@@ -66,6 +66,11 @@ namespace triqs_cthyb {
     h_scalar_t atomic_weight;                                    // The current value of the trace or norm
     h_scalar_t atomic_reweighting;                               // The current value of the reweighting
 
+    // FIXME : where to put this section of dynamical stuff ?
+    std::vector<bosonic_op_pair_t> dyn_op_list;                  // List of bosonic operator pairs for dynamic interactions
+    std::vector<std::function<double(double)>> dyn_interactions; // List of dynamic interactions
+    //std::vector<gfs::gf<imtime, scalar_valued>> dyn_interactions; // List of dynamic interactions
+
     // Construction
     qmc_data(double beta, solve_parameters_t const &p, atom_diag const &h_diag, std::map<std::pair<int, int>, int> linindex,
              block_gf_const_view<imtime> delta, std::vector<int> n_inner, histo_map_t *histo_map)

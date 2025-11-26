@@ -29,7 +29,7 @@ namespace triqs_cthyb {
 
   // Containers for measurements
   struct container_set_t {
-    
+
     // -- Single particle Green's functions
 
     /// Single-particle Green's function :math:`G(\tau)` in imaginary time.
@@ -81,6 +81,8 @@ namespace triqs_cthyb {
 
     /// Histograms of the perturbation order for each block
     std::optional<histo_map_t> perturbation_order;
+
+    // @DYN_IMPL : add a container for na(tau) nb (tau) measurement
 
     /// Function that writes all containers to hdf5 file
     friend void h5_write(h5::group h5group, std::string subgroup_name, container_set_t const &c);

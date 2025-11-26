@@ -69,6 +69,18 @@ namespace triqs_cthyb {
     bool operator==(op_desc const &op) const = default;
   };
 
+  struct op_desc_pair_t { // NOLINT
+    op_desc opL, opR;     // FIXME Need only block and inner index ? what about linear index ?
+  };
+
+  struct bosonic_op_pair_t { // NOLINT
+    op_desc_pair_t op1, op2;
+    int f_index; // index of the function f associated to this pair
+  };
+  // FIXME : a list of this from user input
+  // user intput : this list + the functions f ! stored in qmc_data
+  // make the f_index from input data.
+
   // Configuration of the Monte Carlo simulation.
   struct configuration {
 
@@ -76,6 +88,17 @@ namespace triqs_cthyb {
 
     // a map associating an operator to an imaginary time
     using oplist_t = std::map<time_pt, op_desc, std::greater<time_pt>>;
+
+    // @DYN_IMPL the couples of ops for J and \cal U
+    // a list of pair or times + 2 monomial description (a,b,c,d) : c^+_a c_b   c_^+_c c_d
+    //  f[f_index] (tau - tau') c^+_a c_b (tau) c^+_c d_d (tau')
+
+    struct dyn_bosonic_pair_t { // NOLINT
+      bosonic_op_pair_t ops;
+      time_pt tau1, tau2;
+    };
+    using dyn_oplist_t = std::vector<dyn_bosonic_pair_t>;
+    dyn_oplist_t dyn_oplist;
 
 #ifdef SAVE_CONFIGS
     configuration(double beta, long id = 0, oplist_t oplist = {})
