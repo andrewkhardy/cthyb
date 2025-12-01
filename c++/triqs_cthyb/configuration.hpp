@@ -88,7 +88,6 @@ namespace triqs_cthyb {
 
     // a map associating an operator to an imaginary time
     using oplist_t = std::map<time_pt, op_desc, std::greater<time_pt>>;
-
     // @DYN_IMPL the couples of ops for J and \cal U
     // a list of pair or times + 2 monomial description (a,b,c,d) : c^+_a c_b   c_^+_c c_d
     //  f[f_index] (tau - tau') c^+_a c_b (tau) c^+_c d_d (tau')
@@ -141,7 +140,8 @@ namespace triqs_cthyb {
 
     static configuration h5_read_construct(h5::group g, std::string const &name) {
       h5::group gr = g.open_group(name);
-      h5::assert_hdf5_format<configuration>(gr);
+      h5::assert_hdf5_format(gr, configuration{0.0});
+      // h5::assert_hdf5_format<configuration>(gr);
       auto beta   = h5::read<double>(gr, "beta");
       auto id     = h5::read<long>(gr, "id");
       auto oplist = h5::read<oplist_t>(gr, "oplist");
