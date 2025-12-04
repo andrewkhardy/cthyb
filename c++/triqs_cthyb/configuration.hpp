@@ -97,7 +97,6 @@ namespace triqs_cthyb {
       time_pt tau1, tau2;
     };
     using dyn_oplist_t = std::vector<dyn_bosonic_pair_t>;
-    dyn_oplist_t dyn_oplist;
 
 #ifdef SAVE_CONFIGS
     configuration(double beta, long id = 0, oplist_t oplist = {})
@@ -156,10 +155,11 @@ namespace triqs_cthyb {
 #endif
     }
 
-    private:
+    //private:
     double beta_;
     long id_; // configuration id, for debug purposes
     oplist_t oplist_;
+    dyn_oplist_t dyn_oplist;
 
 #ifdef SAVE_CONFIGS
     // HDF5 file to save configurations

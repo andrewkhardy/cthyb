@@ -33,41 +33,23 @@ namespace triqs_cthyb {
     if (config.dyn_oplist.size() == 0) return 0;
 
     // Pick up a random pair of dynamical operators to remove
-    dyn_op_index = rng(config.dyn_oplist.size());
+    dyn_op_index      = rng(config.dyn_oplist.size());
     auto &dyn_op_pair = config.dyn_oplist[dyn_op_index];
-    dyn_pair = dyn_op_pair.ops;
-    tau1     = dyn_op_pair.tau1;
-    tau2     = dyn_op_pair.tau2;
+    dyn_pair          = dyn_op_pair.ops;
+    tau1              = dyn_op_pair.tau1;
+    tau2              = dyn_op_pair.tau2;
 
     // Mark operators for deletion in the tree
     // Mirror the insertion pattern: we need to delete 4 operators (opL and opR for both op1 and op2)
     // These operators are in config.oplist, so we can count through config to find their indices
-    
-    auto delete_op_pair = [&](auto tau, const auto &op_pair) {
-      // For opL at tau: count how many operators of this type appear before it
-      int count_L = 0;
-      for (auto const &[t, op] : config) {
-        if (op.block_index == op_pair.opL.block_index && op.dagger == op_pair.opL.dagger) {
-          if (t == tau) break;
-          count_L++;
-        }
-      }
-      data.imp_trace.try_delete(count_L, op_pair.opL.block_index, op_pair.opL.dagger);
-      
-      // For opR at tau + epsilon
-      auto tau_R = tau + data.tau_seg.get_epsilon();
-      int count_R = 0;
-      for (auto const &[t, op] : config) {
-        if (op.block_index == op_pair.opR.block_index && op.dagger == op_pair.opR.dagger) {
-          if (t == tau_R) break;
-          count_R++;
-        }
-      }
-      data.imp_trace.try_delete(count_R, op_pair.opR.block_index, op_pair.opR.dagger);
-    };
-    
-    delete_op_pair(tau1, dyn_pair.op1);
-    delete_op_pair(tau2, dyn_pair.op2);
+
+    data.imp_trace.try_delete(tau1);
+    data.imp_trace.try_delete(tau2);
+    data.imp_trace.try_delete(tau1 + data.tau_seg.get_epsilon());
+    data.imp_trace.try_delete(tau2 + data.tau_seg.get_epsilon());
+
+    //delete_op_pair(tau1, dyn_pair.op1);
+    //delete_op_pair(tau2, dyn_pair.op2);
 
     // The ratio for the dynamic interaction (inverse of insertion)
     double dyn_term_ratio = 1.0 / data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2));
@@ -123,7 +105,7 @@ namespace triqs_cthyb {
     config.erase(tau1 + data.tau_seg.get_epsilon());
     config.erase(tau2);
     config.erase(tau2 + data.tau_seg.get_epsilon());
-    
+
     // Remove the pair of bosonic operators from the configuration
     config.dyn_oplist.erase(config.dyn_oplist.begin() + dyn_op_index);
     config.finalize();

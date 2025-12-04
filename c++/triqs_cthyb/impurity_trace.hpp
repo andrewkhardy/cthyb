@@ -293,6 +293,9 @@ namespace triqs_cthyb {
     std::vector<time_pt> removed_keys;
 
     public:
+    // Find and mark as deleted the node with key key
+    void try_delete(time_t const &key) noexcept {}
+
     // Find and mark as deleted the nth operator with fixed dagger and block_index
     // n=0 : first operator, n=1, second, etc...
     time_pt try_delete(int n, int block_index, bool dagger) noexcept {
