@@ -47,6 +47,9 @@ namespace triqs_cthyb {
     /// Number of tau points for gf<imtime, matrix_valued>
     int n_tau = 10001;
 
+    /// Number of tau points for bosonic gf<imtime, matrix_valued> (for dynamical interactions)
+    int n_tau_bosonic = 10001;
+
     /// Number of Legendre polynomials for gf<legendre, matrix_valued>
     int n_l = 50;
 
@@ -116,6 +119,12 @@ namespace triqs_cthyb {
 
     /// Add double insertions as a move?
     bool move_double = true;
+
+    /// Add dynamical interaction insertion as a move?
+    bool move_insert_dyn = false;
+
+    /// Add dynamical interaction removal as a move?
+    bool move_remove_dyn = false;
 
     /// Calculate the full trace or use an estimate?
     bool use_trace_estimator = false;

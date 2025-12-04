@@ -36,6 +36,8 @@
 #include "./moves/double_remove.hpp"
 #include "./moves/shift.hpp"
 #include "./moves/global.hpp"
+#include "./moves/insert_dyn.hpp"
+#include "./moves/remove_dyn.hpp"
 #include "./measures/G_tau.hpp"
 #include "./measures/G_l.hpp"
 #include "./measures/O_tau_ins.hpp"
@@ -71,6 +73,14 @@ namespace triqs_cthyb {
     // Allocate single particle greens functions
     if (not delta_interface) _G0_iw = block_gf<imfreq>({beta, Fermion, n_iw}, gf_struct);
     _Delta_tau = block_gf<imtime>({beta, Fermion, n_tau}, gf_struct);
+
+    // Allocate dynamical interaction containers
+    inputs.D0t    = make_block2_gf<imtime>({beta, Boson, p.n_tau_bosonic}, gf_struct);
+    inputs.Jperpt = gf<imtime>({beta, Boson, p.n_tau_bosonic}, {1, 1});
+
+    // Initialize dynamical interactions to zero
+    inputs.D0t()    = 0;
+    inputs.Jperpt() = 0;
   }
 
   /// -------------------------------------------------------------------------------------------
@@ -326,6 +336,13 @@ namespace triqs_cthyb {
       }
       qmc.add_move(std::move(global), "Global moves", params.move_global_prob);
     }
+
+    // Dynamical interaction moves
+    if (params.move_insert_dyn)
+      qmc.add_move(move_insert_dyn(data, qmc.get_rng(), histo_map), "Insert dynamical interaction", 1.0);
+
+    if (params.move_remove_dyn)
+      qmc.add_move(move_remove_dyn(data, qmc.get_rng(), histo_map), "Remove dynamical interaction", 1.0);
 
     // --------------------------------------------------------------------------
     // Measurements

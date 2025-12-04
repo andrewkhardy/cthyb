@@ -61,6 +61,12 @@ namespace triqs_cthyb {
     G_tau_t _Delta_tau;                                           // Imaginary-time Hybridization function
     std::optional<std::vector<matrix<dcomplex>>> Delta_infty_vec; // Quadratic instantaneous part of G0_iw
 
+    // Dynamical interaction input containers
+    struct {
+      gf<imtime> Jperpt;        // Dynamical spin-spin interaction J_perp(tau)
+      block2_gf<imtime> D0t;    // Dynamical density-density interaction D0(tau)
+    } inputs;
+
     // Return reference to container_set
     container_set_t &container_set() { return static_cast<container_set_t &>(*this); }
     container_set_t const &container_set() const { return static_cast<container_set_t const &>(*this); }
@@ -123,6 +129,12 @@ namespace triqs_cthyb {
 
     /// :math:`\Delta(\tau)` in imaginary time.
     block_gf_view<imtime> Delta_tau() { return _Delta_tau; }
+
+    /// Dynamical spin-spin interaction :math:`\mathcal{J}_\perp(\tau)`
+    gf_view<imtime> Jperp_tau() { return inputs.Jperpt; }
+
+    /// Dynamical density-density interaction :math:`D_0(\tau)`
+    block2_gf_view<imtime> D0_tau() { return inputs.D0t; }
 
     /// :math:`G_0(i\omega)` in imaginary frequencies.
     block_gf_view<imfreq> G0_iw() {
@@ -189,6 +201,8 @@ namespace triqs_cthyb {
       h5_write(grp, "solve_parameters", s.solve_parameters);
       h5_write(grp, "G0_iw", s._G0_iw);
       h5_write(grp, "Delta_tau", s._Delta_tau);
+      h5_write(grp, "Jperp_tau", s.inputs.Jperpt);
+      h5_write(grp, "D0_tau", s.inputs.D0t);
 
       h5_write(grp, "h_diag", s.h_diag);
       h5_write(grp, "h_loc", s._h_loc);
@@ -210,6 +224,8 @@ namespace triqs_cthyb {
       h5_read(grp, "solve_parameters", s.solve_parameters);
       h5_read(grp, "G0_iw", s._G0_iw);
       h5_read(grp, "Delta_tau", s._Delta_tau);
+      h5::try_read(grp, "Jperp_tau", s.inputs.Jperpt);
+      h5::try_read(grp, "D0_tau", s.inputs.D0t);
 
       h5::try_read(grp, "h_diag", s.h_diag);
       h5::try_read(grp, "h_loc", s._h_loc);
