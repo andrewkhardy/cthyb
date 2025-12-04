@@ -73,7 +73,9 @@ namespace triqs_cthyb {
 
     // Construction
     qmc_data(double beta, solve_parameters_t const &p, atom_diag const &h_diag, std::map<std::pair<int, int>, int> linindex,
-             block_gf_const_view<imtime> delta, std::vector<int> n_inner, histo_map_t *histo_map)
+             block_gf_const_view<imtime> delta, std::vector<int> n_inner, histo_map_t *histo_map,
+             std::vector<bosonic_op_pair_t> const &dyn_op_list_ = {},
+             std::vector<std::function<double(double)>> const &dyn_interactions_ = {})
        : config(beta),
          tau_seg(beta),
          linindex(linindex),
@@ -82,7 +84,9 @@ namespace triqs_cthyb {
          n_inner(n_inner),
          delta(map([](gf_const_view<imtime> d) { return real(d); }, delta)),
          current_sign(1),
-         old_sign(1) {
+         old_sign(1),
+         dyn_op_list(dyn_op_list_),
+         dyn_interactions(dyn_interactions_) {
 
       std::vector<std::vector<std::pair<time_pt, int>>> X(delta.size()), Y(delta.size());
 

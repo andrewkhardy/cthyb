@@ -89,22 +89,18 @@ namespace triqs_cthyb {
 namespace triqs {
   namespace gfs {
 
-    /// Function template for block2_gf initialization
+    /// Function template for block2_gf initialization (matching CTSEG)
     template <typename Var_t>
-    block2_gf<Var_t, tensor_valued<4>> make_block2_gf(Var_t const &m, triqs::hilbert_space::gf_struct_t const &gf_struct,
-                                                      triqs_cthyb::block_order order = triqs_cthyb::block_order::AABB) {
+    block2_gf<Var_t> make_block2_gf(Var_t const &m, triqs::hilbert_space::gf_struct_t const &gf_struct) {
 
-      std::vector<std::vector<gf<Var_t, tensor_valued<4>>>> gf_vecvec;
+      std::vector<std::vector<gf<Var_t>>> gf_vecvec;
       std::vector<std::string> block_names;
 
       for (auto const &[bl1, bl1_size] : gf_struct) {
         block_names.push_back(bl1);
-        std::vector<gf<Var_t, tensor_valued<4>>> gf_vec;
+        std::vector<gf<Var_t>> gf_vec;
         for (auto const &[bl2, bl2_size] : gf_struct) {
-          switch (order) {
-            case triqs_cthyb::block_order::AABB: gf_vec.emplace_back(m, make_shape(bl1_size, bl1_size, bl2_size, bl2_size)); break;
-            case triqs_cthyb::block_order::ABBA: gf_vec.emplace_back(m, make_shape(bl1_size, bl2_size, bl2_size, bl1_size)); break;
-          }
+          gf_vec.emplace_back(m, make_shape(bl1_size, bl2_size));
         }
         gf_vecvec.emplace_back(std::move(gf_vec));
       }

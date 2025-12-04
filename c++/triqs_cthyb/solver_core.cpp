@@ -271,8 +271,160 @@ namespace triqs_cthyb {
       return;
     }
 
+    // --------------------------------------------------------------------------
+    // Build dynamical interaction operator lists and functions
+    // --------------------------------------------------------------------------
+    
+    std::vector<bosonic_op_pair_t> dyn_op_list;
+    std::vector<std::function<double(double)>> dyn_interactions;
+    
+    // Check if we have non-zero Jperp (spin-spin interaction)
+    bool has_Jperp = max_element(nda::abs(inputs.Jperpt.data())) > 1.e-13;
+    
+    // Check if we have non-zero D0 (density-density interaction)
+    bool has_D0 = false;
+    for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
+      for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
+        if (max_element(nda::abs(inputs.D0t(bl1, bl2).data())) > 1.e-13) {
+          has_D0 = true;
+          break;
+        }
+      }
+      if (has_D0) break;
+    }
+    
+    if (has_Jperp) {
+      // For Jperp, we need to check that we have exactly 2 blocks (spin up and down)
+      if (gf_struct.size() != 2) {
+        TRIQS_RUNTIME_ERROR << "Jperp (spin-spin) interactions are only implemented for 2 blocks (spin up/down), but gf_struct has " 
+                            << gf_struct.size() << " blocks.";
+      }
+      
+      // Create bosonic operator pairs for S_perp = S_+ * S_-
+      // S_+ = c_dag_up * c_down
+      // S_- = c_dag_down * c_up
+      bosonic_op_pair_t Jperp_pair;
+      
+      // First pair: c_dag(up,0) * c(down,0)  (S_+)
+      Jperp_pair.op1.opL.dagger = true;
+      Jperp_pair.op1.opL.block_index = 0;  // up block
+      Jperp_pair.op1.opL.inner_index = 0;
+      Jperp_pair.op1.opL.linear_index = linindex.at({0, 0});
+      
+      Jperp_pair.op1.opR.dagger = false;
+      Jperp_pair.op1.opR.block_index = 1;  // down block
+      Jperp_pair.op1.opR.inner_index = 0;
+      Jperp_pair.op1.opR.linear_index = linindex.at({1, 0});
+      
+      // Second pair: c_dag(down,0) * c(up,0)  (S_-)
+      Jperp_pair.op2.opL.dagger = true;
+      Jperp_pair.op2.opL.block_index = 1;  // down block
+      Jperp_pair.op2.opL.inner_index = 0;
+      Jperp_pair.op2.opL.linear_index = linindex.at({1, 0});
+      
+      Jperp_pair.op2.opR.dagger = false;
+      Jperp_pair.op2.opR.block_index = 0;  // up block
+      Jperp_pair.op2.opR.inner_index = 0;
+      Jperp_pair.op2.opR.linear_index = linindex.at({0, 0});
+      
+      // Set function index
+      Jperp_pair.f_index = dyn_interactions.size();
+      dyn_op_list.push_back(Jperp_pair);
+      
+      // Create lambda function to evaluate Jperp(tau)
+      // Capture inputs by reference to avoid copying the large Green's function
+      auto Jperp_gf = inputs.Jperpt;  // Make a copy for the lambda
+      auto Jperp_function = [Jperp_gf](double tau) -> double {
+        // Use the [] operator which internally calls closest_mesh_pt
+        return real(Jperp_gf[closest_mesh_pt(tau)](0, 0));
+      };
+      dyn_interactions.push_back(Jperp_function);
+      
+      if (params.verbosity >= 2) {
+        std::cout << "Added Jperp (spin-spin) dynamical interaction." << std::endl;
+      }
+    }
+    
+    if (has_D0) {
+      // For D0, we create operator pairs for each non-zero block pair
+      // D0(tau) n_a(tau) n_b(0) where n_a = c_dag_a * c_a
+      
+      for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
+        for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
+          // Check if this block pair has non-zero interaction
+          auto D0_bl = inputs.D0t(bl1, bl2);
+          if (max_element(nda::abs(D0_bl.data())) < 1.e-13) continue;
+          
+          int bl1_size = gf_struct[bl1].second;
+          int bl2_size = gf_struct[bl2].second;
+          
+          for (int i1 = 0; i1 < bl1_size; ++i1) {
+            for (int i2 = 0; i2 < bl2_size; ++i2) {
+              // Check if this specific matrix element is non-zero
+              bool is_nonzero = false;
+              for (auto const& tau_pt : D0_bl.mesh()) {
+                if (std::abs(D0_bl[tau_pt](i1, i2)) > 1.e-13) {
+                  is_nonzero = true;
+                  break;
+                }
+              }
+              if (!is_nonzero) continue;
+              
+              bosonic_op_pair_t D0_pair;
+              
+              // First operator pair: c_dag(bl1,i1) * c(bl1,i1)  (n_a at tau)
+              D0_pair.op1.opL.dagger = true;
+              D0_pair.op1.opL.block_index = bl1;
+              D0_pair.op1.opL.inner_index = i1;
+              D0_pair.op1.opL.linear_index = linindex.at({bl1, i1});
+              
+              D0_pair.op1.opR.dagger = false;
+              D0_pair.op1.opR.block_index = bl1;
+              D0_pair.op1.opR.inner_index = i1;
+              D0_pair.op1.opR.linear_index = linindex.at({bl1, i1});
+              
+              // Second operator pair: c_dag(bl2,i2) * c(bl2,i2)  (n_b at tau')
+              D0_pair.op2.opL.dagger = true;
+              D0_pair.op2.opL.block_index = bl2;
+              D0_pair.op2.opL.inner_index = i2;
+              D0_pair.op2.opL.linear_index = linindex.at({bl2, i2});
+              
+              D0_pair.op2.opR.dagger = false;
+              D0_pair.op2.opR.block_index = bl2;
+              D0_pair.op2.opR.inner_index = i2;
+              D0_pair.op2.opR.linear_index = linindex.at({bl2, i2});
+              
+              // Set function index
+              D0_pair.f_index = dyn_interactions.size();
+              dyn_op_list.push_back(D0_pair);
+              
+              // Create lambda function to evaluate D0(tau) for this block pair
+              // Make a copy of the specific block for the lambda
+              auto D0_block = inputs.D0t(bl1, bl2);
+              auto D0_function = [D0_block, i1, i2](double tau) -> double {
+                return real(D0_block[closest_mesh_pt(tau)](i1, i2));
+              };
+              dyn_interactions.push_back(D0_function);
+              
+              if (params.verbosity >= 2) {
+                std::cout << "Added D0 density-density interaction for blocks (" << bl1 << "," << bl2 
+                          << ") indices (" << i1 << "," << i2 << ")" << std::endl;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    if (params.verbosity >= 2 && (has_Jperp || has_D0)) {
+      std::cout << "Total number of dynamical interaction terms: " << dyn_op_list.size() << std::endl;
+    }
+
+    // Automatically enable dynamical moves if we have dynamical interactions
+    bool has_dyn_interactions = has_Jperp || has_D0;
+
     // Initialise Monte Carlo quantities
-    qmc_data data(beta, params, h_diag, linindex, _Delta_tau, n_inner, histo_map);
+    qmc_data data(beta, params, h_diag, linindex, _Delta_tau, n_inner, histo_map, dyn_op_list, dyn_interactions);
     auto qmc =
        mc_tools::mc_generic<mc_weight_t>(params.random_name, params.random_seed, params.verbosity);
 
@@ -337,12 +489,20 @@ namespace triqs_cthyb {
       qmc.add_move(std::move(global), "Global moves", params.move_global_prob);
     }
 
-    // Dynamical interaction moves
-    if (params.move_insert_dyn)
+    // Dynamical interaction moves - automatically enabled if Jperp_tau or D0_tau are provided
+    if (params.move_insert_dyn || has_dyn_interactions) {
       qmc.add_move(move_insert_dyn(data, qmc.get_rng(), histo_map), "Insert dynamical interaction", 1.0);
+      if (params.verbosity >= 2 && has_dyn_interactions && !params.move_insert_dyn) {
+        std::cout << "Automatically enabled insert_dyn move due to non-zero Jperp_tau or D0_tau" << std::endl;
+      }
+    }
 
-    if (params.move_remove_dyn)
+    if (params.move_remove_dyn || has_dyn_interactions) {
       qmc.add_move(move_remove_dyn(data, qmc.get_rng(), histo_map), "Remove dynamical interaction", 1.0);
+      if (params.verbosity >= 2 && has_dyn_interactions && !params.move_remove_dyn) {
+        std::cout << "Automatically enabled remove_dyn move due to non-zero Jperp_tau or D0_tau" << std::endl;
+      }
+    }
 
     // --------------------------------------------------------------------------
     // Measurements
