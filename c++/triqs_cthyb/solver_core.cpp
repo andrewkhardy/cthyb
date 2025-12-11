@@ -353,10 +353,10 @@ namespace triqs_cthyb {
               // n_a = c_dag(bl1,i1) * c(bl1,i1)
               // n_b = c_dag(bl2,i2) * c(bl2,i2)
               bosonic_op_pair_t D0_pair = {
-                 .op1     = {.opL = {.block_index = bl1, .inner_index = i1, .dagger = true, .linear_index = linindex.at({bl1, i1})},
-                             .opR = {.block_index = bl1, .inner_index = i1, .dagger = false, .linear_index = linindex.at({bl1, i1})}},
-                 .op2     = {.opL = {.block_index = bl2, .inner_index = i2, .dagger = true, .linear_index = linindex.at({bl2, i2})},
-                             .opR = {.block_index = bl2, .inner_index = i2, .dagger = false, .linear_index = linindex.at({bl2, i2})}},
+                 .op1     = {.opL = {.block_index = static_cast<int>(bl1), .inner_index = i1, .dagger = true, .linear_index = linindex.at({bl1, i1})},
+                             .opR = {.block_index = static_cast<int>(bl1), .inner_index = i1, .dagger = false, .linear_index = linindex.at({bl1, i1})}},
+                 .op2     = {.opL = {.block_index = static_cast<int>(bl2), .inner_index = i2, .dagger = true, .linear_index = linindex.at({bl2, i2})},
+                             .opR = {.block_index = static_cast<int>(bl2), .inner_index = i2, .dagger = false, .linear_index = linindex.at({bl2, i2})}},
                  .f_index = static_cast<int>(dyn_interactions.size())};
               
               dyn_op_list.push_back(D0_pair);
