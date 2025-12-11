@@ -303,38 +303,13 @@ namespace triqs_cthyb {
       // Create bosonic operator pairs for S_perp = S_+ * S_-
       // S_+ = c_dag_up * c_down
       // S_- = c_dag_down * c_up
-      bosonic_op_pair_t Jperp_pair;
+      bosonic_op_pair_t Jperp_pair = {
+         .op1     = {.opL = {.block_index = 0, .inner_index = 0, .dagger = true, .linear_index = linindex.at({0, 0})},
+                     .opR = {.block_index = 1, .inner_index = 0, .dagger = false, .linear_index = linindex.at({1, 0})}},
+         .op2     = {.opL = {.block_index = 1, .inner_index = 0, .dagger = true, .linear_index = linindex.at({1, 0})},
+                     .opR = {.block_index = 0, .inner_index = 0, .dagger = false, .linear_index = linindex.at({0, 0})}},
+         .f_index = 0};
 
-      Jperp_pair = bosonic_op_pair_t{.op1     = {.opL = {.block_index = 0, .inner_index = 0, .dagger = true, .linear_index = linindex.at({0, 0})},
-                                                 .opR = {.block_index = 1, .inner_index = 0, .dagger = false, .linear_index = linindex.at({1, 0})}},
-                                     .op2     = {.opL = {.block_index = 1, .inner_index = 0, .dagger = true, .linear_index = linindex.at({1, 0})},
-                                                 .opR = {.block_index = 0, .inner_index = 0, .dagger = false, .linear_index = linindex.at({0, 0})}},
-                                     .f_index = 0};
-
-      // // First pair: c_dag(up,0) * c(down,0)  (S_+)
-      // Jperp_pair.op1.opL.dagger       = true;
-      // Jperp_pair.op1.opL.block_index  = 0; // up block
-      // Jperp_pair.op1.opL.inner_index  = 0;
-      // Jperp_pair.op1.opL.linear_index = linindex.at({0, 0});
-
-      // Jperp_pair.op1.opR.dagger       = false;
-      // Jperp_pair.op1.opR.block_index  = 1; // down block
-      // Jperp_pair.op1.opR.inner_index  = 0;
-      // Jperp_pair.op1.opR.linear_index = linindex.at({1, 0});
-
-      // // Second pair: c_dag(down,0) * c(up,0)  (S_-)
-      // Jperp_pair.op2.opL.dagger       = true;
-      // Jperp_pair.op2.opL.block_index  = 1; // down block
-      // Jperp_pair.op2.opL.inner_index  = 0;
-      // Jperp_pair.op2.opL.linear_index = linindex.at({1, 0});
-
-      // Jperp_pair.op2.opR.dagger       = false;
-      // Jperp_pair.op2.opR.block_index  = 0; // up block
-      // Jperp_pair.op2.opR.inner_index  = 0;
-      // Jperp_pair.op2.opR.linear_index = linindex.at({0, 0});
-
-      // Set function index
-      //Jperp_pair.f_index = dyn_interactions.size();
       dyn_op_list.push_back(Jperp_pair);
 
       // Create lambda function to evaluate Jperp(tau)
@@ -374,32 +349,16 @@ namespace triqs_cthyb {
               }
               if (!is_nonzero) continue;
 
-              bosonic_op_pair_t D0_pair;
-
-              // First operator pair: c_dag(bl1,i1) * c(bl1,i1)  (n_a at tau)
-              D0_pair.op1.opL.dagger       = true;
-              D0_pair.op1.opL.block_index  = bl1;
-              D0_pair.op1.opL.inner_index  = i1;
-              D0_pair.op1.opL.linear_index = linindex.at({bl1, i1});
-
-              D0_pair.op1.opR.dagger       = false;
-              D0_pair.op1.opR.block_index  = bl1;
-              D0_pair.op1.opR.inner_index  = i1;
-              D0_pair.op1.opR.linear_index = linindex.at({bl1, i1});
-
-              // Second operator pair: c_dag(bl2,i2) * c(bl2,i2)  (n_b at tau')
-              D0_pair.op2.opL.dagger       = true;
-              D0_pair.op2.opL.block_index  = bl2;
-              D0_pair.op2.opL.inner_index  = i2;
-              D0_pair.op2.opL.linear_index = linindex.at({bl2, i2});
-
-              D0_pair.op2.opR.dagger       = false;
-              D0_pair.op2.opR.block_index  = bl2;
-              D0_pair.op2.opR.inner_index  = i2;
-              D0_pair.op2.opR.linear_index = linindex.at({bl2, i2});
-
-              // Set function index
-              D0_pair.f_index = dyn_interactions.size();
+              // Create operator pair for n_a(tau) * n_b(tau')
+              // n_a = c_dag(bl1,i1) * c(bl1,i1)
+              // n_b = c_dag(bl2,i2) * c(bl2,i2)
+              bosonic_op_pair_t D0_pair = {
+                 .op1     = {.opL = {.block_index = bl1, .inner_index = i1, .dagger = true, .linear_index = linindex.at({bl1, i1})},
+                             .opR = {.block_index = bl1, .inner_index = i1, .dagger = false, .linear_index = linindex.at({bl1, i1})}},
+                 .op2     = {.opL = {.block_index = bl2, .inner_index = i2, .dagger = true, .linear_index = linindex.at({bl2, i2})},
+                             .opR = {.block_index = bl2, .inner_index = i2, .dagger = false, .linear_index = linindex.at({bl2, i2})}},
+                 .f_index = static_cast<int>(dyn_interactions.size())};
+              
               dyn_op_list.push_back(D0_pair);
 
               // Create lambda function to evaluate D0(tau) for this block pair
