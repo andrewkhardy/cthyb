@@ -54,7 +54,7 @@ namespace triqs_cthyb {
 
     // The ratio for the dynamic interaction
     // add dyn_interaction.
-    double dyn_term_ratio = data.dyn_interactions[data.dyn_op_list[dyn_pair_idx].f_index](double(tau1 - tau2)); // FIXME
+    double dyn_term_ratio = data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2)); // Use dyn_pair.f_index instead of redundant indexing
 
     // proposition probability
     // FIXME CHECK THE DETAILED BALANCED
