@@ -121,6 +121,14 @@ namespace triqs_cthyb {
     oplist_t::const_iterator begin() const { return oplist_.begin(); }
     oplist_t::const_iterator end() const { return oplist_.end(); }
 
+    // Find the n-th operator associated to an hybridiation in the configuration with given block_index and dagger
+    time_pt find_nth_hybridization_op(int n, int block_index, bool dagger) {
+      int i = 0;
+      for (auto const &[tau, op] : oplist_)
+        if (op.dagger == dagger && op.block_index == block_index && ++i == n + 1) return tau;
+      TRIQS_RUNTIME_ERROR << "Operator not found";
+    };
+
     friend std::ostream &operator<<(std::ostream &out, configuration const &c) {
       for (auto const &op : c) out << "tau = " << op.first << " : " << op.second << std::endl;
       return out;
