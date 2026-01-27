@@ -2,3 +2,17 @@ compile_commands.json
 doc/_autosummary
 doc/cpp2rst_generated
 .claude
+
+# Build directory
+build/
+
+# VS Code local history
+.history/
+
+# IDE settings
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
