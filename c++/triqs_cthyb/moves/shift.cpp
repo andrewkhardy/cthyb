@@ -73,7 +73,30 @@ namespace triqs_cthyb {
     // Properties corresponding to det
     auto &det     = data.dets[block_index];
     auto det_size = det.size();
-    if (det_size == 0) return 0; // nothing to shift
+    if (det_size == 0) return 0; // no hybridization operators in this block
+
+    // Verify the selected operator is a hybridization operator (exists in det)
+    // by checking if tau_old matches any operator in the det
+    bool found_in_det = false;
+    int op_pos_in_det = -1;
+    if (is_dagger) {
+      for (int i = 0; i < det_size; ++i) {
+        if (det.get_x(i).first == tau_old) {
+          found_in_det = true;
+          op_pos_in_det = i;
+          break;
+        }
+      }
+    } else {
+      for (int i = 0; i < det_size; ++i) {
+        if (det.get_y(i).first == tau_old) {
+          found_in_det = true;
+          op_pos_in_det = i;
+          break;
+        }
+      }
+    }
+    if (!found_in_det) return 0; // selected operator is not a hybridization operator
 
     // Construct new operator
     // Choose a new inner index (this is done here for compatibility)
@@ -86,11 +109,9 @@ namespace triqs_cthyb {
 
     time_pt tR, tL;
     int ic_dag = 0, ic = 0;
-    int op_pos_in_det;
 
     if (det_size > 1) {
 
-      // Get the position op_pos_in_det of op_old in the det.
       // Find the c and c_dag operators at the right of op_old (at smaller times)
       // They could be the last entries (earliest times)
 
@@ -100,9 +121,6 @@ namespace triqs_cthyb {
       for (ic = 0; ic < det_size; ++ic) { // c
         if (det.get_y(ic).first < tau_old) break;
       }
-
-      op_pos_in_det = (is_dagger ? ic_dag : ic); // This finds the operator on the right
-      --op_pos_in_det;                           // Rewind by one to find the operator
 
       // Find the times of the operator at the right of op_old with cyclicity
       auto tRdag   = (ic_dag != det_size ? det.get_x(ic_dag).first : det.get_x(0).first);
@@ -126,7 +144,6 @@ namespace triqs_cthyb {
 
     } else { // det_size = 1
 
-      op_pos_in_det = 0;
       // Choose new random time, can be anywhere between beta and 0
       tau_new = data.tau_seg.get_random_pt(rng);
     }

@@ -6,6 +6,8 @@
 
 # Single orbital with dynamical spin-spin interactions. 
 # Data in spin_spin.ref.h5 is obtained by running this script on 800 cores. 
+import sys
+sys.path.insert(0, '/home/andrewhardy/Documents/CCQ/cthyb_dyn/build/python')
 from triqs.gf import *
 import triqs.utility.mpi as mpi
 from triqs.gf.descriptors import Function
@@ -19,7 +21,7 @@ beta = 10
 U = 4.0
 mu = U/2
 J = 0.5
-n_tau = 2051
+n_tau = 4096
 n_tau_bosonic = 2001
 
 # Solver construction parameters
@@ -28,7 +30,8 @@ constr_params = {
     "gf_struct": gf_struct,
     "beta": beta,
     "n_tau": n_tau,
-    "n_tau_bosonic": n_tau_bosonic
+    "n_tau_bosonic": n_tau_bosonic,
+    "delta_interface": True  # Use Delta_tau interface for dynamical interactions
 }
 
 # Construct solver
@@ -61,9 +64,11 @@ solve_params = {
     "length_cycle": 50,
     "n_warmup_cycles": 1000,
     "n_cycles": 1000000,
-    "measure_F_tau": True,
-    "measure_nn_tau": True,
-    "measure_nn_static": True
+    "move_insert_dyn": True,  # Enable dynamical interaction moves
+    "move_remove_dyn": True,
+    # "measure_F_tau": True,
+    # "measure_nn_tau": True,
+    # "measure_nn_static": True
     }
 
 # Solve
@@ -72,8 +77,8 @@ S.solve(**solve_params)
 # Save data
 if mpi.is_master_node():
     with h5.HDFArchive("spin_spin.out.h5", 'w') as A:
-        A['G_tau'] = S.results.G_tau
-        A['F_tau'] = S.results.F_tau
-        A['nn_tau'] = S.results.nn_tau
-        A['nn'] = S.results.nn_static
-        A['densities'] = S.results.densities
+        A['G_tau'] = S.G_tau
+        # A['F_tau'] = S.F_tau
+        # A['nn_tau'] = S.nn_tau
+        # A['nn'] = S.nn_static
+    print("Results saved to spin_spin.out.h5")
