@@ -45,35 +45,42 @@ namespace triqs_cthyb {
     std::cerr << "* Attempt for move_shift_operator ";
 #endif
 
-    // --- Choose an operator in configuration to shift at random
-    // By choosing an *operator* in config directly, not bias based on det size introduced
-    auto config_size = config.size();
-    if (config_size == 0) {
+    // --- Choose a hybridization operator in configuration to shift at random
+    // Count only hybridization operators (sum of det sizes)
+    int total_hyb_ops = 0;
+    for (auto const &det : data.dets) total_hyb_ops += det.size();
+    if (total_hyb_ops == 0) {
 #ifdef EXT_DEBUG
-      std::cerr << "(empty configuration)" << std::endl;
+      std::cerr << "(no hybridization operators)" << std::endl;
       block_index = -1;
 #endif
       return 0;
     }
-    const int op_pos_in_config = rng(config_size);
+    const int op_pos = rng(total_hyb_ops);
 
-    // --- Find operator (and its characteristics) from the configuration
-    auto itconfig = config.begin();
-    for (int i = 0; i < op_pos_in_config; ++i, ++itconfig)
-      ; // Get to right position in config
-    tau_old        = (*itconfig).first;
-    op_old         = (*itconfig).second;
-    block_index    = op_old.block_index;
-    auto is_dagger = op_old.dagger;
+    // --- Find which block and position within that block the operator is in
+    int op_pos_in_det = op_pos;
+    for (block_index = 0; block_index < data.dets.size(); ++block_index) {
+      int det_size = data.dets[block_index].size();
+      if (op_pos_in_det < det_size) break;
+      op_pos_in_det -= det_size;
+    }
+
+    // --- Determine if this is a c or c_dag operator and find its tau
+    // Each hybridization pair contributes one c and one c_dag to the det
+    // op_pos_in_det indexes into the det - pick randomly whether c or c_dag
+    auto &det     = data.dets[block_index];
+    auto is_dagger = (rng(2) == 0);
+    auto [tau, inner] = is_dagger ? det.get_x(op_pos_in_det) : det.get_y(op_pos_in_det);
+    tau_old        = tau;
+    op_old         = op_desc{block_index, inner, is_dagger, data.linindex[std::make_pair(block_index, inner)]};
 
 #ifdef EXT_DEBUG
     std::cerr << "(block " << block_index << ")" << std::endl;
 #endif
 
-    // Properties corresponding to det
-    auto &det     = data.dets[block_index];
+    // Get det size (det already defined above)
     auto det_size = det.size();
-    if (det_size == 0) return 0; // nothing to shift
 
     // Construct new operator
     // Choose a new inner index (this is done here for compatibility)
@@ -86,11 +93,10 @@ namespace triqs_cthyb {
 
     time_pt tR, tL;
     int ic_dag = 0, ic = 0;
-    int op_pos_in_det;
+    // pos_in_block is already the position of the selected operator in the det
 
     if (det_size > 1) {
 
-      // Get the position op_pos_in_det of op_old in the det.
       // Find the c and c_dag operators at the right of op_old (at smaller times)
       // They could be the last entries (earliest times)
 
@@ -100,9 +106,6 @@ namespace triqs_cthyb {
       for (ic = 0; ic < det_size; ++ic) { // c
         if (det.get_y(ic).first < tau_old) break;
       }
-
-      op_pos_in_det = (is_dagger ? ic_dag : ic); // This finds the operator on the right
-      --op_pos_in_det;                           // Rewind by one to find the operator
 
       // Find the times of the operator at the right of op_old with cyclicity
       auto tRdag   = (ic_dag != det_size ? det.get_x(ic_dag).first : det.get_x(0).first);
@@ -126,7 +129,6 @@ namespace triqs_cthyb {
 
     } else { // det_size = 1
 
-      op_pos_in_det = 0;
       // Choose new random time, can be anywhere between beta and 0
       tau_new = data.tau_seg.get_random_pt(rng);
     }
@@ -145,7 +147,7 @@ namespace triqs_cthyb {
     // --- Modify the tree
 
     // Mark the operator at original time for deletion in the tree
-    data.imp_trace.try_delete(op_pos_in_det, block_index, is_dagger);
+    data.imp_trace.try_delete(tau_old);
 
     // Try to insert the new operator at shifted time in the tree
     try {

@@ -61,9 +61,9 @@ namespace triqs_cthyb {
     std::cerr << num_c << "-th C(" << block_index << ",...)" << std::endl;
 #endif
 
-    // now mark 2 nodes for deletion
-    tau1 = data.config.find_nth_hybridization_op(num_c, block_index, false);
-    tau2 = data.config.find_nth_hybridization_op(num_c_dag, block_index, true);
+    // now mark 2 nodes for deletion - get tau directly from the determinant
+    tau1 = det.get_y(num_c).first;      // c operator
+    tau2 = det.get_x(num_c_dag).first;  // c_dag operator
     data.imp_trace.try_delete(tau1);
     data.imp_trace.try_delete(tau2);
 
