@@ -71,8 +71,7 @@ TEST(CTHYB, Spin_Spin) {
   param_solve.length_cycle      = length_cycle;
   param_solve.random_seed       = random_seed;
   param_solve.measure_G_tau     = true;
-  param_solve.move_insert_dyn   = true;  // Enable dynamical interaction moves
-  param_solve.move_remove_dyn   = true;
+  // Dynamical interaction moves are automatically enabled when D0_tau or Jperp_tau are non-zero
 
   // Solve
   std::cout << "Solving with dynamical interactions D0_tau and Jperp_tau..." << std::endl;

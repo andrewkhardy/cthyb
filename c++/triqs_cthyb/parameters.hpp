@@ -120,12 +120,6 @@ namespace triqs_cthyb {
     /// Add double insertions as a move?
     bool move_double = true;
 
-    /// Add dynamical interaction insertion as a move?
-    bool move_insert_dyn = false;
-
-    /// Add dynamical interaction removal as a move?
-    bool move_remove_dyn = false;
-
     /// Calculate the full trace or use an estimate?
     bool use_trace_estimator = false;
 

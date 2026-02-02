@@ -450,18 +450,12 @@ namespace triqs_cthyb {
       qmc.add_move(std::move(global), "Global moves", params.move_global_prob);
     }
 
-    // Dynamical interaction moves - automatically enabled if Jperp_tau or D0_tau are provided
-    if (params.move_insert_dyn || has_dyn_interactions) {
+    // Dynamical interaction moves - automatically enabled when dynamical interactions are present
+    if (has_dyn_interactions) {
       qmc.add_move(move_insert_dyn(data, qmc.get_rng(), histo_map), "Insert dynamical interaction", 1.0);
-      if (params.verbosity >= 2 && has_dyn_interactions && !params.move_insert_dyn) {
-        std::cout << "Automatically enabled insert_dyn move due to non-zero Jperp_tau or D0_tau" << std::endl;
-      }
-    }
-
-    if (params.move_remove_dyn || has_dyn_interactions) {
       qmc.add_move(move_remove_dyn(data, qmc.get_rng(), histo_map), "Remove dynamical interaction", 1.0);
-      if (params.verbosity >= 2 && has_dyn_interactions && !params.move_remove_dyn) {
-        std::cout << "Automatically enabled remove_dyn move due to non-zero Jperp_tau or D0_tau" << std::endl;
+      if (params.verbosity >= 2) {
+        std::cout << "Dynamical interaction moves enabled due to non-zero Jperp_tau or D0_tau" << std::endl;
       }
     }
 

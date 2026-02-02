@@ -54,7 +54,7 @@ namespace triqs_cthyb {
     // The ratio for the dynamic interaction (inverse of insertion)
     double dyn_term_ratio = 1.0 / data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2));
 
-    // proposition probability (inverse of insertion)
+    // Proposal probability ratio (inverse of insertion)
     mc_weight_t t_ratio = double(config.dyn_oplist.size()) / (config.beta() * config.beta());
 
     // For quick abandon

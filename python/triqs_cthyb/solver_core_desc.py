@@ -185,10 +185,6 @@ c.add_method("""void solve (**solve_parameters_t)""",
 +-------------------------------+----------------------------------------------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------+
 | move_double                   | bool                                                     | true                          | Add double insertions as a move?                                                                                  |
 +-------------------------------+----------------------------------------------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| move_insert_dyn               | bool                                                     | false                         | Add dynamical interaction insertion as a move?                                                                    |
-+-------------------------------+----------------------------------------------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| move_remove_dyn               | bool                                                     | false                         | Add dynamical interaction removal as a move?                                                                      |
-+-------------------------------+----------------------------------------------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------+
 | use_trace_estimator           | bool                                                     | false                         | Calculate the full trace or use an estimate?                                                                      |
 +-------------------------------+----------------------------------------------------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------+
 | measure_G_tau                 | bool                                                     | true                          | Measure G(tau)? :math:`G_{ij}(\tau)=G_{ji}^*(\tau)` is enforced for the resulting G(tau)                          |
@@ -432,16 +428,6 @@ c.add_member(c_name = "move_double",
              c_type = "bool",
              initializer = """ true """,
              doc = r"""Add double insertions as a move?""")
-
-c.add_member(c_name = "move_insert_dyn",
-             c_type = "bool",
-             initializer = """ false """,
-             doc = r"""Add dynamical interaction insertion as a move?""")
-
-c.add_member(c_name = "move_remove_dyn",
-             c_type = "bool",
-             initializer = """ false """,
-             doc = r"""Add dynamical interaction removal as a move?""")
 
 c.add_member(c_name = "use_trace_estimator",
              c_type = "bool",
