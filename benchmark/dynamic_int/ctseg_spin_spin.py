@@ -19,7 +19,7 @@ beta = 10
 U = 4.0
 mu = U/2
 J = 0.5
-n_tau = 2051
+n_tau = 4096
 n_tau_bosonic = 2001
 
 # Solver construction parameters
@@ -48,7 +48,7 @@ Delta << iOmega_n + mu - invg0
 S.Delta_tau << Fourier(Delta)
 
 # Spin-spin interaction (D0(tau) and Jperp(tau))
-S.Jperp_tau << -J**2*Q_tau
+S.Jperp_tau << -0.0*J**2*Q_tau
 S.D0_tau["up", "up"] << -0.25*J**2*Q_tau
 S.D0_tau["down", "down"] << -0.25*J**2*Q_tau
 S.D0_tau["up", "down"] << 0.25*J**2*Q_tau
@@ -71,7 +71,7 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    with h5.HDFArchive("spin_spin_ctseg_J-5.h5", 'w') as A:
+    with h5.HDFArchive("spin_spin_ctseg_U.h5", 'w') as A:
         A['G_tau'] = S.results.G_tau
         A['F_tau'] = S.results.F_tau
         A['nn_tau'] = S.results.nn_tau

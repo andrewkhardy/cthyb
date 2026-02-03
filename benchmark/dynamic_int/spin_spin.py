@@ -4,8 +4,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
 
-# Single orbital with dynamical spin-spin interactions. 
-# Data in spin_spin.ref.h5 is obtained by running this script on 800 cores. 
+# Single orbital with dynamical spin-spin interactions.
+# Data in spin_spin.ref.h5 is obtained by running this script on 800 cores.
 import sys
 sys.path.insert(0, '/home/andrewhardy/Documents/CCQ/cthyb_dyn/build/python')
 from triqs.gf import *
@@ -20,7 +20,7 @@ from triqs_cthyb import SolverCore as Solver
 beta = 10
 U = 4.0
 mu = U/2
-J = 0.5#0.5
+J = 0.5
 n_tau = 4096
 n_tau_bosonic = 2001
 
@@ -51,7 +51,7 @@ Delta << iOmega_n + mu - invg0
 S.Delta_tau << Fourier(Delta)
 
 # Spin-spin interaction (D0(tau) and Jperp(tau))
-S.Jperp_tau << -J**2*Q_tau
+S.Jperp_tau << -0.0 * J**2 * Q_tau
 S.D0_tau["up", "up"] << -0.25*J**2*Q_tau
 S.D0_tau["down", "down"] << -0.25*J**2*Q_tau
 S.D0_tau["up", "down"] << 0.25*J**2*Q_tau
@@ -75,7 +75,7 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    with h5.HDFArchive("spin_spin_cthyb_J-5.h5", 'w') as A:
+    with h5.HDFArchive("spin_spin_cthyb_U-0.5.h5", "w") as A:
         A['G_tau'] = S.G_tau
         # A['F_tau'] = S.F_tau
         # A['nn_tau'] = S.nn_tau

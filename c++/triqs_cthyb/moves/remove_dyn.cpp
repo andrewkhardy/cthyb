@@ -55,7 +55,10 @@ namespace triqs_cthyb {
     double dyn_term_ratio = 1.0 / data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2));
 
     // Proposal probability ratio (inverse of insertion)
-    mc_weight_t t_ratio = double(config.dyn_oplist.size()) / (config.beta() * config.beta());
+    // Proposal probability ratio
+    mc_weight_t reverse_probability = (2.0 / (config.beta() * config.beta())) * (1.0 / data.dyn_op_list.size());
+    mc_weight_t direct_probability  = 1.0 / double(config.dyn_oplist.size());
+    mc_weight_t t_ratio             = reverse_probability / direct_probability;
 
     // For quick abandon
     double random_number = rng.preview();
