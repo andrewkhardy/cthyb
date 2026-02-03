@@ -303,14 +303,17 @@ namespace triqs_cthyb {
       // Create bosonic operator pairs for S_perp = S_+ * S_-
       // S_+ = c_dag_up * c_down
       // S_- = c_dag_down * c_up
-      bosonic_op_pair_t Jperp_pair = {
-         .op1     = {.opL = {.block_index = 0, .inner_index = 0, .dagger = true, .linear_index = linindex.at({0, 0})},
-                     .opR = {.block_index = 1, .inner_index = 0, .dagger = false, .linear_index = linindex.at({1, 0})}},
-         .op2     = {.opL = {.block_index = 1, .inner_index = 0, .dagger = true, .linear_index = linindex.at({1, 0})},
-                     .opR = {.block_index = 0, .inner_index = 0, .dagger = false, .linear_index = linindex.at({0, 0})}},
-         .f_index = 0};
+      // ONLY VALID if block == spin
+      for (auto s : {0, 1}) {
+        bosonic_op_pair_t Jperp_pair = {
+           .op1     = {.opL = {.block_index = s, .inner_index = 0, .dagger = true, .linear_index = linindex.at({0, 0})},
+                       .opR = {.block_index = 1 - s, .inner_index = 0, .dagger = false, .linear_index = linindex.at({1, 0})}},
+           .op2     = {.opL = {.block_index = 1 - s, .inner_index = 0, .dagger = true, .linear_index = linindex.at({1, 0})},
+                       .opR = {.block_index = s, .inner_index = 0, .dagger = false, .linear_index = linindex.at({0, 0})}},
+           .f_index = 0};
 
-      dyn_op_list.push_back(Jperp_pair);
+        dyn_op_list.push_back(Jperp_pair);
+      }
 
       // Create lambda function to evaluate Jperp(tau)
       // Capture inputs by reference to avoid copying the large Green's function
@@ -358,14 +361,14 @@ namespace triqs_cthyb {
                  .op2     = {.opL = {.block_index = static_cast<int>(bl2), .inner_index = i2, .dagger = true, .linear_index = linindex.at({bl2, i2})},
                              .opR = {.block_index = static_cast<int>(bl2), .inner_index = i2, .dagger = false, .linear_index = linindex.at({bl2, i2})}},
                  .f_index = static_cast<int>(dyn_interactions.size())};
-              
+
               dyn_op_list.push_back(D0_pair);
 
               // Create lambda function to evaluate D0(tau) for this block pair
               // Make a copy of the specific block for the lambda
               auto D0_block    = inputs.D0t(bl1, bl2);
               auto D0_function = [D0_block, i1, i2](double tau) -> double { return real(D0_block[closest_mesh_pt(tau)](i1, i2)); };
-              dyn_interactions.push_back(D0_function);
+              dyn_interactions.emplace_back(D0_function);
 
               if (params.verbosity >= 2) {
                 std::cout << "Added D0 density-density interaction for blocks (" << bl1 << "," << bl2 << ") indices (" << i1 << "," << i2 << ")"
