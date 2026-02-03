@@ -51,11 +51,11 @@ Delta << iOmega_n + mu - invg0
 S.Delta_tau << Fourier(Delta)
 
 # Spin-spin interaction (D0(tau) and Jperp(tau))
-S.Jperp_tau << -0.0 * J**2 * Q_tau
+S.Jperp_tau << -(J**2) * Q_tau *0.0
 S.D0_tau["up", "up"] << -0.25*J**2*Q_tau
-S.D0_tau["down", "down"] << -0.25*J**2*Q_tau
-S.D0_tau["up", "down"] << 0.25*J**2*Q_tau
-S.D0_tau["down", "up"] << 0.25*J**2*Q_tau
+S.D0_tau["down", "down"] << -0.25*J**2*Q_tau 
+S.D0_tau["up", "down"] << 0.25*J**2*Q_tau *0.0
+S.D0_tau["down", "up"] << 0.25*J**2*Q_tau*0.0
 
 # Solve parameters
 solve_params = {
@@ -75,9 +75,9 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    with h5.HDFArchive("spin_spin_cthyb_U-0.5.h5", "w") as A:
+    with h5.HDFArchive("spin_spin_cthyb_n-0.5.h5", "w") as A:
         A['G_tau'] = S.G_tau
         # A['F_tau'] = S.F_tau
         # A['nn_tau'] = S.nn_tau
         # A['nn'] = S.nn_static
-    print("Results saved to spin_spin_new_J-5.h5")
+    print("Results saved to spin_spin_cthyb_J-0.5.h5")
