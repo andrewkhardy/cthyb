@@ -42,7 +42,7 @@ namespace triqs_cthyb {
     try {
       auto insert_op_pair = [&](auto tau, const auto &op) {
         data.imp_trace.try_insert(tau, op.opL);
-        data.imp_trace.try_insert(tau + data.tau_seg.get_epsilon(), op.opR);
+        data.imp_trace.try_insert(tau - data.tau_seg.get_epsilon(), op.opR);
       };
       insert_op_pair(tau1, dyn_pair.op1);
       insert_op_pair(tau2, dyn_pair.op2);
@@ -105,9 +105,9 @@ namespace triqs_cthyb {
 
     // insert in the configuration (all 4 operators: opL and opR for both op1 and op2)
     config.insert(tau1, dyn_pair.op1.opL);
-    config.insert(tau1 + data.tau_seg.get_epsilon(), dyn_pair.op1.opR);
+    config.insert(tau1 - data.tau_seg.get_epsilon(), dyn_pair.op1.opR);
     config.insert(tau2, dyn_pair.op2.opL);
-    config.insert(tau2 + data.tau_seg.get_epsilon(), dyn_pair.op2.opR);
+    config.insert(tau2 - data.tau_seg.get_epsilon(), dyn_pair.op2.opR);
     
     // Insert the pair of bosonic operators in the configuration
     config.dyn_oplist.push_back({dyn_pair, tau1, tau2});

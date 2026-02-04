@@ -45,8 +45,8 @@ namespace triqs_cthyb {
 
     data.imp_trace.try_delete(tau1);
     data.imp_trace.try_delete(tau2);
-    data.imp_trace.try_delete(tau1 + data.tau_seg.get_epsilon());
-    data.imp_trace.try_delete(tau2 + data.tau_seg.get_epsilon());
+    data.imp_trace.try_delete(tau1 - data.tau_seg.get_epsilon());
+    data.imp_trace.try_delete(tau2 - data.tau_seg.get_epsilon());
 
     //delete_op_pair(tau1, dyn_pair.op1);
     //delete_op_pair(tau2, dyn_pair.op2);
@@ -105,9 +105,9 @@ namespace triqs_cthyb {
 
     // remove from the configuration (all 4 operators)
     config.erase(tau1);
-    config.erase(tau1 + data.tau_seg.get_epsilon());
+    config.erase(tau1 - data.tau_seg.get_epsilon());
     config.erase(tau2);
-    config.erase(tau2 + data.tau_seg.get_epsilon());
+    config.erase(tau2 - data.tau_seg.get_epsilon());
 
     // Remove the pair of bosonic operators from the configuration
     config.dyn_oplist.erase(config.dyn_oplist.begin() + dyn_op_index);
