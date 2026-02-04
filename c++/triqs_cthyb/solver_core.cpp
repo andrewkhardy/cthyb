@@ -304,12 +304,13 @@ namespace triqs_cthyb {
       // S_+ = c_dag_up * c_down
       // S_- = c_dag_down * c_up
       // ONLY VALID if block == spin
+      //FIXME COMPUTE Linear_index automatically
       for (auto s : {0, 1}) {
         bosonic_op_pair_t Jperp_pair = {
-           .op1     = {.opL = {.block_index = s, .inner_index = 0, .dagger = true, .linear_index = linindex.at({0, 0})},
-                       .opR = {.block_index = 1 - s, .inner_index = 0, .dagger = false, .linear_index = linindex.at({1, 0})}},
-           .op2     = {.opL = {.block_index = 1 - s, .inner_index = 0, .dagger = true, .linear_index = linindex.at({1, 0})},
-                       .opR = {.block_index = s, .inner_index = 0, .dagger = false, .linear_index = linindex.at({0, 0})}},
+           .op1     = {.opL = {.block_index = s, .inner_index = 0, .dagger = true, .linear_index = linindex.at({s, 0})},
+                       .opR = {.block_index = 1 - s, .inner_index = 0, .dagger = false, .linear_index = linindex.at({1 - s, 0})}},
+           .op2     = {.opL = {.block_index = 1 - s, .inner_index = 0, .dagger = true, .linear_index = linindex.at({1 - s, 0})},
+                       .opR = {.block_index = s, .inner_index = 0, .dagger = false, .linear_index = linindex.at({s, 0})}},
            .f_index = 0};
 
         dyn_op_list.push_back(Jperp_pair);
