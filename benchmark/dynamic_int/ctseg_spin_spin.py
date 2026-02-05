@@ -51,8 +51,8 @@ S.Delta_tau << Fourier(Delta)
 S.Jperp_tau << -(J**2) * Q_tau *0.0
 S.D0_tau["up", "up"] << -0.25*J**2*Q_tau
 S.D0_tau["down", "down"] << -0.25*J**2*Q_tau
-S.D0_tau["up", "down"] << 0.25*J**2*Q_tau*0
-S.D0_tau["down", "up"] << 0.25*J**2*Q_tau*0
+S.D0_tau["up", "down"] << 0.25*J**2*Q_tau
+S.D0_tau["down", "up"] << 0.25*J**2*Q_tau
 
 
 # Solve parameters
@@ -72,7 +72,7 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    with h5.HDFArchive("spin_spin_ctseg_ndiag-2.h5", 'w') as A:
+    with h5.HDFArchive("spin_spin_ctseg_n-2.h5", 'w') as A:
         A['G_tau'] = S.results.G_tau
         #A['F_tau'] = S.results.F_tau
         A['nn_tau'] = S.results.nn_tau
