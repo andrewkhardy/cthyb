@@ -91,7 +91,7 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    filename = f"spin_spin_cthyb_J-{J}_{i_1}_U-{U}_{i_2}_{i_3}_{i_4}_{i_5}.h5"
+    filename = f"spin_spin_cthyb_J-{i_1}_U-{i_2}_{i_3}_{i_4}_{i_5}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         # A['F_tau'] = S.F_tau
