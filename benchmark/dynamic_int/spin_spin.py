@@ -26,11 +26,11 @@ parser.add_argument('--i1', type=float, default=1.0,  help='i1 switch (0 or 1)')
 parser.add_argument('--i2', type=float, default=1.0,  help='i2 switch (0 or 1)')
 parser.add_argument('--i3', type=float, default=1.0,  help='i3 switch (0 or 1)')
 parser.add_argument('--i4', type=float, default=1.0,  help='i4 switch (0 or 1)')
-parser.add_argument('--i5', type=float, default=1.0, help='i5 switch (0 or 1)')
+parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
 args = parser.parse_args()
-## for example python spin_spin.py --U 4.0 --J 2.0 --i1 1 --i2 1 --i3 1 --i4 1 --i5 1
+
 # Numerical values
-beta = 10
+beta = args.beta
 U = args.U
 mu = U/2
 J = args.J
@@ -67,11 +67,11 @@ S.Delta_tau << Fourier(Delta)
 # plt.figure()
 # oplot(Q_tau)
 # plt.show()
-S.Jperp_tau << -(J**2) * Q_tau * i_1
-S.D0_tau["up", "up"] << -0.25*J**2*Q_tau *i_2
-S.D0_tau["down", "down"] << -0.25*J**2*Q_tau *i_3
-S.D0_tau["up", "down"] << 0.25*J**2*Q_tau * i_4
-S.D0_tau["down", "up"] << 0.25*J**2*Q_tau * i_5
+S.Jperp_tau << -(J) * Q_tau * i_1
+S.D0_tau["up", "up"] << -0.25*J*Q_tau *i_2
+S.D0_tau["down", "down"] << -0.25*J*Q_tau *i_3
+S.D0_tau["up", "down"] << 0.25*J*Q_tau * i_4
+S.D0_tau["down", "up"] << 0.25*J*Q_tau * i_5
 
 # Solve parameters
 solve_params = {
@@ -91,7 +91,7 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    filename = f"spin_spin_cthyb_J-{i_1}_U-{i_2}_{i_3}_{i_4}_{i_5}.h5"
+    filename = f"spin_spin_cthyb_J-{J}-U-{U}_{i_1}_{i_2}_{i_3}_{i_4}_{i_5}_b-{beta}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         # A['F_tau'] = S.F_tau
