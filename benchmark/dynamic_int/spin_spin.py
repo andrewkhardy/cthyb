@@ -77,9 +77,9 @@ S.D0_tau["down", "up"] << 0.25*J**2*Q_tau * i_5
 solve_params = {
     "h_int": U*n("up", 0)*n("down", 0),
     "h_loc0": -mu * (n("up", 0) + n("down", 0)),
-    "length_cycle": 50,
-    "n_warmup_cycles": 50000,
-    "n_cycles": 5000000,
+    "length_cycle": 100,
+    "n_warmup_cycles": 100000,
+    "n_cycles": 25000000,
     # Dynamical interaction moves are now automatically enabled when Jperp_tau or D0_tau are non-zero
     # "measure_F_tau": True,
     # "measure_nn_tau": True,

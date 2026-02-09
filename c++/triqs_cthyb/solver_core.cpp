@@ -321,7 +321,7 @@ namespace triqs_cthyb {
       auto Jperp_gf       = inputs.Jperpt; // Make a copy for the lambda
       auto Jperp_function = [Jperp_gf](double tau) -> double {
         // Use the [] operator which internally calls closest_mesh_pt
-        return real(Jperp_gf[closest_mesh_pt(tau)](0, 0));
+        return real(Jperp_gf[closest_mesh_pt(tau)](0, 0) / 2.0);
       };
       dyn_interactions.push_back(Jperp_function);
 

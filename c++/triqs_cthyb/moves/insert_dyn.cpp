@@ -103,7 +103,7 @@ namespace triqs_cthyb {
     // insert in the tree
     data.imp_trace.confirm_insert();
 
-    //insert in the configuration (all 4 operators: opL and opR for both op1 and op2)
+    // insert in the configuration (all 4 operators: opL and opR for both op1 and op2)
     // config.insert(tau1, dyn_pair.op1.opL);
     // config.insert(tau1 - data.tau_seg.get_epsilon(), dyn_pair.op1.opR);
     // config.insert(tau2, dyn_pair.op2.opL);
