@@ -26,6 +26,7 @@ parser.add_argument('--i1', type=float, default=1.0,  help='i1 switch (0 or 1)')
 parser.add_argument('--i2', type=float, default=1.0,  help='i2 switch (0 or 1)')
 parser.add_argument('--i3', type=float, default=1.0,  help='i3 switch (0 or 1)')
 parser.add_argument('--i4', type=float, default=1.0,  help='i4 switch (0 or 1)')
+parser.add_argument('--i5', type=float, default=1.0,  help='i5 switch (0 or 1)')
 parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
 args = parser.parse_args()
 
