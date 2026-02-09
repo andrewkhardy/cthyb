@@ -7,7 +7,7 @@
 # Single orbital with dynamical spin-spin interactions.
 # Data in spin_spin.ref.h5 is obtained by running this script on 800 cores.
 import sys
-sys.path.insert(0, '/home/andrewhardy/Documents/CCQ/cthyb_dyn/build/python')
+import argparse
 from triqs.gf import *
 import triqs.utility.mpi as mpi
 from triqs.gf.descriptors import Function
@@ -18,11 +18,23 @@ from triqs_cthyb import SolverCore as Solver
 import matplotlib.pyplot as plt
 from triqs.plot.mpl_interface import oplot
 
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
+parser.add_argument('--U', type=float, default=4.0, help='U parameter')
+parser.add_argument('--J', type=float, default=1.0, help='J parameter')
+parser.add_argument('--i1', type=float, default=1.0,  help='i1 switch (0 or 1)')
+parser.add_argument('--i2', type=float, default=1.0,  help='i2 switch (0 or 1)')
+parser.add_argument('--i3', type=float, default=1.0,  help='i3 switch (0 or 1)')
+parser.add_argument('--i4', type=float, default=1.0,  help='i4 switch (0 or 1)')
+parser.add_argument('--i5', type=float, default=1.0, help='i5 switch (0 or 1)')
+args = parser.parse_args()
+## for example python spin_spin.py --U 4.0 --J 2.0 --i1 1 --i2 1 --i3 1 --i4 1 --i5 1
 # Numerical values
 beta = 10
-U = 4.0
+U = args.U
 mu = U/2
-J = 0.5*4
+J = args.J
+i_1, i_2, i_3, i_4, i_5 = args.i1, args.i2, args.i3, args.i4, args.i5
 n_tau = 4096
 n_tau_bosonic = 2001
 
@@ -56,11 +68,11 @@ S.Delta_tau << Fourier(Delta)
 # plt.figure()
 # oplot(Q_tau)
 # plt.show()
-S.Jperp_tau << -(J**2) * Q_tau *0
-S.D0_tau["up", "up"] << -0.25*J**2*Q_tau
-S.D0_tau["down", "down"] << -0.25*J**2*Q_tau
-S.D0_tau["up", "down"] << 0.25*J**2*Q_tau *0
-S.D0_tau["down", "up"] << 0.25*J**2*Q_tau *0
+S.Jperp_tau << -(J**2) * Q_tau * i_1
+S.D0_tau["up", "up"] << -0.25*J**2*Q_tau *i_2
+S.D0_tau["down", "down"] << -0.25*J**2*Q_tau *i_3
+S.D0_tau["up", "down"] << 0.25*J**2*Q_tau * i_4
+S.D0_tau["down", "up"] << 0.25*J**2*Q_tau * i_5
 
 # Solve parameters
 solve_params = {
@@ -80,9 +92,10 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    with h5.HDFArchive("spin_spin_cthyb_n-2.h5", "w") as A:
+    filename = f"spin_spin_cthyb_J-{J}_{i_1}_U-{U}_{i_2}_{i_3}_{i_4}_{i_5}.h5"
+    with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         # A['F_tau'] = S.F_tau
         # A['nn_tau'] = S.nn_tau
         # A['nn'] = S.nn_static
-    print("Results saved to spin_spin_cthyb_n-2.h5")
+    print(f"Results saved to {filename}")

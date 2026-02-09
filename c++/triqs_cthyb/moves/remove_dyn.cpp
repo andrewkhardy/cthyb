@@ -116,6 +116,11 @@ namespace triqs_cthyb {
     data.update_sign();
     data.atomic_weight      = new_atomic_weight;
     data.atomic_reweighting = new_atomic_reweighting;
+  // if (data.current_sign/ data.old_sign != 1.0) {
+  //     TRIQS_RUNTIME_ERROR << "(remove_dyn) Sign changed during bosonic operator removal! "
+  //                         << "new sign is " << data.current_sign / data.old_sign
+  //                         << " in config " << config.get_id();
+  // }
 
     return data.current_sign / data.old_sign;
   }

@@ -103,7 +103,7 @@ namespace triqs_cthyb {
     // insert in the tree
     data.imp_trace.confirm_insert();
 
-    // insert in the configuration (all 4 operators: opL and opR for both op1 and op2)
+    //insert in the configuration (all 4 operators: opL and opR for both op1 and op2)
     config.insert(tau1, dyn_pair.op1.opL);
     config.insert(tau1 - data.tau_seg.get_epsilon(), dyn_pair.op1.opR);
     config.insert(tau2, dyn_pair.op2.opL);
@@ -117,6 +117,12 @@ namespace triqs_cthyb {
     data.atomic_weight      = new_atomic_weight;
     data.atomic_reweighting = new_atomic_reweighting;
     // if (histo_accepted) *histo_accepted << dtau;
+  // if (data.current_sign/ data.old_sign != 1.0) {
+  //     TRIQS_RUNTIME_ERROR << "(insert_dyn) Sign changed during bosonic operator insertion! "
+  //                         << "new sign is " << data.current_sign / data.old_sign
+  //                         << " in config " << config.get_id();
+  // }
+
 
     return data.current_sign / data.old_sign;
   }
