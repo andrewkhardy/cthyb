@@ -18,9 +18,9 @@ module load ${MODULES}
 #source /mnt/home/ahardy/ccq-software-build/triqs/3_developlment/installation/share/triqs/triqsvars.sh
 
 ##################### run your code here #####################
-
-mpirun python ../CTHYB/benchmark/spin_spin.py --J 1.0 --U 4.0 --beta 50.0
-mpirun python ../CTHYB/benchmark/ctseg_spin_spin.py --J 1.0 --U 4.0 --beta 50.0
-mpirun python ../CTHYB/benchmark/spin_spin.py --J 2.0 --U 4.0 --beta 50.0
-mpirun python ../CTHYB/benchmark/ctseg_spin_spin.py --J 2.0 --U 4.0 --beta 50.0
+#../CTHYB/benchmark/
+mpirun python spin_spin.py --J 1.0 --U 4.0 --beta 50.0
+mpirun python ctseg_spin_spin.py --J 1.0 --U 4.0 --beta 50.0
+mpirun python spin_spin.py --J 2.0 --U 4.0 --beta 50.0
+mpirun python ctseg_spin_spin.py --J 2.0 --U 4.0 --beta 50.0
 
