@@ -52,7 +52,7 @@ namespace triqs_cthyb {
     //delete_op_pair(tau2, dyn_pair.op2);
 
     // The ratio for the dynamic interaction (inverse of insertion)
-    double dyn_term_ratio = 1.0 / data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2));
+    double dyn_term_ratio = -1.0 / data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2));
 
     // Proposal probability ratio (inverse of insertion)
     // Proposal probability ratio
@@ -104,10 +104,10 @@ namespace triqs_cthyb {
     data.imp_trace.confirm_delete();
 
     // remove from the configuration (all 4 operators)
-    config.erase(tau1);
-    config.erase(tau1 - data.tau_seg.get_epsilon());
-    config.erase(tau2);
-    config.erase(tau2 - data.tau_seg.get_epsilon());
+    // config.erase(tau1);
+    // config.erase(tau1 - data.tau_seg.get_epsilon());
+    // config.erase(tau2);
+    // config.erase(tau2 - data.tau_seg.get_epsilon());
 
     // Remove the pair of bosonic operators from the configuration
     config.dyn_oplist.erase(config.dyn_oplist.begin() + dyn_op_index);

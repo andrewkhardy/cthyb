@@ -38,7 +38,6 @@ i_1, i_2, i_3, i_4, i_5 = args.i1, args.i2, args.i3, args.i4, args.i5
 n_tau = 4096
 n_tau_bosonic = 2001
 
-# Solver construction parameters
 gf_struct = [('down', 1), ('up', 1)]
 constr_params = {
     "gf_struct": gf_struct,
