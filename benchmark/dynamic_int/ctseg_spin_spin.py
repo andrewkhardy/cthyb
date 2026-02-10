@@ -50,12 +50,17 @@ S = Solver(**constr_params)
 # Get inputs from reference file
 with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
     g0 = Af["dmft_loop/i_001/S/G0_iw/up"]
-    Q_tau = Af["dmft_loop/i_000/Q_tau"]
+    q_tau = Af["dmft_loop/i_000/Q_tau"]
+g0
 
 # Hybridization Delta(tau)
 n_iw = 1025
 Delta = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 invg0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
+Q_tau = GfImTime(indices=[0],  statistic='Boson', beta=beta, n_points=n_tau_bosonic)
+G0 = invg0.copy()
+G0.data[:,0,0] = g0.data[:,0,0]
+Q_tau.data[:,0,0] = q_tau.data[:,0,0]
 invg0 << inverse(g0)
 Delta << iOmega_n + mu - invg0
 S.Delta_tau << Fourier(Delta)
@@ -77,7 +82,8 @@ solve_params = {
     "n_cycles": 25000000,
     "measure_F_tau": False,
     "measure_nn_tau": True,
-    "measure_nn_static": True
+    "measure_nn_static": True,
+    "measure_pert_order": True
     }
 
 # Solve
@@ -85,10 +91,14 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    filename = f"spin_spin_ctseg_J-{J}-U-{U}_{i_1}_{i_2}_{i_3}_{i_4}_{i_5}_b-{beta}.h5"
+    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_ctseg_J-{J}-U-{U}_{i_1}_{i_2}_{i_3}_{i_4}_{i_5}_b-{beta}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.results.G_tau
         #A['F_tau'] = S.results.F_tau
         A['nn_tau'] = S.results.nn_tau
         A['nn'] = S.results.nn_static
         A['densities'] = S.results.densities
+        A["average_sign"] = S.average_sign
+        A["perturbation_order_J"] = S.results.pert_order_Jperp
+        A["perturbation_order_D"] = S.results.pert_order_Delta
+
