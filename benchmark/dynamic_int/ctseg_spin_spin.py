@@ -98,7 +98,7 @@ if mpi.is_master_node():
         A['nn_tau'] = S.results.nn_tau
         A['nn'] = S.results.nn_static
         A['densities'] = S.results.densities
-        A["average_sign"] = S.average_sign
+        A["average_sign"] = S.results.average_sign
         A["perturbation_order_J"] = S.results.pert_order_Jperp
         A["perturbation_order_D"] = S.results.pert_order_Delta
 
