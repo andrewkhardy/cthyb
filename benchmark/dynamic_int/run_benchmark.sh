@@ -15,12 +15,13 @@ module --force purge
 MODULES="modules/2.4-20250724 fftw nfft openmpi/5.0.6 hdf5/mpi-1.12.3 boost/1.87.0  python/3.12.9 python-mpi/3.12.9 flexiblas/3.4.2 llvm/19.1.7"
 module load ${MODULES}
 #source /mnt/home/ahardy/ccq-software-build/triqs/3_unst_nix2.3_llvm/installation/share/triqs/triqsvars.sh
-source /mnt/home/ahardy/ccq-software-build/triqs/3_developlment/installation/share/triqs/triqsvars.sh
+source /mnt/home/ahardy/ccq-software-build/triqs/.triqs_dev/bin/activate
+source /mnt/home/ahardy/ccq-software-build/triqs/3_development/installation/share/triqs/triqsvars.sh
 
 ##################### run your code here #####################
 #../CTHYB/benchmark/
-mpirun python spin_spin.py --J 1.0 --U 4.0 --beta 50.0
-mpirun python ctseg_spin_spin.py --J 1.0 --U 4.0 --beta 50.0
-mpirun python spin_spin.py --J 2.0 --U 4.0 --beta 50.0
-mpirun python ctseg_spin_spin.py --J 2.0 --U 4.0 --beta 50.0
+mpirun python spin_spin.py --J 1.0 --U 4.0 --beta 10.0
+#mpirun python ctseg_spin_spin.py --J 1.0 --U 4.0 --beta 10.0
+mpirun python spin_spin.py --J 2.0 --U 4.0 --beta 10.0
+mpirun python ctseg_spin_spin.py --J 2.0 --U 4.0 --beta 10.0
 
