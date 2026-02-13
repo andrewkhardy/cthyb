@@ -36,10 +36,9 @@ gf_struct = [('down', 1), ('up', 1)]
 S = Solver(beta = beta,
            gf_struct = gf_struct,
            n_tau = n_tau,
-           dlr_wmax = 10.0,
            use_Jperp = True,
            n_tau_dynamical_interactions = n_tau_bosonic)
-
+##    dlr_wmax = 10.0,
 # Get inputs from reference file
 with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
     g0 = Af["dmft_loop/i_001/S/G0_iw/up"]
