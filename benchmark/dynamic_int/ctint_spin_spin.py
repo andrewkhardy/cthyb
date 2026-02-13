@@ -50,8 +50,9 @@ with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
 # Both spin channels get the same G0 (paramagnetic solution)
 for bl, g_bl in S.G0_iw:
     print(S.G0_iw[bl])
-    g0_tau = make_gf_from_fourier
-    g_bl.data[:,0,0] = g0.data[:,0,0]
+    g0_tau = make_gf_from_fourier(g0)
+    go_tau_dlr = fit_gf_dlr(g0_tau, wmax=10.0, eps = 1e-10, symmetrize = True)
+    g_bl.data[:,0,0] = go_tau_dlr.data[:,0,0]
 
 # Construct Q_tau from reference data
 Q_tau = GfImTime(indices=[0], statistic='Boson', beta=beta, n_points=n_tau_bosonic)
