@@ -100,7 +100,7 @@ S.solve(h_int = U*n("up", 0)*n("down", 0),
 
 # -------- Save in archive ---------
 if mpi.is_master_node():
-    filename = f"spin_spin_ctint_J-{J}-U-{U}_{i_1}_{i_2}_{i_3}_{i_4}_{i_5}_b-{beta}.h5"
+    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_ctint_J-{J}-U-{U}_{i_1}_{i_2}_{i_3}_{i_4}_{i_5}_b-{beta}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A["G0_iw"] = S.G0_iw
         A["G_iw"] = S.G_iw
