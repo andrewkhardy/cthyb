@@ -45,9 +45,12 @@ with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
     g0 = Af["dmft_loop/i_001/S/G0_iw/up"]
     q_tau = Af["dmft_loop/i_000/Q_tau"]
 
+
 # Initialize G0_iw (CT-INT uses G0_iw, not Delta_tau)
 # Both spin channels get the same G0 (paramagnetic solution)
 for bl, g_bl in S.G0_iw:
+    print(S.G0_iw[bl])
+    g0_tau = make_gf_from_fourier
     g_bl.data[:,0,0] = g0.data[:,0,0]
 
 # Construct Q_tau from reference data
