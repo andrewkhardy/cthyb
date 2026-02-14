@@ -82,6 +82,7 @@ solve_params = {
     "n_cycles": 50000000,
     "measure_F_tau": False,
     "measure_nn_tau": True,
+    "measure_nu_nu": True,
     "measure_nn_static": True,
     "measure_pert_order": True
     }
@@ -96,6 +97,7 @@ if mpi.is_master_node():
         A['G_tau'] = S.results.G_tau
         #A['F_tau'] = S.results.F_tau
         A['nn_tau'] = S.results.nn_tau
+        A['nu_nu'] = S.results.nu_nu
         A['nn'] = S.results.nn_static
         A['densities'] = S.results.densities
         A["average_sign"] = S.results.average_sign
