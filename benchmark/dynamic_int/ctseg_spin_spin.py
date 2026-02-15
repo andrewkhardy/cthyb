@@ -82,7 +82,7 @@ solve_params = {
     "n_cycles": 50000000,
     "measure_F_tau": False,
     "measure_nn_tau": True,
-    "measure_nu_nu": True,
+    "measure_nn_nu": True,
     "measure_nn_static": True,
     "measure_pert_order": True
     }
