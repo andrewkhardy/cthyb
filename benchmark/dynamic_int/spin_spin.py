@@ -28,6 +28,8 @@ parser.add_argument('--i3', type=float, default=1.0,  help='i3 switch (0 or 1)')
 parser.add_argument('--i4', type=float, default=1.0,  help='i4 switch (0 or 1)')
 parser.add_argument('--i5', type=float, default=1.0,  help='i5 switch (0 or 1)')
 parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
+parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
+parser.add_argument('--measure_O_tau', type=int, default=100, help='Minimum insertions for O_tau measurement')
 args = parser.parse_args()
 
 # Numerical values
@@ -38,6 +40,8 @@ J = args.J
 i_1, i_2, i_3, i_4, i_5 = args.i1, args.i2, args.i3, args.i4, args.i5
 n_tau = 4096
 n_tau_bosonic = 2001
+n_cycles = args.n_cycles
+measure_O_tau_min_ins = args.measure_O_tau
 Sz = 0.5 * ( n('up', 0) - n('down', 0) )
 gf_struct = [('down', 1), ('up', 1)]
 constr_params = {
@@ -85,10 +89,10 @@ solve_params = {
     "h_loc0": -mu * (n("up", 0) + n("down", 0)),
     "length_cycle": 100,
     "n_warmup_cycles": 100000,
-    "n_cycles": 25000000,
+    "n_cycles": n_cycles,
     "measure_pert_order": True,
     "measure_O_tau": (Sz, Sz),
-    "measure_O_tau_min_ins": 100,
+    "measure_O_tau_min_ins": measure_O_tau_min_ins,
     # Dynamical interaction moves are now automatically enabled when Jperp_tau or D0_tau are non-zero
     # "measure_F_tau": True,
     # "measure_nn_tau": True,
@@ -100,7 +104,7 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_cthyb_J-{J}-U-{U}_{i_1}_{i_2}_{i_3}_{i_4}_{i_5}_b-{beta}.h5"
+    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_cthyb_J-{J}-U-{U}_{i_1}_{i_2}_{i_3}_{i_4}_{i_5}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         A["perturbation_order"] = S.perturbation_order
