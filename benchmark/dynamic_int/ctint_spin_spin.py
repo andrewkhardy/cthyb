@@ -66,10 +66,10 @@ Q_iw_dlr = make_gf_dlr_imfreq(Q_tau_dlr)
 
 # --------- Spin-spin interaction via Matsubara frequency (DLR) ---------
 S.Jperp_iw.data[:] = -(J) * Q_iw_dlr.data[:] * i_1
-S.D0_iw["up", "up"].data[:] = -0.25*J*Q_iw_dlr.data[:] * i_2
-S.D0_iw["down", "down"].data[:] = -0.25*J*Q_iw_dlr.data[:] * i_3
-S.D0_iw["up", "down"].data[:] = 0.25*J*Q_iw_dlr.data[:] * i_4
-S.D0_iw["down", "up"].data[:] = 0.25*J*Q_iw_dlr.data[:] * i_5
+# S.D0_iw["up", "up"].data[:] = -0.25*J*Q_iw_dlr.data[:] * i_2
+# S.D0_iw["down", "down"].data[:] = -0.25*J*Q_iw_dlr.data[:] * i_3
+# S.D0_iw["up", "down"].data[:] = 0.25*J*Q_iw_dlr.data[:] * i_4
+# S.D0_iw["down", "up"].data[:] = 0.25*J*Q_iw_dlr.data[:] * i_5
 
 # # --------- Alternative: Spin-spin interaction via tau interface ---------
 # S.Jperp_tau << -(J) * Q_tau * i_1
