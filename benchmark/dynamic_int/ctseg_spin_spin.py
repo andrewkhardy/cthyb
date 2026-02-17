@@ -97,7 +97,7 @@ if mpi.is_master_node():
         A['G_tau'] = S.results.G_tau
         #A['F_tau'] = S.results.F_tau
         A['nn_tau'] = S.results.nn_tau
-        A['nu_nu'] = S.results.nu_nu
+        A['nn_nu'] = S.results.nn_nu
         A['nn'] = S.results.nn_static
         A['densities'] = S.results.densities
         A["average_sign"] = S.results.average_sign
