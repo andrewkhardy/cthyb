@@ -52,7 +52,7 @@ S = Solver(beta = beta,
                use_D = True,
                use_Jperp = True,
                n_tau_dynamical_interactions = 2001,
-               n_iw_dynamical_interactions = 200)
+               n_iw_dynamical_interactions = 333)
 
 # Get inputs from reference file
 with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
