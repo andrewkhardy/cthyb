@@ -34,14 +34,24 @@ n_tau = 4096
 n_tau_bosonic = 2001
 
 # Solver construction parameters
-gf_struct = [('down', 1), ('up', 1)]
+block_names = ['down','up']
+gf_struct = [(bl, 1) for bl in block_names]
+# S = Solver(beta = beta,
+#            gf_struct = gf_struct,
+#            n_tau = n_tau,
+#            use_Jperp = True,
+#             use_D = True,
+#            dlr_wmax = 10.0
+# )
 S = Solver(beta = beta,
-           gf_struct = gf_struct,
-           n_tau = n_tau,
-           use_Jperp = True,
-            use_D = True,
-           dlr_wmax = 10.0
-)
+               gf_struct = gf_struct,
+               n_iw = 200,
+               n_tau = 100001,
+               use_D = True,
+               use_Jperp = True,
+               n_tau_dynamical_interactions = 2001,
+               n_iw_dynamical_interactions = 200)
+
 # Get inputs from reference file
 with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
     g0 = Af["dmft_loop/i_001/S/G0_iw/up"]
@@ -78,8 +88,7 @@ S.D0_iw["down", "up"].data[:] = 0.25*J*Q_iw.data[:] * i_5
 # S.D0_tau["down", "down"] << -0.25*J*Q_tau * i_3
 # S.D0_tau["up", "down"] << 0.25*J*Q_tau * i_4
 # S.D0_tau["down", "up"] << 0.25*J*Q_tau * i_5
-block_names = ['up','dn']
-gf_struct = [(bl, 1) for bl in block_names]
+
 h_int = U * n(block_names[0],0)*n(block_names[1],0)
 
 S.solve(h_int=h_int,
