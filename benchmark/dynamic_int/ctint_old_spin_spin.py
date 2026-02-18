@@ -47,7 +47,7 @@ n_iw = 1025
 
 S = Solver(beta = beta,
                gf_struct = gf_struct,
-               n_iw = 200,
+               n_iw = 1025,
                n_tau = 100001,
                use_D = True,
                use_Jperp = True,
