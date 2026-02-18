@@ -56,16 +56,17 @@ S = Solver(beta = beta,
 with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
     g0 = Af["dmft_loop/i_001/S/G0_iw/up"]
     q_tau = Af["dmft_loop/i_000/Q_tau"]
-
-
+invg0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
+G0 = invg0.copy()
+G0.data[:,0,0] = g0.data[:,0,0]
 # Initialize G0_iw (CT-INT uses G0_iw, not Delta_tau)
 # Both spin channels get the same G0 (paramagnetic solution)
-g0_tau = make_gf_from_fourier(g0)
-g0_tau_dlr = fit_gf_dlr(g0_tau, w_max=10.0, eps = 1e-10, symmetrize = True)
-g0_iw = make_gf_dlr_imfreq(g0_tau_dlr)
+G0_tau = make_gf_from_fourier(G0)
+#g0_tau_dlr = fit_gf_dlr(g0_tau, w_max=10.0, eps = 1e-10, symmetrize = True)
+#g0_iw = make_gf_dlr_imfreq(g0_tau_dlr)
 
 for bl, g_bl in S.G0_iw:
-    g_bl.data[:,0,0] = g0.data[:,0,0]
+    g_bl.data[:,0,0] = G0.data[:,0,0]
 
 Q_tau = GfImTime(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_tau_bosonic)
 Q_tau.data[:,0,0] = q_tau.data[:,0,0]
