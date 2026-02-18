@@ -34,7 +34,7 @@ n_tau = 4096
 n_tau_bosonic = 2001
 
 # Solver construction parameters
-block_names = ['down','up']
+block_names = ['dn','up']
 gf_struct = [(bl, 1) for bl in block_names]
 h_int = U * n(block_names[0],0)*n(block_names[1],0)
 
@@ -83,16 +83,16 @@ Q_iw = make_gf_from_fourier(Q_tau)
 # --------- Spin-spin interaction via Matsubara frequency (DLR) ---------
 S.Jperp_iw.data[:] = -(J) * Q_iw.data[:] * i_1
 S.D0_iw["up", "up"].data[:] = -0.25*J*Q_iw.data[:] * i_2
-S.D0_iw["down", "down"].data[:] = -0.25*J*Q_iw.data[:] * i_3
-S.D0_iw["up", "down"].data[:] = 0.25*J*Q_iw.data[:] * i_4
-S.D0_iw["down", "up"].data[:] = 0.25*J*Q_iw.data[:] * i_5
+S.D0_iw["dn", "dn"].data[:] = -0.25*J*Q_iw.data[:] * i_3
+S.D0_iw["up", "dn"].data[:] = 0.25*J*Q_iw.data[:] * i_4
+S.D0_iw["dn", "up"].data[:] = 0.25*J*Q_iw.data[:] * i_5
 
 # # --------- Alternative: Spin-spin interaction via tau interface ---------
 # S.Jperp_tau << -(J) * Q_tau * i_1
 # S.D0_tau["up", "up"] << -0.25*J*Q_tau * i_2
-# S.D0_tau["down", "down"] << -0.25*J*Q_tau * i_3
-# S.D0_tau["up", "down"] << 0.25*J*Q_tau * i_4
-# S.D0_tau["down", "up"] << 0.25*J*Q_tau * i_5
+# S.D0_tau["dn", "dn"] << -0.25*J*Q_tau * i_3
+# S.D0_tau["up", "dn"] << 0.25*J*Q_tau * i_4
+# S.D0_tau["dn", "up"] << 0.25*J*Q_tau * i_5
 
 
 S.solve(h_int=h_int,
