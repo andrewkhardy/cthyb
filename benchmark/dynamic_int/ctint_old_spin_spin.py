@@ -43,11 +43,11 @@ gf_struct = [(bl, 1) for bl in block_names]
 #             use_D = True,
 #            dlr_wmax = 10.0
 # )
-n_iw = 200
+n_iw = 1025
 
 S = Solver(beta = beta,
                gf_struct = gf_struct,
-               n_iw = n_iw,
+               n_iw = 200,
                n_tau = 100001,
                use_D = True,
                use_Jperp = True,
