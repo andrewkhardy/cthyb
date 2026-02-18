@@ -36,6 +36,8 @@ n_tau_bosonic = 2001
 # Solver construction parameters
 block_names = ['down','up']
 gf_struct = [(bl, 1) for bl in block_names]
+h_int = U * n(block_names[0],0)*n(block_names[1],0)
+
 # S = Solver(beta = beta,
 #            gf_struct = gf_struct,
 #            n_tau = n_tau,
@@ -92,7 +94,6 @@ S.D0_iw["down", "up"].data[:] = 0.25*J*Q_iw.data[:] * i_5
 # S.D0_tau["up", "down"] << 0.25*J*Q_tau * i_4
 # S.D0_tau["down", "up"] << 0.25*J*Q_tau * i_5
 
-h_int = U * n(block_names[0],0)*n(block_names[1],0)
 
 S.solve(h_int=h_int,
         n_cycles = 1000000,
