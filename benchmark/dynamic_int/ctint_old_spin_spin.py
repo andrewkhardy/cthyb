@@ -32,67 +32,49 @@ J = args.J
 i_1, i_2, i_3, i_4, i_5 = args.i1, args.i2, args.i3, args.i4, args.i5
 n_tau = 4096
 n_tau_bosonic = 2001
-
+n_iw = 1025
 # Solver construction parameters
 block_names = ['dn','up']
 gf_struct = [(bl, 1) for bl in block_names]
 h_int = U * n(block_names[0],0)*n(block_names[1],0)
 
-# S = Solver(beta = beta,
-#            gf_struct = gf_struct,
-#            n_tau = n_tau,
-#            use_Jperp = True,
-#             use_D = True,
-#            dlr_wmax = 10.0
-# )
 n_iw = 1025
 
 S = Solver(beta = beta,
                gf_struct = gf_struct,
-               n_iw = 1025,
-               n_tau = 100001,
+               n_iw = n_iw,
+               n_tau = n_tau,
                use_D = True,
                use_Jperp = True,
-               n_tau_dynamical_interactions = 2001,
+               n_tau_dynamical_interactions = n_tau_bosonic,
                n_iw_dynamical_interactions = 333)
 
 # Get inputs from reference file
 with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
     g0 = Af["dmft_loop/i_001/S/G0_iw/up"]
     q_tau = Af["dmft_loop/i_000/Q_tau"]
+
 invg0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 G0 = invg0.copy()
 G0.data[:,0,0] = g0.data[:,0,0]
 # Initialize G0_iw (CT-INT uses G0_iw, not Delta_tau)
 # Both spin channels get the same G0 (paramagnetic solution)
-G0_tau = make_gf_from_fourier(G0)
-#g0_tau_dlr = fit_gf_dlr(g0_tau, w_max=10.0, eps = 1e-10, symmetrize = True)
-#g0_iw = make_gf_dlr_imfreq(g0_tau_dlr)
-
 for bl, g_bl in S.G0_iw:
     g_bl.data[:,0,0] = G0.data[:,0,0]
 
 Q_tau = GfImTime(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_tau_bosonic)
 Q_tau.data[:,0,0] = q_tau.data[:,0,0]
 
-# Convert Q_tau to DLR grid for frequency-domain input
-# Q_tau_dlr = fit_gf_dlr(Q_tau, w_max=10.0, eps=1e-10, symmetrize=True)
-# Q_iw_dlr = make_gf_dlr_imfreq(Q_tau_dlr)
 Q_iw = make_gf_from_fourier(Q_tau)
-
+print(Q_tau)
+print(Q_iw)
+print(S.Jperp)
 # --------- Spin-spin interaction via Matsubara frequency (DLR) ---------
 S.Jperp_iw.data[:]          = -1.00*J* Q_iw.data[:] * i_1
 S.D0_iw["up", "up"].data[:] = -0.25*J* Q_iw.data[:] * i_2
 S.D0_iw["dn", "dn"].data[:] = -0.25*J* Q_iw.data[:] * i_3
 S.D0_iw["up", "dn"].data[:] =  0.25*J* Q_iw.data[:] * i_4
 S.D0_iw["dn", "up"].data[:] =  0.25*J* Q_iw.data[:] * i_5
-
-# # --------- Alternative: Spin-spin interaction via tau interface ---------
-# S.Jperp_tau << -(J) * Q_tau * i_1
-# S.D0_tau["up", "up"] << -0.25*J*Q_tau * i_2
-# S.D0_tau["dn", "dn"] << -0.25*J*Q_tau * i_3
-# S.D0_tau["up", "dn"] << 0.25*J*Q_tau * i_4
-# S.D0_tau["dn", "up"] << 0.25*J*Q_tau * i_5
 
 
 S.solve(h_int=h_int,
