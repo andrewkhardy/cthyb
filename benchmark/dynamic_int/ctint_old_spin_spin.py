@@ -47,7 +47,7 @@ S = Solver(beta = beta,
                use_D = True,
                use_Jperp = True,
                n_tau_dynamical_interactions = n_tau_bosonic,
-               n_iw_dynamical_interactions = n_iw)
+               n_iw_dynamical_interactions = n_tau_bosonic//2)
 
 # Get inputs from reference file
 with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
@@ -63,7 +63,7 @@ for bl, g_bl in S.G0_iw:
     g_bl.data[:,0,0] = G0.data[:,0,0]
 
 Q_tau = GfImTime(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_tau_bosonic)
-Q_iw = GfImFreq(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_tau_bosonic)
+Q_iw = GfImFreq(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_tau_bosonic//2)
 Q_tau.data[:,0,0] = q_tau.data[:,0,0]
 
 #Q_iw = make_gf_from_fourier(Q_tau)
