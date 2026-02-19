@@ -47,7 +47,7 @@ S = Solver(beta = beta,
                use_D = True,
                use_Jperp = True,
                n_tau_dynamical_interactions = n_tau_bosonic,
-               n_iw_dynamical_interactions = 333)
+               n_iw_dynamical_interactions = n_iw)
 
 # Get inputs from reference file
 with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
@@ -63,12 +63,14 @@ for bl, g_bl in S.G0_iw:
     g_bl.data[:,0,0] = G0.data[:,0,0]
 
 Q_tau = GfImTime(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_tau_bosonic)
+Q_iw = GfImFreq(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_iw)
 Q_tau.data[:,0,0] = q_tau.data[:,0,0]
 
-Q_iw = make_gf_from_fourier(Q_tau)
+#Q_iw = make_gf_from_fourier(Q_tau)
+Q_iw << Fourier(Q_tau)
 print(Q_tau)
 print(Q_iw)
-print(S.Jperp)
+print(S.Jperp_iw)
 # --------- Spin-spin interaction via Matsubara frequency (DLR) ---------
 S.Jperp_iw.data[:]          = -1.00*J* Q_iw.data[:] * i_1
 S.D0_iw["up", "up"].data[:] = -0.25*J* Q_iw.data[:] * i_2
