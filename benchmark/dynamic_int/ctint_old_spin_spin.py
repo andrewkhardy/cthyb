@@ -63,7 +63,7 @@ for bl, g_bl in S.G0_iw:
     g_bl.data[:,0,0] = G0.data[:,0,0]
 
 Q_tau = GfImTime(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_tau_bosonic)
-Q_iw = GfImFreq(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_iw)
+Q_iw = GfImFreq(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_tau_bosonic)
 Q_tau.data[:,0,0] = q_tau.data[:,0,0]
 
 #Q_iw = make_gf_from_fourier(Q_tau)
