@@ -81,11 +81,11 @@ Q_tau.data[:,0,0] = q_tau.data[:,0,0]
 Q_iw = make_gf_from_fourier(Q_tau)
 
 # --------- Spin-spin interaction via Matsubara frequency (DLR) ---------
-S.Jperp_iw.data[:] = -(J) * Q_iw.data[:] * i_1
-S.D0_iw["up", "up"].data[:] = -0.25*J*Q_iw.data[:] * i_2
-S.D0_iw["dn", "dn"].data[:] = -0.25*J*Q_iw.data[:] * i_3
-S.D0_iw["up", "dn"].data[:] = 0.25*J*Q_iw.data[:] * i_4
-S.D0_iw["dn", "up"].data[:] = 0.25*J*Q_iw.data[:] * i_5
+S.Jperp_iw.data[:]          = -1.00*J* Q_iw.data[:] * i_1
+S.D0_iw["up", "up"].data[:] = -0.25*J* Q_iw.data[:] * i_2
+S.D0_iw["dn", "dn"].data[:] = -0.25*J* Q_iw.data[:] * i_3
+S.D0_iw["up", "dn"].data[:] =  0.25*J* Q_iw.data[:] * i_4
+S.D0_iw["dn", "up"].data[:] =  0.25*J* Q_iw.data[:] * i_5
 
 # # --------- Alternative: Spin-spin interaction via tau interface ---------
 # S.Jperp_tau << -(J) * Q_tau * i_1
@@ -96,7 +96,7 @@ S.D0_iw["dn", "up"].data[:] = 0.25*J*Q_iw.data[:] * i_5
 
 
 S.solve(h_int=h_int,
-        n_cycles = 1000000,
+        n_cycles = 100000,
         length_cycle = 100,
         n_warmup_cycles = 100,
         random_seed = 34788,

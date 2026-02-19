@@ -26,4 +26,5 @@ source /mnt/home/ahardy/ccq-software-build/triqs/3.3.x/installation/share/triqs/
 #mpirun python spin_spin.py --J 1.0 --U 4.0 --i1 0.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0
 #mpirun python ctseg_spin_spin.py --J 1.0 --U 4.0 --i1 0.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0
 #mpirun python spin_spin.py --J 1.0 --U 4.0 --i1 1.0 --i2 0.0 --i3 0.0 --i4 0.0  --i5 0.0 --beta 10.0
-mpirun python ctint_old_spin_spin.py --J 1.0 --U 4.0 --i1 1.0 --i2 0.0 --i3 0.0 --i4 0.0  --i5 0.0 --beta 10.0
+#mpirun python ctint_old_spin_spin.py --J 1.0 --U 4.0 --i1 1.0 --i2 0.0 --i3 0.0 --i4 0.0  --i5 0.0 --beta 10.0
+mpirun python ctint_old_spin_spin.py --J 0.25 --U 4.0 --i1 1.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0
