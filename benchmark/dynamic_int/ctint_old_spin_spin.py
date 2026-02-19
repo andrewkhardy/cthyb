@@ -66,11 +66,8 @@ Q_tau = GfImTime(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_ta
 Q_iw = GfImFreq(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_tau_bosonic//2)
 Q_tau.data[:,0,0] = q_tau.data[:,0,0]
 
-#Q_iw = make_gf_from_fourier(Q_tau)
 Q_iw << Fourier(Q_tau)
-print(Q_tau)
-print(Q_iw)
-print(S.Jperp_iw)
+
 # --------- Spin-spin interaction via Matsubara frequency (DLR) ---------
 S.Jperp_iw.data[:]          = -1.00*J* Q_iw.data[:] * i_1
 S.D0_iw["up", "up"].data[:] = -0.25*J* Q_iw.data[:] * i_2
