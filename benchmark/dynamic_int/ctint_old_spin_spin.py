@@ -96,7 +96,7 @@ S.D0_iw["dn", "up"].data[:] =  0.25*J* Q_iw.data[:] * i_5
 
 
 S.solve(h_int=h_int,
-        n_cycles = 100000,
+        n_cycles = 1000000,
         length_cycle = 100,
         n_warmup_cycles = 100,
         random_seed = 34788,
