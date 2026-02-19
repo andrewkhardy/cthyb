@@ -1,16 +1,13 @@
-# Single orbital with dynamical spin-spin interactions (CT-INT solver).
-# Adapted from ctseg_spin_spin.py for benchmarking against CT-SEG and CT-HYB.
-from triqs_ctint import Solver
-
+from triqs.gf import *
 import argparse
 import triqs.utility.mpi as mpi
-from triqs.gf import *
 from triqs.gf.descriptors import Function
 from triqs.gf.tools import *
-from triqs.operators import n
 from triqs.gf.block_gf import *
+from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff
+from triqs_ctint import Solver
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking (CT-INT).')
@@ -27,7 +24,7 @@ args, unknown = parser.parse_known_args()
 # Numerical values
 beta = args.beta
 U = args.U
-mu = U/2
+mu = U/2 # where does this get input?
 J = args.J
 i_1, i_2, i_3, i_4, i_5 = args.i1, args.i2, args.i3, args.i4, args.i5
 n_tau = 4096
@@ -37,17 +34,17 @@ n_iw = 1025
 block_names = ['dn','up']
 gf_struct = [(bl, 1) for bl in block_names]
 h_int = U * n(block_names[0],0)*n(block_names[1],0)
-
-n_iw = 1025
-
-S = Solver(beta = beta,
-               gf_struct = gf_struct,
-               n_iw = n_iw,
-               n_tau = n_tau,
-               use_D = True,
-               use_Jperp = True,
-               n_tau_dynamical_interactions = n_tau_bosonic,
-               n_iw_dynamical_interactions = n_tau_bosonic//2)
+constr_params = {
+    "beta": beta,
+    "gf_struct": gf_struct,
+    "n_iw": n_iw,
+    "n_tau": n_tau,
+    "use_D": True,
+    "use_Jperp": True,
+"n_tau_dynamical_interactions": n_tau_bosonic,
+"n_iw_dynamical_interactions": n_tau_bosonic//2
+}
+S = Solver(**constr_params)
 
 # Get inputs from reference file
 with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
@@ -67,7 +64,6 @@ Q_iw = GfImFreq(target_shape=[1,1], statistic='Boson', beta=beta, n_points=n_tau
 Q_tau.data[:,0,0] = q_tau.data[:,0,0]
 
 Q_iw << Fourier(Q_tau)
-
 # --------- Spin-spin interaction via Matsubara frequency (DLR) ---------
 S.Jperp_iw.data[:]          = -1.00*J* Q_iw.data[:] * i_1
 S.D0_iw["up", "up"].data[:] = -0.25*J* Q_iw.data[:] * i_2

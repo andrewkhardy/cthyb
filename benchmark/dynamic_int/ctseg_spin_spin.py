@@ -1,15 +1,9 @@
-# Copyright (c) 2025--present, The Simons Foundation
-# Copyright (c) 2025--present, Max Planck Institute for Polymer Research, Mainz, Germany
-# This file is part of TRIQS/ctseg and is licensed under the terms of GPLv3 or later.
-# SPDX-License-Identifier: GPL-3.0-or-later
-# See LICENSE in the root of this distribution for details.
-
-# Single orbital with dynamical spin-spin interactions. 
-# Data in spin_spin.ref.h5 is obtained by running this script on 800 cores. 
 from triqs.gf import *
 import argparse
 import triqs.utility.mpi as mpi
 from triqs.gf.descriptors import Function
+from triqs.gf.tools import *
+from triqs.gf.block_gf import *
 from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff
@@ -35,6 +29,8 @@ J = args.J
 i_1, i_2, i_3, i_4, i_5 = args.i1, args.i2, args.i3, args.i4, args.i5
 n_tau = 4096
 n_tau_bosonic = 2001
+n_iw = 1025
+h_int = U*n("up", 0)*n("down", 0)
 # Solver construction parameters
 gf_struct = [('down', 1), ('up', 1)]
 constr_params = {
@@ -51,10 +47,8 @@ S = Solver(**constr_params)
 with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
     g0 = Af["dmft_loop/i_001/S/G0_iw/up"]
     q_tau = Af["dmft_loop/i_000/Q_tau"]
-g0
 
 # Hybridization Delta(tau)
-n_iw = 1025
 Delta = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 invg0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 Q_tau = GfImTime(indices=[0],  statistic='Boson', beta=beta, n_points=n_tau_bosonic)
@@ -75,7 +69,7 @@ S.D0_tau["down", "up"] << 0.25*J*Q_tau * i_5
 
 # Solve parameters
 solve_params = {
-    "h_int": U*n("up", 0)*n("down", 0),
+    "h_int": h_int,
     "h_loc0": -mu * (n("up", 0) + n("down", 0)),
     "length_cycle": 100,
     "n_warmup_cycles": 100000,
