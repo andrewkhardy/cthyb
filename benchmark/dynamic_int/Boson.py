@@ -7,12 +7,11 @@ from h5 import *
 from triqs.operators import *
 from triqs.utility.h5diff import h5diff
 from triqs.gf.descriptors import Function
-from numpy import linspace
-
+import numpy as np
 test_name = 'all_continuousBoson'
 
 ######## physical parameters ########
-U = 1.0
+U = 4.0
 mu = U/4.0
 beta = 10.0
 
@@ -43,18 +42,18 @@ for bl, g_bl in S.G0_iw: g_bl << inverse(iOmega_n + mu - 1.0 * semicirc)
 # Boson Frequency
 w0=1.0
 s=0.2
-nu = lambda n,beta : (2*n*pi/beta) #bosonic frequences
-Eps=linspace(0,w0,2500) #eps grid
+nu = lambda n,beta : (2*n*np.pi/beta) #bosonic frequences
+Eps=np.linspace(0,w0,2500) #eps grid
 Dz_expr = lambda w, g : (-1.)*(.5*g**2) *((s+1)*w0**(-s-1))*sum([eps**(s+1)/(abs(w)*abs(w)+eps**2) for eps in Eps])*(Eps[1]-Eps[0]) #Dz away from 0
 Dz0 = lambda g : (-1.)*(.5*g**2)*(s+1.)/s/w0 #Dz at zero (Dz_expr ill-defined at w=0)
 Dz_expr_reg = lambda w, g: Dz_expr(w,g) if abs(w)>0.0 else Dz0(g) #Dz for any w
 
 # Dynamic Spin-Spin Interaction
-J = 0.5;
+J = 1.0;
 S.Jperp_iw[0,0] << Function(lambda w : 2.0*Dz_expr_reg(w, J))
 
 # Dynamic Density-Density Interaction
-D = 0.5
+D = 1.0
 S.D0_iw['up','dn'][0,0] << Function(lambda w : Dz_expr_reg(w, D))
 
 # --------- Solve! ----------

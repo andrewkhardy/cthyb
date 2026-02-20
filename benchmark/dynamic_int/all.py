@@ -10,7 +10,7 @@ from triqs.utility.h5diff import h5diff
 test_name = 'all'
 
 ######## physical parameters ########
-U = 1.0
+U = 4.0
 mu = U/4.0
 beta = 10.0
 
@@ -42,11 +42,11 @@ for bl, g_bl in S.G0_iw: g_bl << inverse(iOmega_n + mu - 1.0 * semicirc)
 w0=1.0
 
 # Dynamic Spin-Spin Interaction
-J = 0.5;
+J = 1.0;
 S.Jperp_iw[0,0] << 0.5 * J**2*(inverse(iOmega_n-w0)-inverse(iOmega_n+w0))
 
 # Dynamic Density-Density Interaction
-D = 0.5
+D = 1.0
 S.D0_iw['up','dn'][0,0]  << D**2*(inverse(iOmega_n-w0)-inverse(iOmega_n+w0))
 
 # --------- Solve! ----------
