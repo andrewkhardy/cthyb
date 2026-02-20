@@ -15,7 +15,7 @@ mu = U/4.0
 beta = 10.0
 
 ######## simulation parameters ########
-n_cyc = 100000
+n_cyc = 1000000
 
 # --------- set up static interactions and the block structure ---------
 block_names = ['dn','up']
