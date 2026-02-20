@@ -553,6 +553,12 @@ namespace triqs_cthyb {
       }
       qmc.add_measure(measure_perturbation_hist_total(data, *perturbation_order_total), "Perturbation order");
     }
+    // Dynamical interaction perturbation order - automatically enabled
+    if (has_dyn_interactions) {
+      perturbation_order_dyn = histogram{};
+      qmc.add_measure(measure_perturbation_hist_dyn(data, *perturbation_order_dyn), "Perturbation order (dynamical interactions)");
+    }
+
     if (params.measure_density_matrix) {
       if (!params.use_norm_as_weight)
         TRIQS_RUNTIME_ERROR << "To measure the density_matrix of atomic states, you need to set "

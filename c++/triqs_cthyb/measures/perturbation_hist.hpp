@@ -54,4 +54,20 @@ namespace triqs_cthyb {
 
     void collect_results(mpi::communicator const &c) { histo_perturbation_order = mpi::all_reduce(histo_perturbation_order, c); }
   };
+
+  // -----------------------------------------------------------------------------
+  /// Measurement of the perturbation order in dynamical interactions
+  struct measure_perturbation_hist_dyn {
+
+    qmc_data const &data;
+    stat::histogram &histo_perturbation_order;
+
+    measure_perturbation_hist_dyn(qmc_data const &data, stat::histogram &hist) : data(data), histo_perturbation_order(hist) {
+      histo_perturbation_order = {0, 1000};
+    }
+
+    void accumulate(mc_weight_t) { histo_perturbation_order << data.config.dyn_oplist.size(); }
+
+    void collect_results(mpi::communicator const &c) { histo_perturbation_order = mpi::all_reduce(histo_perturbation_order, c); }
+  };
 }

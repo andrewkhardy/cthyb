@@ -82,6 +82,9 @@ namespace triqs_cthyb {
     /// Histograms of the perturbation order for each block
     std::optional<histo_map_t> perturbation_order;
 
+    /// Histogram of the perturbation order in dynamical interactions
+    std::optional<histogram> perturbation_order_dyn;
+
     // @DYN_IMPL : add a container for na(tau) nb (tau) measurement
 
     /// Function that writes all containers to hdf5 file
