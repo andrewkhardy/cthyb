@@ -15,7 +15,7 @@ mu = U/4.0
 beta = 10.0
 
 ######## simulation parameters ########
-n_cyc = 1000
+n_cyc = 100000
 
 # --------- set up static interactions and the block structure ---------
 block_names = ['dn','up']
@@ -53,7 +53,7 @@ S.D0_iw['up','dn'][0,0]  << D**2*(inverse(iOmega_n-w0)-inverse(iOmega_n+w0))
 S.solve(h_int=h_int,
         n_cycles = n_cyc,
         length_cycle = 100,
-        n_warmup_cycles = 100,
+        n_warmup_cycles = 10000,
         random_seed = 34788,
         measure_histogram = True,
         measure_density = True,
