@@ -18,7 +18,7 @@ from triqs_cthyb import SolverCore as Solver
 import matplotlib.pyplot as plt
 from triqs.plot.mpl_interface import oplot
 from triqs.operators import n
-# Parse command line arguments
+# Parse command line arguments (falls back to defaults in interactive window)
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
 parser.add_argument('--U', type=float, default=4.0, help='U parameter')
 parser.add_argument('--J', type=float, default=1.0, help='J parameter')
@@ -30,7 +30,10 @@ parser.add_argument('--i5', type=float, default=1.0,  help='i5 switch (0 or 1)')
 parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
 parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
 parser.add_argument('--measure_O_tau', type=int, default=100, help='Minimum insertions for O_tau measurement')
-args = parser.parse_args()
+try:
+    args = parser.parse_args()
+except SystemExit:
+    args = parser.parse_args([])
 
 # Numerical values
 beta = args.beta
