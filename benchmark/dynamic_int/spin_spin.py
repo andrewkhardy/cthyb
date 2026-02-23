@@ -79,7 +79,7 @@ S.Delta_tau << Fourier(Delta)
 # plt.figure()
 # oplot(Q_tau)
 # plt.show()
-S.Jperp_tau << -(J) * Q_tau * i_1
+S.Jperp_tau["up", "up"] << -(J) * Q_tau * i_1
 S.D0_tau["up", "up"] << -0.25*J*Q_tau *i_2
 S.D0_tau["down", "down"] << -0.25*J*Q_tau *i_3
 S.D0_tau["up", "down"] << 0.25*J*Q_tau * i_4
@@ -111,6 +111,7 @@ if mpi.is_master_node():
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         A["perturbation_order"] = S.perturbation_order
+        A["perturbation_order_dynamical"] = S.perturbation_order_dyn
         A["average_sign"] = S.average_sign
         A["O_tau"] = S.O_tau#[(Sz, Sz)], hopefully allows many measurements eventually? # why use this over G2 blocks? 
         # A['F_tau'] = S.F_tau

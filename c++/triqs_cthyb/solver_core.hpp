@@ -63,7 +63,7 @@ namespace triqs_cthyb {
 
     // Dynamical interaction input containers
     struct {
-      gf<imtime> Jperpt;        // Dynamical spin-spin interaction J_perp(tau)
+      block2_gf<imtime> Jperpt; // Dynamical spin-flip interaction J_perp(tau), indexed by orbital pairs
       block2_gf<imtime> D0t;    // Dynamical density-density interaction D0(tau)
     } inputs;
 
@@ -130,8 +130,8 @@ namespace triqs_cthyb {
     /// :math:`\Delta(\tau)` in imaginary time.
     block_gf_view<imtime> Delta_tau() { return _Delta_tau; }
 
-    /// Dynamical spin-spin interaction :math:`\mathcal{J}_\perp(\tau)`
-    gf_view<imtime> Jperp_tau() { return inputs.Jperpt; }
+    /// Dynamical spin-flip interaction :math:`\mathcal{J}_\perp(\tau)` indexed by block pairs
+    block2_gf_view<imtime> Jperp_tau() { return inputs.Jperpt; }
 
     /// Dynamical density-density interaction :math:`D_0(\tau)`
     block2_gf_view<imtime> D0_tau() { return inputs.D0t; }

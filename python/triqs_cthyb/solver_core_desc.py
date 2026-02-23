@@ -117,7 +117,10 @@ c.add_member(c_name = "perturbation_order",
              c_type = "std::optional<histo_map_t>",
              read_only= True,
              doc = r"""Histograms of the perturbation order for each block""")
-
+c.add_member(c_name = "perturbation_order_dyn",
+             c_type = "std::optional<histogram>",
+             read_only= True,
+             doc = r"""Histogram of the perturbation order in dynamical interactions""")
 c.add_member(c_name = "constr_parameters",
              c_type = "constr_parameters_t",
              read_only= True,
@@ -288,8 +291,8 @@ c.add_property(name = "Delta_tau",
                doc = r""":math:`\Delta(\tau)` in imaginary time.""")
 
 c.add_property(name = "Jperp_tau",
-               getter = cfunction("gf_view<imtime> Jperp_tau ()"),
-               doc = r""":math:`J_\perp(\tau)` dynamical spin-spin interaction in imaginary time.""")
+               getter = cfunction("block2_gf_view<imtime> Jperp_tau ()"),
+               doc = r":math:`J_\perp(\tau)` dynamical spin-flip interaction in imaginary time, indexed by block pairs.")
 
 c.add_property(name = "D0_tau",
                getter = cfunction("block2_gf_view<imtime> D0_tau ()"),

@@ -76,7 +76,7 @@ namespace triqs_cthyb {
 
     // Allocate dynamical interaction containers
     inputs.D0t    = make_block2_gf<imtime>({beta, Boson, p.n_tau_bosonic}, gf_struct);
-    inputs.Jperpt = gf<imtime>({beta, Boson, p.n_tau_bosonic}, {1, 1});
+    inputs.Jperpt = make_block2_gf<imtime>({beta, Boson, p.n_tau_bosonic}, gf_struct);
 
     // Initialize dynamical interactions to zero
     inputs.D0t()    = 0;
@@ -278,8 +278,17 @@ namespace triqs_cthyb {
     std::vector<bosonic_op_pair_t> dyn_op_list;
     std::vector<std::function<double(double)>> dyn_interactions;
     
-    // Check if we have non-zero Jperp (spin-spin interaction)
-    bool has_Jperp = max_element(nda::abs(inputs.Jperpt.data())) > 1.e-13;
+    // Check if we have non-zero Jperp (spin-flip interaction)
+    bool has_Jperp = false;
+    for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
+      for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
+        if (max_element(nda::abs(inputs.Jperpt(bl1, bl2).data())) > 1.e-13) {
+          has_Jperp = true;
+          break;
+        }
+      }
+      if (has_Jperp) break;
+    }
     
     // Check if we have non-zero D0 (density-density interaction)
     bool has_D0 = false;
@@ -294,38 +303,134 @@ namespace triqs_cthyb {
     }
 
     if (has_Jperp) {
-      // For Jperp, we need to check that we have exactly 2 blocks (spin up and down)
-      if (gf_struct.size() != 2) {
-        TRIQS_RUNTIME_ERROR << "Jperp (spin-spin) interactions are only implemented for 2 blocks (spin up/down), but gf_struct has "
-                            << gf_struct.size() << " blocks.";
+      int n_blocks = gf_struct.size();
+
+      if (n_blocks < 2 || n_blocks % 2 != 0) {
+        TRIQS_RUNTIME_ERROR << "Jperp (spin-flip) interactions require an even number of blocks, got " << n_blocks << ".";
       }
 
-      // Create bosonic operator pairs for S_perp = S_+ * S_-
-      // S_+ = c_dag_up * c_down
-      // S_- = c_dag_down * c_up
-      // ONLY VALID if block == spin
-      //FIXME COMPUTE Linear_index automatically
-      for (auto s : {0, 1}) {
-        bosonic_op_pair_t Jperp_pair = {
-           .op1     = {.opL = {.block_index = s, .inner_index = 0, .dagger = true, .linear_index = linindex.at({s, 0})},
-                       .opR = {.block_index = 1 - s, .inner_index = 0, .dagger = false, .linear_index = linindex.at({1 - s, 0})}},
-           .op2     = {.opL = {.block_index = 1 - s, .inner_index = 0, .dagger = true, .linear_index = linindex.at({1 - s, 0})},
-                       .opR = {.block_index = s, .inner_index = 0, .dagger = false, .linear_index = linindex.at({s, 0})}},
-           .f_index = 0};
+      // Create bosonic operator pairs for spin-flip interactions:
+      //   Jperp_ab(tau)/2 * [ S+_a(tau) S-_b(0) + S-_a(tau) S+_b(0) ]
+      // summed over all orbital pairs (a, b) with non-zero Jperp_tau[up_a, up_b].
+      //
+      // Jperp_tau is a block2_gf indexed like D0_tau by (block1, block2).
+      // The Jperp coupling for orbital pair (a, b) is read from Jperp_tau[up_a, up_b].
+      //
+      // Two modes are supported:
+      //
+      // (1) Two-block mode: gf_struct = [('up', n_orb), ('down', n_orb)]
+      //     Block 0 = up, block 1 = down. Orbitals are inner indices.
+      //     Jperp_tau[0,0](tau)(i1,i2) gives Jperp for orbital pair (i1, i2).
+      //
+      // (2) Interleaved mode: gf_struct = [('up_0',1), ('down_0',1), ('up_1',1), ('down_1',1), ...]
+      //     Consecutive block pairs (2a, 2a+1) = (up_a, down_a). Each block has size 1.
+      //     Jperp_tau[up_a, up_b](tau)(0,0) gives Jperp for orbital pair (a, b).
 
-        dyn_op_list.push_back(Jperp_pair);
+      if (n_blocks == 2) {
+        // --- Two-block mode: orbitals are inner indices ---
+        int n_orb_inner = gf_struct[0].second;
+        if (gf_struct[1].second != n_orb_inner) {
+          TRIQS_RUNTIME_ERROR << "Jperp two-block mode requires equal block sizes, got "
+                              << gf_struct[0].second << " and " << gf_struct[1].second;
+        }
+
+        // Jperp coupling for orbital pair (i1,i2) is stored in Jperp_tau[0,0](tau)(i1,i2)
+        // (the up-up block, which has n_orb x n_orb matrix structure)
+        auto Jperp_block = inputs.Jperpt(0, 0); // up-up block
+
+        for (int i1 = 0; i1 < n_orb_inner; ++i1) {
+          for (int i2 = 0; i2 < n_orb_inner; ++i2) {
+            // Check if this orbital pair has non-zero Jperp
+            bool is_nonzero = false;
+            for (auto const &tau_pt : Jperp_block.mesh()) {
+              if (std::abs(Jperp_block[tau_pt](i1, i2)) > 1.e-13) { is_nonzero = true; break; }
+            }
+            if (!is_nonzero) continue;
+
+            // Create lambda for this orbital pair
+            int f_idx = static_cast<int>(dyn_interactions.size());
+            auto Jperp_gf_copy = Jperp_block; // copy for lambda capture
+            auto Jperp_func = [Jperp_gf_copy, i1, i2](double tau) -> double {
+              return real(Jperp_gf_copy[closest_mesh_pt(tau)](i1, i2) / 2.0);
+            };
+            dyn_interactions.push_back(Jperp_func);
+
+            // s=0: S+_i1(tau) S-_i2(0),  s=1: S-_i1(tau) S+_i2(0)
+            for (auto s : {0, 1}) {
+              int up = s, dn = 1 - s;
+              bosonic_op_pair_t pair = {
+                 .op1     = {.opL = {.block_index = up, .inner_index = i1, .dagger = true,  .linear_index = linindex.at({up, i1})},
+                             .opR = {.block_index = dn, .inner_index = i1, .dagger = false, .linear_index = linindex.at({dn, i1})}},
+                 .op2     = {.opL = {.block_index = dn, .inner_index = i2, .dagger = true,  .linear_index = linindex.at({dn, i2})},
+                             .opR = {.block_index = up, .inner_index = i2, .dagger = false, .linear_index = linindex.at({up, i2})}},
+                 .f_index = f_idx};
+              dyn_op_list.push_back(pair);
+            }
+          }
+        }
+
+        if (params.verbosity >= 2) {
+          std::cout << "Added Jperp (spin-flip) dynamical interaction in two-block mode with "
+                    << n_orb_inner << " orbital(s)." << std::endl;
+        }
+
+      } else {
+        // --- Interleaved mode: (up_a, down_a) block pairs, each size 1 ---
+        int n_orb_sites = n_blocks / 2;
+
+        for (int bl = 0; bl < n_blocks; ++bl) {
+          if (gf_struct[bl].second != 1) {
+            TRIQS_RUNTIME_ERROR << "Jperp interleaved mode requires all blocks to have size 1, but block "
+                                << bl << " ('" << gf_struct[bl].first << "') has size " << gf_struct[bl].second;
+          }
+        }
+
+        for (int a = 0; a < n_orb_sites; ++a) {
+          for (int b = 0; b < n_orb_sites; ++b) {
+            int up_a = 2 * a, dn_a = 2 * a + 1;
+            int up_b = 2 * b, dn_b = 2 * b + 1;
+
+            // Jperp for orbital pair (a,b) stored in Jperp_tau[up_a, up_b](tau)(0,0)
+            auto Jperp_ab = inputs.Jperpt(up_a, up_b);
+            if (max_element(nda::abs(Jperp_ab.data())) < 1.e-13) continue;
+
+            // Create lambda for this orbital pair
+            int f_idx = static_cast<int>(dyn_interactions.size());
+            auto Jperp_gf_copy = Jperp_ab; // copy for lambda capture
+            auto Jperp_func = [Jperp_gf_copy](double tau) -> double {
+              return real(Jperp_gf_copy[closest_mesh_pt(tau)](0, 0) / 2.0);
+            };
+            dyn_interactions.push_back(Jperp_func);
+
+            // S+_a(tau) S-_b(0): c†(up_a) c(dn_a) (tau)  *  c†(dn_b) c(up_b) (0)
+            bosonic_op_pair_t pair_pm = {
+               .op1     = {.opL = {.block_index = up_a, .inner_index = 0, .dagger = true,  .linear_index = linindex.at({up_a, 0})},
+                           .opR = {.block_index = dn_a, .inner_index = 0, .dagger = false, .linear_index = linindex.at({dn_a, 0})}},
+               .op2     = {.opL = {.block_index = dn_b, .inner_index = 0, .dagger = true,  .linear_index = linindex.at({dn_b, 0})},
+                           .opR = {.block_index = up_b, .inner_index = 0, .dagger = false, .linear_index = linindex.at({up_b, 0})}},
+               .f_index = f_idx};
+            dyn_op_list.push_back(pair_pm);
+
+            // S-_a(tau) S+_b(0): c†(dn_a) c(up_a) (tau)  *  c†(up_b) c(dn_b) (0)
+            bosonic_op_pair_t pair_mp = {
+               .op1     = {.opL = {.block_index = dn_a, .inner_index = 0, .dagger = true,  .linear_index = linindex.at({dn_a, 0})},
+                           .opR = {.block_index = up_a, .inner_index = 0, .dagger = false, .linear_index = linindex.at({up_a, 0})}},
+               .op2     = {.opL = {.block_index = up_b, .inner_index = 0, .dagger = true,  .linear_index = linindex.at({up_b, 0})},
+                           .opR = {.block_index = dn_b, .inner_index = 0, .dagger = false, .linear_index = linindex.at({dn_b, 0})}},
+               .f_index = f_idx};
+            dyn_op_list.push_back(pair_mp);
+          }
+        }
+
+        if (params.verbosity >= 2) {
+          std::cout << "Added Jperp (spin-flip) dynamical interaction in interleaved mode with "
+                    << n_orb_sites << " orbital site(s)." << std::endl;
+        }
       }
 
-      // Create lambda function to evaluate Jperp(tau)
-      // Capture inputs by reference to avoid copying the large Green's function
-      auto Jperp_gf       = inputs.Jperpt; // Make a copy for the lambda
-      auto Jperp_function = [Jperp_gf](double tau) -> double {
-        // Use the [] operator which internally calls closest_mesh_pt
-        return real(Jperp_gf[closest_mesh_pt(tau)](0, 0) / 2.0);
-      };
-      dyn_interactions.push_back(Jperp_function);
-
-      if (params.verbosity >= 2) { std::cout << "Added Jperp (spin-spin) dynamical interaction." << std::endl; }
+      if (params.verbosity >= 2) {
+        std::cout << "Total Jperp operator pair terms: " << dyn_op_list.size() << std::endl;
+      }
     }
 
     if (has_D0) {

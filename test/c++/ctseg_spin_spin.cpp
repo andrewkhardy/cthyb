@@ -73,7 +73,7 @@ TEST(CTSEG, Spin_Spin) {
   Solver.D0_tau()(0, 1) = -D0t;
   Solver.D0_tau()(1, 0) = -D0t;
   Solver.D0_tau()(1, 1) = D0t;
-  Solver.Jperp_tau()    = fourier(J0w);
+  Solver.Jperp_tau()(0, 0) = fourier(J0w);  // Jperp for orbital pair (0,0) stored in up-up block
 
   // Solve
   Solver.solve(param_solve);

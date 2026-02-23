@@ -62,7 +62,7 @@ TEST(CTHYB, Spin_Spin) {
   Solver.D0_tau()(0, 1) = -D0t;
   Solver.D0_tau()(1, 0) = -D0t;
   Solver.D0_tau()(1, 1) = D0t;
-  Solver.Jperp_tau()    = J0t;
+  Solver.Jperp_tau()(0, 0) = J0t;  // Jperp for orbital pair (0,0) stored in up-up block
 
   // Solve parameters
   solve_parameters_t param_solve(U * n("up", 0) * n("down", 0), n_cycles);
