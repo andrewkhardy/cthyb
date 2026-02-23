@@ -133,8 +133,7 @@ Q_tau.data[:, 0, 0] = Q_data
 # Jperp_tau["up_a", "up_b"]. The C++ code reads from the up-up block pairs.
 # SU(2) symmetric: same Jperp for all orbital pairs.
 for a in range(n_orb):
-    for b in range(n_orb):
-        S.Jperp_tau["up_%i" % a, "up_%i" % b] << -(J_dyn) * Q_tau
+        S.Jperp_tau["up_%i" % a, "up_%i" % a] << -(J_dyn) * Q_tau
 
 # D0_tau: density-density dynamical interaction
 # D0_tau is a Block2Gf indexed by (block_name_1, block_name_2)
@@ -151,13 +150,12 @@ for a in range(n_orb):
 #
 # We apply this for all orbital pairs (including intra-orbital).
 for a in range(n_orb):
-    for b in range(n_orb):
-        # Same spin: -0.25 * J
-        S.D0_tau["up_%i" % a, "up_%i" % b] << -0.25 * J_dyn * Q_tau
-        S.D0_tau["down_%i" % a, "down_%i" % b] << -0.25 * J_dyn * Q_tau
-        # Opposite spin: +0.25 * J
-        S.D0_tau["up_%i" % a, "down_%i" % b] << 0.25 * J_dyn * Q_tau
-        S.D0_tau["down_%i" % a, "up_%i" % b] << 0.25 * J_dyn * Q_tau
+    # Same spin: -0.25 * J
+    S.D0_tau["up_%i" % a, "up_%i" % a] << -0.25 * J_dyn * Q_tau
+    S.D0_tau["down_%i" % a, "down_%i" % a] << -0.25 * J_dyn * Q_tau
+    # Opposite spin: +0.25 * J
+    S.D0_tau["up_%i" % a, "down_%i" % a] << 0.25 * J_dyn * Q_tau
+    S.D0_tau["down_%i" % a, "up_%i" % a] << 0.25 * J_dyn * Q_tau
 
 # ======================== Static Hamiltonian ========================
 # h_int: interacting part (quartic terms)
@@ -179,9 +177,8 @@ for s in spins:
     for a in range(n_orb):
         h_loc0 += -mu * n('%s_%i' % (s, a), 0)
 
-if mpi.is_master_node():
-    print("h_int =", h_int)
-    print("h_loc0 =", h_loc0)
+print("h_int =", h_int)
+print("h_loc0 =", h_loc0)
 
 # ======================== Solve parameters ========================
 solve_params = {
@@ -198,24 +195,20 @@ solve_params = {
 S.solve(**solve_params)
 
 # ======================== Save results ========================
-if mpi.is_master_node():
-    Jperp_str = "Jperp" if Jperp_on else "noJperp"
-    D0_str    = "D0" if D0_on else "noD0"
-    filename = (f"multiorb_spin_spin_cthyb_norb-{n_orb}_U-{U}_Up-{Up}_J-{J_dyn}"
-                f"_{Jperp_str}_{D0_str}_beta-{beta}_nc-{args.n_cycles}.h5")
-    with h5.HDFArchive(filename, "w") as A:
-        A['G_tau'] = S.G_tau
-        A['perturbation_order'] = S.perturbation_order
-        A['average_sign'] = S.average_sign
-        A["perturbation_order_dynamical"] = S.perturbation_order_dyn
-        # Save parameters for reproducibility
-        A['U']     = U
-        A['Up']    = Up
-        A['J_dyn'] = J_dyn
-        A['beta']  = beta
-        A['n_orb'] = n_orb
-        A['Jperp_on'] = Jperp_on
-        A['D0_on']    = D0_on
-        A['Q_tau']    = Q_tau
-    print(f"Results saved to {filename}")
-    print(f"Average sign = {S.average_sign}")
+
+filename = (f"multiorb_spin_spin_cthyb_norb-{n_orb}_U-{U}_Up-{Up}_J-{J_dyn}"
+            f"_{U}_{J}_beta-{beta}_nc-{args.n_cycles}.h5")
+with h5.HDFArchive(filename, "w") as A:
+    A['G_tau'] = S.G_tau
+    A['perturbation_order'] = S.perturbation_order
+    A['average_sign'] = S.average_sign
+    A["perturbation_order_dynamical"] = S.perturbation_order_dyn
+    # Save parameters for reproducibility
+    A['U']     = U
+    A['Up']    = Up
+    A['J_dyn'] = J_dyn
+    A['beta']  = beta
+    A['n_orb'] = n_orb
+    A['Q_tau']    = Q_tau
+print(f"Results saved to {filename}")
+print(f"Average sign = {S.average_sign}")
