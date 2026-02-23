@@ -197,7 +197,7 @@ S.solve(**solve_params)
 # ======================== Save results ========================
 
 filename = (f"multiorb_spin_spin_cthyb_norb-{n_orb}_U-{U}_Up-{Up}_J-{J_dyn}"
-            f"_{U}_{J}_beta-{beta}_nc-{args.n_cycles}.h5")
+            f"_{U}_{J_dyn}_beta-{beta}_nc-{args.n_cycles}.h5")
 with h5.HDFArchive(filename, "w") as A:
     A['G_tau'] = S.G_tau
     A['perturbation_order'] = S.perturbation_order
