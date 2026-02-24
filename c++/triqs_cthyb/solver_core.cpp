@@ -334,9 +334,20 @@ namespace triqs_cthyb {
                               << gf_struct[0].second << " and " << gf_struct[1].second;
         }
 
-        // Jperp coupling for orbital pair (i1,i2) is stored in Jperp_tau[0,0](tau)(i1,i2)
-        // (the up-up block, which has n_orb x n_orb matrix structure)
-        auto Jperp_block = inputs.Jperpt(0, 0); // up-up block
+        // Jperp coupling for orbital pair (i1,i2) is stored in a diagonal block pair
+        // of Jperp_tau, e.g. Jperp_tau["up","up"](tau)(i1,i2).
+        // Find the first non-zero diagonal block (works regardless of block ordering).
+        int jperp_diag_bl = -1;
+        for (int bl = 0; bl < 2; ++bl) {
+          if (max_element(nda::abs(inputs.Jperpt(bl, bl).data())) > 1.e-13) {
+            jperp_diag_bl = bl;
+            break;
+          }
+        }
+        if (jperp_diag_bl < 0) {
+          TRIQS_RUNTIME_ERROR << "Jperp detected as non-zero but no non-zero diagonal block found in Jperp_tau.";
+        }
+        auto Jperp_block = inputs.Jperpt(jperp_diag_bl, jperp_diag_bl);
 
         for (int i1 = 0; i1 < n_orb_inner; ++i1) {
           for (int i2 = 0; i2 < n_orb_inner; ++i2) {
