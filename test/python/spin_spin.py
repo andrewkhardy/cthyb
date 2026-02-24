@@ -23,10 +23,10 @@ from triqs_cthyb import SolverCore as Solver
 
 # Physical parameters (same as C++ test)
 beta    = 10.0
-U       = 4.0
+U       = 2.0
 mu      = U / 2.0   # half-filling
 epsilon = 0.3        # bath level
-l       = 1.0        # electron-boson coupling
+l       = 0.5        # electron-boson coupling (weak enough for reasonable sign)
 w0      = 1.0        # screening frequency
 
 # Discretization
@@ -41,16 +41,19 @@ gf_struct = [('down', 1), ('up', 1)]
 S = Solver(beta=beta, gf_struct=gf_struct, n_iw=n_iw, n_tau=n_tau,
            n_tau_bosonic=n_tau_bosonic, delta_interface=True)
 
-# Hybridization: symmetric two-pole bath
+# Hybridization: symmetric two-pole bath Delta(iw) = 1/(iw-eps) + 1/(iw+eps)
 Delta_iw = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
-Delta_iw << 1.0 / (iOmega_n - epsilon) + 1.0 / (iOmega_n + epsilon)
+Delta_iw << inverse(iOmega_n - epsilon) + inverse(iOmega_n + epsilon)
 S.Delta_tau << Fourier(Delta_iw)
 
-# Bosonic propagators
+# Bosonic propagators: J(iw) = 4*l^2*w0/(iw^2 - w0^2), D(iw) = l^2*w0/(iw^2 - w0^2)
+# Built via mesh iteration since lazy expressions don't support this form
 J0_iw = GfImFreq(indices=[0], beta=beta, n_points=n_iw, statistic='Boson')
 D0_iw = GfImFreq(indices=[0], beta=beta, n_points=n_iw, statistic='Boson')
-J0_iw << 4 * l**2 * w0 / (iOmega_n**2 - w0**2)
-D0_iw << l**2 * w0 / (iOmega_n**2 - w0**2)
+for iw in J0_iw.mesh:
+    w = complex(iw)
+    J0_iw[iw] = 4 * l**2 * w0 / (w**2 - w0**2)
+    D0_iw[iw] = l**2 * w0 / (w**2 - w0**2)
 J0_tau = GfImTime(indices=[0], beta=beta, n_points=n_tau_bosonic, statistic='Boson')
 D0_tau = GfImTime(indices=[0], beta=beta, n_points=n_tau_bosonic, statistic='Boson')
 J0_tau << Fourier(J0_iw)

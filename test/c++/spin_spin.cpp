@@ -29,10 +29,10 @@ TEST(CTHYB, Spin_Spin) {
 
   // Physical parameters
   double beta    = 10.0;
-  double U       = 4.0;
+  double U       = 2.0;
   double mu      = U / 2.0; // half-filling
   double epsilon = 0.3;     // bath level
-  double l       = 1.0;     // electron-boson coupling
+  double l       = 0.5;     // electron-boson coupling (weak enough for reasonable sign)
   double w0      = 1.0;     // screening frequency
 
   // Solver parameters — fixed seed for reproducibility
