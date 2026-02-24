@@ -170,7 +170,7 @@ for a in range(n_orb):
             for s1 in spins:
                 for s2 in spins:
                     h_int += (Up / 2.0) * n('%s_%i' % (s1, a), 0) * n('%s_%i' % (s2, b), 0)
-                    
+
 # more Hund's interactions here?
 # h_loc0: quadratic part (chemical potential)
 h_loc0 = Operator()
@@ -198,19 +198,19 @@ S.solve(**solve_params)
 
 # ======================== Save results ========================
 
-filename = (f"multiorb_spin_spin_cthyb_norb-{n_orb}_U-{U}_Up-{Up}_J-{J_dyn}"
-            f"_{U}_{J_dyn}_beta-{beta}_nc-{args.n_cycles}.h5")
-with h5.HDFArchive(filename, "w") as A:
-    A['G_tau'] = S.G_tau
-    A['perturbation_order'] = S.perturbation_order
-    A['average_sign'] = S.average_sign
-    A["perturbation_order_dynamical"] = S.perturbation_order_dyn
-    # Save parameters for reproducibility
-    A['U']     = U
-    A['Up']    = Up
-    A['J_dyn'] = J_dyn
-    A['beta']  = beta
-    A['n_orb'] = n_orb
-    A['Q_tau']    = Q_tau
-print(f"Results saved to {filename}")
-print(f"Average sign = {S.average_sign}")
+filename = f"multiorb_spin_spin_cthyb_norb-{n_orb}_U-{U}_Up-{Up}_J-{J_dyn}_beta-{beta}_nc-{args.n_cycles}.h5"
+if mpi.is_master_node():
+    with h5.HDFArchive(filename, "w") as A:
+        A['G_tau'] = S.G_tau
+        A['perturbation_order'] = S.perturbation_order
+        A['average_sign'] = S.average_sign
+        A["perturbation_order_dynamical"] = S.perturbation_order_dyn
+        # Save parameters for reproducibility
+        A['U']     = U
+        A['Up']    = Up
+        A['J_dyn'] = J_dyn
+        A['beta']  = beta
+        A['n_orb'] = n_orb
+        A['Q_tau']    = Q_tau
+    print(f"Results saved to {filename}")
+    print(f"Average sign = {S.average_sign}")
