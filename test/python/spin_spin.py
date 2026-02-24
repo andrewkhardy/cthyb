@@ -77,9 +77,9 @@ S.D0_tau["down", "up"]   << -1.0 * U/4*  D0_tau
 solve_params = {
     "h_int":             U * n("up", 0) * n("down", 0),
     "h_loc0":            -mu * (n("up", 0) + n("down", 0)),
-    "n_cycles":          100000,
-    "n_warmup_cycles":   10000,
-    "length_cycle":      100,
+    "n_cycles":          200000,
+    "n_warmup_cycles":   20000,
+    "length_cycle":      75,
     "random_seed":       123 * mpi.rank + 567,
     "random_name":       "",
     "measure_pert_order": True,
@@ -105,3 +105,4 @@ if mpi.is_master_node():
 if mpi.is_master_node():
     with HDFArchive("spin_spin.ref.h5", 'r') as A:
         assert_block_gfs_are_close(A["G_tau"], S.G_tau)
+        print("G_tau matches reference")
