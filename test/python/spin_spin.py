@@ -16,77 +16,91 @@
 
 import triqs.utility.mpi as mpi
 from triqs.gf import *
-from triqs.operators import *
+from triqs.operators import n
 from h5 import HDFArchive
 from triqs.utility.comparison_tests import *
+from triqs_cthyb import Solver
 
-from triqs_cthyb import *
+# Physical parameters (same as C++ test)
+beta    = 10.0
+U       = 2.0
+mu      = U / 2.0   # half-filling
+epsilon = 0.3        # bath level
+l       = 0.5        # electron-boson coupling (weak enough for reasonable sign)
+w0      = 1.0        # screening frequency
 
-#  Example of DMFT single site solution with CTQMC
+# Discretization
+n_iw          = 1025
+n_tau         = 10001
+n_tau_bosonic = 10001
 
-# set up a few parameters
+# gf_struct — note 'down' before 'up' to test block ordering independence
+gf_struct = [('down', 1), ('up', 1)]
+
+# Construct solver with Delta_tau interface
+S = Solver(beta=beta, gf_struct=gf_struct, n_iw=n_iw, n_tau=n_tau,
+           n_tau_bosonic=n_tau_bosonic, delta_interface=True)
+
+# Hybridization: Bethe lattice starting guess Delta(iw) = t^2 * G(iw)
 half_bandwidth = 1.0
-U = 2.5
-mu = (U/2.0)+0.2
-beta = 80.0
-
-gf_struct = [['down',1], ['up',1]]
-
-# Parameters
-p = {}
-p["max_time"] = -1
-p["random_name"] = ""
-p["random_seed"] = 123 * mpi.rank + 567
-p["length_cycle"] = 500
-p["n_warmup_cycles"] = 5000
-p["n_cycles"] = 10000
-p["measure_G_l"] = True
-p["move_double"] = False
-p["perform_tail_fit"] = True
-p["fit_max_moment"] = 3
-p["fit_min_w"] = 1.2
-p["fit_max_w"] = 3.0
-
-# Construct solver (delta interface: provide Delta_tau instead of G0_iw)
-S = Solver(beta=beta, gf_struct=gf_struct, n_iw=1025, n_tau=8001, n_l=30, delta_interface=True)
-
-# Local Hamiltonian
-H = U*n("up",0)*n("down",0)
-
-# Single-particle part of local Hamiltonian (chemical potential)
-h_loc0 = -mu * (n("up",0) + n("down",0))
-
-# init the Green function
-S.G_iw << SemiCircular(half_bandwidth)
-
 t = half_bandwidth / 2.0
+G_iw_init = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
+G_iw_init << SemiCircular(half_bandwidth)
+Delta_iw = G_iw_init.copy()
+Delta_iw << t**2 * G_iw_init
+S.Delta_tau << Fourier(Delta_iw)
 
-for i in range(2):
+# Bosonic propagators: J(iw) = 4*l^2*w0/(iw^2 - w0^2), D(iw) = l^2*w0/(iw^2 - w0^2)
+# Built via mesh iteration since lazy expressions don't support this form
+J0_iw = GfImFreq(indices=[0], beta=beta, n_points=n_iw, statistic='Boson')
+D0_iw = GfImFreq(indices=[0], beta=beta, n_points=n_iw, statistic='Boson')
+for iw in J0_iw.mesh:
+    w = complex(iw)
+    J0_iw[iw] = 4 * l**2 * w0 / (w**2 - w0**2)
+    D0_iw[iw] = l**2 * w0 / (w**2 - w0**2)
+J0_tau = GfImTime(indices=[0], beta=beta, n_points=n_tau_bosonic, statistic='Boson')
+D0_tau = GfImTime(indices=[0], beta=beta, n_points=n_tau_bosonic, statistic='Boson')
+J0_tau << Fourier(J0_iw)
+D0_tau << Fourier(D0_iw)
 
-    g = 0.5 * ( S.G_iw['up'] + S.G_iw['down'] )
-    # Bethe lattice self-consistency: Delta(iw) = t^2 * G(iw)
-    Delta_iw = S.G_iw.copy()
-    for name, d in Delta_iw:
-        d << t**2 * g
-    S.Delta_tau << Fourier(Delta_iw)
+# Jperp: spin-flip interaction (scalar gf at this interface)
+S.Jperp_tau << U/4* J0_tau
 
-    S.solve(h_int=H, h_loc0=h_loc0, **p)
+# D0: density-density retarded interaction
+# Sz*Sz decomposition: same-spin = +D0, opposite-spin = -D0
+S.D0_tau["up", "up"]     << U/4* D0_tau
+S.D0_tau["down", "down"] << U/4* D0_tau
+S.D0_tau["up", "down"]   << -1.0 * U/4* D0_tau
+S.D0_tau["down", "up"]   << -1.0 * U/4*  D0_tau
 
-# Calculation is done. Now save a few things
+# Solve parameters — fixed seed for reproducibility
+solve_params = {
+    "h_int":             U * n("up", 0) * n("down", 0),
+    "h_loc0":            -mu * (n("up", 0) + n("down", 0)),
+    "n_cycles":          200000,
+    "n_warmup_cycles":   20000,
+    "length_cycle":      75,
+    "random_seed":       123 * mpi.rank + 567,
+    "random_name":       "",
+    "measure_pert_order": True,
+    "perform_tail_fit": True,
+    "fit_max_moment": 3,
+    "fit_min_w": 1.2,
+    "fit_max_w": 3.0
+}
+
+S.solve(**solve_params)
+
+# Save output
 if mpi.is_master_node():
-    with HDFArchive("single_site_bethe.out.h5",'w') as Results:
-
-        Results["Delta_tau"] = S.Delta_tau
-
-        Results["G_tau"] = S.G_tau
-        Results["G_l"] = S.G_l
-
-        Results["G_iw"] = S.G_iw
-        Results["G_iw_raw"] = S.G_iw_raw
-
-        Results["Sigma_iw"] = S.Sigma_iw
-        Results["Sigma_iw_raw"] = S.Sigma_iw_raw
-
+    with HDFArchive("spin_spin.out.h5", 'w') as A:
+        A["G_tau"] = S.G_tau
+        A["perturbation_order"] = S.perturbation_order
+        A["Delta_tau"] = S.Delta_tau
+        A["G_iw"] = S.G_iw
+        A["G_iw_raw"] = S.G_iw_raw
+        A["Sigma_iw"] = S.Sigma_iw
+        A["Sigma_iw_raw"] = S.Sigma_iw_raw
 # Compare against reference
 if mpi.is_master_node():
     with HDFArchive("spin_spin.ref.h5", 'r') as A:
