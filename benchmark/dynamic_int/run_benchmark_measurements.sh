@@ -17,7 +17,8 @@ module load ${MODULES}
 #source /mnt/home/ahardy/ccq-software-build/triqs/3_unst_nix2.3_llvm/installation/share/triqs/triqsvars.sh
 source /mnt/home/ahardy/ccq-software-build/triqs/.triqs_dev/bin/activate
 #source /mnt/home/ahardy/ccq-software-build/triqs/3_development/installation/share/triqs/triqsvars.sh
-source /mnt/home/ahardy/ccq-software-build/triqs/3_nu_nu/installation/share/triqs/triqsvars.sh
+# source /mnt/home/ahardy/ccq-software-build/triqs/3_nu_nu/installation/share/triqs/triqsvars.sh
+source /mnt/home/ahardy/ccq-software-build/triqs/3_development/installation/share/triqs/triqsvars.sh
 
 ##################### run your code here #####################
 #../CTHYB/benchmark/
