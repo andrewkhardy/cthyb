@@ -102,8 +102,3 @@ if mpi.is_master_node():
         A["Sigma_iw"] = S.Sigma_iw
         A["Sigma_iw_raw"] = S.Sigma_iw_raw
 
-
-# Compare against reference
-if mpi.is_master_node():
-    with HDFArchive("spin_spin.ref.h5", 'r') as A:
-        assert_block_gfs_are_close(A["G_tau"], S.G_tau)

@@ -34,7 +34,7 @@ from .util import orbital_occupations
 
 class Solver(SolverCore):
 
-    def __init__(self, beta, gf_struct, n_iw=1025, n_tau=10001, n_l=30, delta_interface = False):
+    def __init__(self, beta, gf_struct, n_iw=1025, n_tau=10001, n_l=30, delta_interface = False, n_tau_bosonic=10001):
         """
         Initialise the solver.
 
@@ -55,13 +55,16 @@ class Solver(SolverCore):
              Number of legendre polynomials to use in accumulations of the Green's functions.
         delta_interface: bool, optional
             Are Delta_tau and Delta_infty provided as input instead of G0_iw?
+        n_tau_bosonic : integer, optional
+            Number of imaginary time points for bosonic Green's functions (D0_tau, Jperp_tau).
         """
 
         gf_struct = fix_gf_struct_type(gf_struct)
 
         # Initialise the core solver
         SolverCore.__init__(self, beta=beta, gf_struct=gf_struct,
-                            n_iw=n_iw, n_tau=n_tau, n_l=n_l, delta_interface = delta_interface)
+                            n_iw=n_iw, n_tau=n_tau, n_l=n_l, delta_interface = delta_interface,
+                            n_tau_bosonic=n_tau_bosonic)
 
         mesh = MeshImFreq(beta = beta, S="Fermion", n_max = n_iw)
         self.Sigma_iw = BlockGf(mesh = mesh, gf_struct = gf_struct)
