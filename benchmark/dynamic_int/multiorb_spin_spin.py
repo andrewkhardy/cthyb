@@ -29,7 +29,7 @@ from triqs_cthyb import SolverCore as Solver
 # ======================== Command line arguments (falls back to defaults in interactive window) ========================
 parser = argparse.ArgumentParser(description='Multi-orbital cthyb benchmark with dynamical spin-spin interactions.')
 parser.add_argument('--U',    type=float, default=4.0,  help='Intra-orbital Hubbard U')
-parser.add_argument('--Up',   type=float, default=2.0,  help='Inter-orbital Hubbard U\'')
+parser.add_argument('--Up',   type=float, default=0.0,  help='Inter-orbital Hubbard U\'')
 parser.add_argument('--J',    type=float, default=1.0,  help='Dynamical interaction coupling J')
 parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
 parser.add_argument('--t',    type=float, default=1.0,  help='Hopping (half-bandwidth for Bethe lattice)')
@@ -163,19 +163,21 @@ for a in range(n_orb):
 # Inter-orbital: U' * n_a * n_b  (for a != b, simplified)
 h_int = Operator()
 for a in range(n_orb):
-    h_int += U * n('up_%i' % a, 0) * n('down_%i' % a, 0)
+    h_int += U * n('up_%i' % a, 0) * n('down_%i' % a, 0) 
 for a in range(n_orb):
     for b in range(n_orb):
         if a != b:
             for s1 in spins:
                 for s2 in spins:
                     h_int += (Up / 2.0) * n('%s_%i' % (s1, a), 0) * n('%s_%i' % (s2, b), 0)
-
+                    
+# more Hund's interactions here?
 # h_loc0: quadratic part (chemical potential)
 h_loc0 = Operator()
 for s in spins:
     for a in range(n_orb):
         h_loc0 += -mu * n('%s_%i' % (s, a), 0)
+        # need to add DCA buisness here. 
 
 print("h_int =", h_int)
 print("h_loc0 =", h_loc0)
