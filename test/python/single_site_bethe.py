@@ -21,9 +21,9 @@ p = {}
 p["max_time"] = -1
 p["random_name"] = ""
 p["random_seed"] = 123 * mpi.rank + 567
-p["length_cycle"] = 500
+p["length_cycle"] = 1000
 p["n_warmup_cycles"] = 5000
-p["n_cycles"] = 5000
+p["n_cycles"] = 20000
 p["measure_G_l"] = True
 p["move_double"] = False
 p["perform_tail_fit"] = True
@@ -31,33 +31,36 @@ p["fit_max_moment"] = 3
 p["fit_min_w"] = 1.2
 p["fit_max_w"] = 3.0
 
-# Construct solver
-S = Solver(beta=beta, gf_struct=gf_struct, n_iw=1025, n_tau=8001, n_l=30)
+# Construct solver (delta interface: provide Delta_tau instead of G0_iw)
+S = Solver(beta=beta, gf_struct=gf_struct, n_iw=1025, n_tau=8001, n_l=30, delta_interface=True)
 
 # Local Hamiltonian
 H = U*n("up",0)*n("down",0)
 
+# Single-particle part of local Hamiltonian (chemical potential)
+h_loc0 = -mu * (n("up",0) + n("down",0))
+
 # init the Green function
 S.G_iw << SemiCircular(half_bandwidth)
 
+t = half_bandwidth / 2.0
 
 for i in range(2):
 
     g = 0.5 * ( S.G_iw['up'] + S.G_iw['down'] )
-    # Compute G0
-    for name, g0 in S.G0_iw:
-      g0 << inverse(iOmega_n + mu - (half_bandwidth/2.0)**2  * g)
+    # Bethe lattice self-consistency: Delta(iw) = t^2 * G(iw)
+    Delta_iw = S.G_iw.copy()
+    for name, d in Delta_iw:
+        d << t**2 * g
+    S.Delta_tau << Fourier(Delta_iw)
 
-    S.solve(h_int=H, **p)
+    S.solve(h_int=H, h_loc0=h_loc0, **p)
 
 # Calculation is done. Now save a few things
 if mpi.is_master_node():
     with HDFArchive("single_site_bethe.out.h5",'w') as Results:
 
-        Results["Delta_infty"] = S.Delta_infty
         Results["Delta_tau"] = S.Delta_tau
-
-        Results["G0_iw"] = S.G0_iw
 
         Results["G_tau"] = S.G_tau
         Results["G_l"] = S.G_l
@@ -65,8 +68,6 @@ if mpi.is_master_node():
         Results["G_iw"] = S.G_iw
         Results["G_iw_raw"] = S.G_iw_raw
 
-        # we store Sigma_iw_arw here, but comparing noisy Sigma from Dyson after 2 DMFT
-        # iteration is pointless. The tail fitted Sigma_iw can be compared to some degree
         Results["Sigma_iw"] = S.Sigma_iw
         Results["Sigma_iw_raw"] = S.Sigma_iw_raw
 
