@@ -101,8 +101,6 @@ if mpi.is_master_node():
         A["G_iw_raw"] = S.G_iw_raw
         A["Sigma_iw"] = S.Sigma_iw
         A["Sigma_iw_raw"] = S.Sigma_iw_raw
-
-
 # Compare against reference
 if mpi.is_master_node():
     with HDFArchive("spin_spin.ref.h5", 'r') as A:
