@@ -16,7 +16,8 @@ MODULES="modules/2.4-20250724 fftw nfft openmpi/5.0.6 hdf5/mpi-1.12.3 boost/1.87
 module load ${MODULES}
 #source /mnt/home/ahardy/ccq-software-build/triqs/3_unst_nix2.3_llvm/installation/share/triqs/triqsvars.sh
 #source /mnt/home/ahardy/ccq-software-build/triqs/.triqs_dev/bin/activate
-source /mnt/home/ahardy/ccq-software-build/triqs/3_new/installation/share/triqs/triqsvars.sh
+source /mnt/home/ahardy/triqs_venv/bin/activate
+source /mnt/home/ahardy/ccq-software-build/triqs/unstable/installation/share/triqs/triqsvars.sh
 #source /mnt/home/ahardy/ccq-software-build/triqs/3_nu_nu/installation/share/triqs/triqsvars.sh
 
 ##################### run your code here #####################
