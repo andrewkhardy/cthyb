@@ -11,13 +11,10 @@
 #SBATCH --ntasks-per-node=64
 #SBATCH --cpus-per-task=1
 #SBATCH --time=72:00:00
-module --force purge
-MODULES="modules/2.4-20250724 fftw nfft openmpi/5.0.6 hdf5/mpi-1.12.3 boost/1.87.0  python/3.12.9 python-mpi/3.12.9 flexiblas/3.4.2 llvm/19.1.7"
+MODULES="modules/2.4 gcc flexiblas openmpi cmake ccache gmp fftw nfft hdf5/mpi boost python/3.12 python-mpi/3.12 intel-oneapi-mkl llvm/19 eigen mpfr"
+module purge
 module load ${MODULES}
-#source /mnt/home/ahardy/ccq-software-build/triqs/3_unst_nix2.3_llvm/installation/share/triqs/triqsvars.sh
-source /mnt/home/ahardy/ccq-software-build/triqs/.triqs_dev/bin/activate
-source /mnt/home/ahardy/ccq-software-build/triqs/3_development/installation/share/triqs/triqsvars.sh
-#source /mnt/home/ahardy/ccq-software-build/triqs/3_nu_nu/installation/share/triqs/triqsvars.sh
+module load triqs/3_unst_nix2.4_llvm
 
 ##################### run your code here #####################
 #../CTHYB/benchmark/
