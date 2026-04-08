@@ -27,6 +27,7 @@ U = args.U
 mu = U/2
 J = args.J
 i_1, i_2, i_3, i_4, i_5 = args.i1, args.i2, args.i3, args.i4, args.i5
+print(U,J,i_1,i_2,i_3,i_4,i_5,beta)
 n_tau = 4096
 n_tau_bosonic = 2001
 n_iw = 1025
@@ -73,7 +74,7 @@ solve_params = {
     "h_loc0": -mu * (n("up", 0) + n("down", 0)),
     "length_cycle": 100,
     "n_warmup_cycles": 100000,
-    "n_cycles": 5000000,
+    "n_cycles": 10000000,
     "measure_F_tau": False,
     "measure_nn_tau": True,
     "measure_nn_nu": True,

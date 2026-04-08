@@ -32,7 +32,7 @@ beta = args.beta
 U = args.U
 J = args.J
 i_1, i_2, i_3, i_4, i_5 = args.i1, args.i2, args.i3, args.i4, args.i5
-
+print(U,J,i_1,i_2,i_3,i_4,i_5,beta)
 n_tau = 2001
 n_tau_bosonic = 2001
 dlr_wmax = 10.0
@@ -72,7 +72,8 @@ solver.D0_iw["up", "down"].data[:] = 0.25 * J * q_iw_dlr.data[:] * i_4
 solver.D0_iw["down", "up"].data[:] = 0.25 * J * q_iw_dlr.data[:] * i_5
 
 solver.solve(
-    n_cycles=5000000,
+    h_int=U * n("up", 0) * n("down", 0),
+    n_cycles=10000000,
     measure_M_iw=True,
     measure_M_tau=False,
     measure_chiAB_tau=True,
