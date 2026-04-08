@@ -65,11 +65,11 @@ q_tau <<= q_tau_ref
 q_tau_dlr = fit_gf_dlr(q_tau, w_max=dlr_wmax, eps=dlr_eps, symmetrize=True)
 q_iw_dlr = make_gf_dlr_imfreq(q_tau_dlr)
 
-solver.Jperp_iw.data[:] = -(J) * q_iw_dlr.data[:] * i_1
-solver.D0_iw["up", "up"].data[:] = -0.25 * J * q_iw_dlr.data[:] * i_2
-solver.D0_iw["down", "down"].data[:] = -0.25 * J * q_iw_dlr.data[:] * i_3
-solver.D0_iw["up", "down"].data[:] = 0.25 * J * q_iw_dlr.data[:] * i_4
-solver.D0_iw["down", "up"].data[:] = 0.25 * J * q_iw_dlr.data[:] * i_5
+solver.Jperp_iw.data[:] = -(J/2) * q_iw_dlr.data[:] * i_1
+solver.D0_iw["up", "up"].data[:] = -0.125 * J * q_iw_dlr.data[:] * i_2
+solver.D0_iw["down", "down"].data[:] = -0.125 * J * q_iw_dlr.data[:] * i_3
+solver.D0_iw["up", "down"].data[:] = 0.125 * J * q_iw_dlr.data[:] * i_4
+solver.D0_iw["down", "up"].data[:] = 0.125 * J * q_iw_dlr.data[:] * i_5
 
 solver.solve(
     h_int=U * n("up", 0) * n("down", 0),

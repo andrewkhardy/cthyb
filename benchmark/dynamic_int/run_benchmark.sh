@@ -20,4 +20,4 @@ module load triqs/3_unst_nix2.4_llvm
 #../CTHYB/benchmark/
 mpirun python spin_spin.py --J 1.0 --U 4.0 --i1 1.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0 --n_cycles 1000000 --measure_O_tau 50
 mpirun python ctseg_spin_spin.py --J 1.0 --U 4.0 --i1 1.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0
-mpirun python ctint_spin_spin.py --J 0.5 --U 4.0 --i1 1.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0
+mpirun python ctint_spin_spin.py --J 1.0 --U 4.0 --i1 1.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0

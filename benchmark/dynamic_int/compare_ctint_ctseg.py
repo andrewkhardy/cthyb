@@ -145,6 +145,33 @@ chiAB_conn_reg = make_gf_imtime(chiAB_conn_dlr, len(tau_nn))
 SzSz_int = chiAB_conn_reg.data[:, 0].real + (Sz_mean * Sz_mean).real
 tau_chiAB = np.array([float(t) for t in chiAB_conn_reg.mesh])
 
+# ============ Save extracted data for later plotting ============
+out_h5 = f"/mnt/home/ahardy/ceph/CTHYB_Data/comparison_ctint_ctseg_U-{U}_J-{J}_beta-{beta}_ncycles-{int(n_cycles)}.h5"
+with h5.HDFArchive(out_h5, "w") as A:
+    A["beta"] = beta
+    A["U"] = U
+    A["J"] = J
+    A["n_cycles"] = int(n_cycles)
+
+    # Save extracted arrays used by the plotting section.
+    A["tau_seg"] = tau_seg
+    A["G_seg_tau"] = G_seg_data
+    A["tau_int"] = tau_int
+    A["G_int_tau"] = G_int_data
+
+    A["tau_nn"] = tau_nn
+    A["SzSz_seg_tau"] = SzSz_seg
+    A["tau_chiAB"] = tau_chiAB
+    A["SzSz_int_tau"] = SzSz_int
+
+    # Save selected raw objects for possible post-processing.
+    A["G_seg_tau_gf"] = G_seg_tau
+    A["G_int_iw"] = S_int.G_iw["up"]
+    A["nn_tau"] = nn
+    A["chiAB_tau"] = S_int.chiAB_tau
+
+print(f"Saved extracted comparison data to {out_h5}")
+
 # ============ Plots ============
 fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
@@ -197,7 +224,7 @@ ax.set_title(r'$\langle S_z S_z \rangle^\mathrm{SEG} - \langle S_z S_z \rangle^\
 fig.suptitle(f'CT-INT vs CT-SEG comparison (U={U}, J={J}, beta={beta}, {n_cycles/1e6:.0f}M cycles)',
              fontsize=14)
 fig.tight_layout()
-fig.savefig('comparison_ctint_ctseg.pdf')
-fig.savefig('comparison_ctint_ctseg.png', dpi=150)
+fig.savefig('/mnt/home/ahardy/ceph/CTHYB_Data/comparison_ctint_ctseg.pdf')
+fig.savefig('/mnt/home/ahardy/ceph/CTHYB_Data/comparison_ctint_ctseg.png', dpi=150)
 print("\nPlots saved to comparison_ctint_ctseg.pdf / .png")
 print("Done.")
