@@ -72,10 +72,7 @@ solver.D0_iw["up", "down"].data[:] = 0.25 * J * q_iw_dlr.data[:] * i_4
 solver.D0_iw["down", "up"].data[:] = 0.25 * J * q_iw_dlr.data[:] * i_5
 
 solver.solve(
-    h_int=U * n("up", 0) * n("down", 0),
-    length_cycle=100,
-    n_warmup_cycles=10000,
-    n_cycles=2000000,
+    n_cycles=5000000,
     measure_M_iw=True,
     measure_M_tau=False,
     measure_chiAB_tau=True,
