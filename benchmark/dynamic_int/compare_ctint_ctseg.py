@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 beta = 10.0
 U = 4.0
 mu = U / 2
-J = 1.0
+J = 1.0 # what about 2 ? 
 n_tau = 2001
 n_tau_bosonic = 2001
 n_iw = 1025
