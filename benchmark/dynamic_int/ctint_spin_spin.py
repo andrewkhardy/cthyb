@@ -73,7 +73,7 @@ solver.D0_iw["down", "up"].data[:] = 0.125 * J * q_iw_dlr.data[:] * i_5
 
 solver.solve(
     h_int=U * n("up", 0) * n("down", 0),
-    n_cycles=10000000,
+    n_cycles=500000,
     measure_M_iw=True,
     measure_M_tau=False,
     measure_chiAB_tau=True,

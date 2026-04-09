@@ -74,7 +74,7 @@ solve_params = {
     "h_loc0": -mu * (n("up", 0) + n("down", 0)),
     "length_cycle": 100,
     "n_warmup_cycles": 100000,
-    "n_cycles": 10000000,
+    "n_cycles": 500000,
     "measure_F_tau": False,
     "measure_nn_tau": True,
     "measure_nn_nu": True,

@@ -26,7 +26,7 @@ J = 1.0 # what about 2 ?
 n_tau = 2001
 n_tau_bosonic = 2001
 n_iw = 1025
-n_cycles = 10000000
+n_cycles = 1000000
 
 gf_struct = [('down', 1), ('up', 1)]
 Sz = 0.5 * (n('up', 0) - n('down', 0))
