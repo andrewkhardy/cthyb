@@ -5,10 +5,10 @@
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
 #SBATCH --partition=ccq
-#SBATCH --constraint=icelake
+#SBATCH --constraint=rome
 #SBATCH --output=/mnt/home/ahardy/ceph/SLURMOutputs/%x-%j.txt
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=64
+#SBATCH --ntasks-per-node=128
 #SBATCH --cpus-per-task=1
 #SBATCH --time=72:00:00
 MODULES="modules/2.4 gcc flexiblas openmpi cmake ccache gmp fftw nfft hdf5/mpi boost python/3.12 python-mpi/3.12 intel-oneapi-mkl llvm/19 eigen mpfr"
