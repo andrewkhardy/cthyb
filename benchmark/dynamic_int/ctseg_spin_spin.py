@@ -74,7 +74,7 @@ solve_params = {
     "h_loc0": -mu * (n("up", 0) + n("down", 0)),
     "length_cycle": 100,
     "n_warmup_cycles": 100000,
-    "n_cycles": 5000000,
+    "n_cycles": 10000000,
     "measure_F_tau": False,
     "measure_nn_tau": True,
     "measure_nn_nu": True,
@@ -96,6 +96,10 @@ if mpi.is_master_node():
         A['nn'] = S.results.nn_static
         A['densities'] = S.results.densities
         A["average_sign"] = S.results.average_sign
-        A["perturbation_order_J"] = S.results.pert_order_Jperp
+        if i_1 == 0.0:
+            print("no Jperp_tau, skipping perturbation order data for Jperp_tau and D0_tau")
+        else:
+            A["perturbation_order_J"] = S.results.pert_order_Jperp
+
         A["perturbation_order_D"] = S.results.pert_order_Delta
 
