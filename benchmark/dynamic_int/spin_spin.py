@@ -93,10 +93,6 @@ solve_params = {
     "measure_pert_order": True,
     "measure_O_tau": (Sz, Sz),
     "measure_O_tau_min_ins": measure_O_tau_min_ins,
-    # Dynamical interaction moves are now automatically enabled when Jperp_tau or D0_tau are non-zero
-    # "measure_F_tau": True,
-    # "measure_nn_tau": True,
-    # "measure_nn_static": True
     }
 
 # Solve
