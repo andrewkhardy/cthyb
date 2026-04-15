@@ -79,7 +79,7 @@ Ntot = sum(n(block, 0) for block, _ in gf_struct)
 solve_params = {
     'h_int': h_int,
     'h_loc0': h_loc0,
-    'length_cycle': 100,
+    'length_cycle': 1000,
     'n_warmup_cycles': 10000,
     'n_cycles': 1000000,
     'measure_pert_order': True,
@@ -92,7 +92,7 @@ S.solve(**solve_params)
 
 # Save and compare to reference
 if mpi.is_master_node():
-    with HDFArchive("cthyb_dynamic_int_multiorb.out.h5", 'w') as A:
+    with HDFArchive("/mnt/home/ahardy/ceph/Data/cthyb_dynamic_int_multiorb.out.h5", 'w') as A:
         A['G_tau'] = S.G_tau
         A['average_sign'] = S.average_sign
         A['perturbation_order'] = S.perturbation_order
