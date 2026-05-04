@@ -14,7 +14,7 @@ from triqs.gf.descriptors import Function
 from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff
-from triqs_cthyb import SolverCore as Solver
+from triqs_cthyb import Solver
 import matplotlib.pyplot as plt
 from triqs.plot.mpl_interface import oplot
 from triqs.operators import n
@@ -30,7 +30,7 @@ parser.add_argument('--i5', type=float, default=1.0,  help='i5 switch (0 or 1)')
 parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
 parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
 parser.add_argument('--measure_O_tau', type=int, default=100, help='Minimum insertions for O_tau measurement')
-args = parser.parse_args()
+args, unknown = parser.parse_known_args()
 
 # Numerical values
 beta = args.beta
@@ -93,6 +93,8 @@ solve_params = {
     "measure_pert_order": True,
     "measure_O_tau": (Sz, Sz),
     "measure_O_tau_min_ins": measure_O_tau_min_ins,
+    "perform_tail_fit": True,
+    "fit_max_moment": 3
     }
 
 # Solve
@@ -106,6 +108,8 @@ if mpi.is_master_node():
         A["perturbation_order"] = S.perturbation_order
         A["average_sign"] = S.average_sign
         A["O_tau"] = S.O_tau#[(Sz, Sz)], hopefully allows many measurements eventually? # why use this over G2 blocks? 
+        A["Sigma_iw"] = S.Sigma_iw
+        A["Sigma_tau"] = S.Sigma_tau
         # A['F_tau'] = S.F_tau
         # A['nn_tau'] = S.nn_tau
         # A['nn'] = S.nn_static

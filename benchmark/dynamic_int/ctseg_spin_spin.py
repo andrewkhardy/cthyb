@@ -7,8 +7,7 @@ from triqs.gf.block_gf import *
 from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff
-from triqs_ctseg import SolverCore as Solver
-
+from triqs_ctseg import Solver
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
 parser.add_argument('--U', type=float, default=4.0, help='U parameter')
@@ -90,7 +89,8 @@ if mpi.is_master_node():
     filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_ctseg_J-{J}-U-{U}_{i_1}_{i_2}_{i_3}_{i_4}_{i_5}_b-{beta}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.results.G_tau
-        #A['F_tau'] = S.results.F_tau
+        A["Sigma_tau"] = S.results.Sigma_tau
+        A['F_tau'] = S.results.F_tau
         A['nn_tau'] = S.results.nn_tau
         A['nn_nu'] = S.results.nn_nu
         A['nn'] = S.results.nn_static
