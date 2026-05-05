@@ -25,11 +25,6 @@ from triqs.operators import n
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
 parser.add_argument('--U', type=float, default=4.0, help='U parameter')
 parser.add_argument('--J', type=float, default=1.0, help='J parameter')
-parser.add_argument('--i1', type=float, default=1.0,  help='i1 switch (0 or 1)')
-parser.add_argument('--i2', type=float, default=1.0,  help='i2 switch (0 or 1)')
-parser.add_argument('--i3', type=float, default=1.0,  help='i3 switch (0 or 1)')
-parser.add_argument('--i4', type=float, default=1.0,  help='i4 switch (0 or 1)')
-parser.add_argument('--i5', type=float, default=1.0,  help='i5 switch (0 or 1)')
 parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
 parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
 parser.add_argument('--measure_O_tau', type=int, default=100, help='Minimum insertions for O_tau measurement')
@@ -41,9 +36,9 @@ w0 = 0.1
 beta = args.beta
 U = args.U
 J = args.J
-i_1, i_2, i_3, i_4, i_5 = args.i1, args.i2, args.i3, args.i4, args.i5
 n_tau = 4096
-n_tau_bosonic = 2001
+n_tau_bosonic = 3999
+n_iw = 2048
 n_cycles = args.n_cycles
 measure_O_tau_min_ins = args.measure_O_tau
 Sz = 0.5 * ( n('up', 0) - n('down', 0) )
@@ -60,7 +55,6 @@ constr_params = {
 S = Solver(**constr_params)
 
 # Hybridization Delta(tau)
-n_iw = 1025
 Delta = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 g0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 q_tau = GfImTime(indices=[0],  statistic='Boson', beta=beta, n_points=n_tau_bosonic)
@@ -76,10 +70,7 @@ mu = U/2 - np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].d
 Delta << iOmega_n + mu - inverse(g0)
 S.Delta_tau << Fourier(Delta)
 
-S.D0_tau["up", "up"] << q_tau 
-S.D0_tau["down", "down"] << q_tau 
-S.D0_tau["up", "down"] << q_tau
-S.D0_tau["down", "up"] << q_tau
+S.D0_tau << Q_tau
 
 
 # Solve parameters

@@ -23,8 +23,8 @@ U = args.U
 
 J = args.J
 n_tau = 4096
-n_tau_bosonic = 2001
-n_iw = 1025
+n_tau_bosonic = 3999
+n_iw = 2048
 h_int = U*n("up", 0)*n("down", 0)
 # Solver construction parameters
 gf_struct = [('down', 1), ('up', 1)]
@@ -55,7 +55,7 @@ zero_freq = np.where(np.abs(ivn) < 1e-10)
 mu = U/2 - np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].data[zero_freq][0,0,0])/2.0)
 Delta << iOmega_n + mu - inverse(g0)
 S.Delta_tau << Fourier(Delta)
-S.D0_tau = Q_tau
+S.D0_tau << Q_tau
 
 
 # Solve parameters
