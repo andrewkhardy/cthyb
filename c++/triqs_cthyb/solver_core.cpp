@@ -22,6 +22,7 @@
  ******************************************************************************/
 #include "./solver_core.hpp"
 #include "./qmc_data.hpp"
+#include "./math_utils.hpp"
 
 #include <triqs/utility/callbacks.hpp>
 #include <triqs/utility/exceptions.hpp>
@@ -328,52 +329,98 @@ namespace triqs_cthyb {
       if (params.verbosity >= 2) { std::cout << "Added Jperp (spin-spin) dynamical interaction." << std::endl; }
     }
 
+    std::vector<std::vector<std::vector<double>>> analytic_k_n;
+
     if (has_D0) {
-      // For D0, we create operator pairs for each non-zero block pair
-      // D0(tau) n_a(tau) n_b(0) where n_a = c_dag_a * c_a
+      if (params.analytic_D) {
+        int N_leg = params.n_l; 
+        if (N_leg <= 0) N_leg = 50; // fallback default
+        
+        auto M_matrix = build_M_matrix(N_leg, beta);
 
-      for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
-        for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
-          // Check if this block pair has non-zero interaction
-          auto D0_bl = inputs.D0t(bl1, bl2);
-          if (max_element(nda::abs(D0_bl.data())) < 1.e-13) continue;
+        // find total number of linear indices
+        int max_linindex = 0;
+        for (auto const& pair : linindex) max_linindex = std::max(max_linindex, pair.second);
+        analytic_k_n.resize(max_linindex + 1, std::vector<std::vector<double>>(max_linindex + 1, std::vector<double>(N_leg, 0.0)));
 
-          int bl1_size = gf_struct[bl1].second;
-          int bl2_size = gf_struct[bl2].second;
+        for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
+          for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
+            auto D0_bl = inputs.D0t(bl1, bl2);
+            if (max_element(nda::abs(D0_bl.data())) < 1.e-13) continue;
 
-          for (int i1 = 0; i1 < bl1_size; ++i1) {
-            for (int i2 = 0; i2 < bl2_size; ++i2) {
-              // Check if this specific matrix element is non-zero
-              bool is_nonzero = false;
-              for (auto const &tau_pt : D0_bl.mesh()) {
-                if (std::abs(D0_bl[tau_pt](i1, i2)) > 1.e-13) {
-                  is_nonzero = true;
-                  break;
+            int bl1_size = gf_struct[bl1].second;
+            int bl2_size = gf_struct[bl2].second;
+            int n_pt_tau = D0_bl.mesh().size();
+
+            for (int i1 = 0; i1 < bl1_size; ++i1) {
+              for (int i2 = 0; i2 < bl2_size; ++i2) {
+                bool is_nonzero = false;
+                for (auto const &tau_pt : D0_bl.mesh()) {
+                  if (std::abs(D0_bl[tau_pt](i1, i2)) > 1.e-13) { is_nonzero = true; break; }
+                }
+                if (!is_nonzero) continue;
+
+                auto D0_eval = [D0_bl, i1, i2](double tau) -> double { return real(D0_bl[closest_mesh_pt(tau)](i1, i2)); };
+                
+                auto d_n = compute_D_legendre_coeffs(n_pt_tau, beta, D0_eval, N_leg);
+                auto k_n_vec = nda::matrix<double>(M_matrix * d_n);
+
+                int lin1 = linindex.at({bl1, i1});
+                int lin2 = linindex.at({bl2, i2});
+                for (int n = 0; n < N_leg; ++n) {
+                  analytic_k_n[lin1][lin2][n] = k_n_vec(n, 0); // M * d_n yields vector
                 }
               }
-              if (!is_nonzero) continue;
+            }
+          }
+        }
+      } else {
+        // For D0, we create operator pairs for each non-zero block pair
+        // D0(tau) n_a(tau) n_b(0) where n_a = c_dag_a * c_a
 
-              // Create operator pair for n_a(tau) * n_b(tau')
-              // n_a = c_dag(bl1,i1) * c(bl1,i1)
-              // n_b = c_dag(bl2,i2) * c(bl2,i2)
-              bosonic_op_pair_t D0_pair = {
-                 .op1     = {.opL = {.block_index = static_cast<int>(bl1), .inner_index = i1, .dagger = true, .linear_index = linindex.at({bl1, i1})},
-                             .opR = {.block_index = static_cast<int>(bl1), .inner_index = i1, .dagger = false, .linear_index = linindex.at({bl1, i1})}},
-                 .op2     = {.opL = {.block_index = static_cast<int>(bl2), .inner_index = i2, .dagger = true, .linear_index = linindex.at({bl2, i2})},
-                             .opR = {.block_index = static_cast<int>(bl2), .inner_index = i2, .dagger = false, .linear_index = linindex.at({bl2, i2})}},
-                 .f_index = static_cast<int>(dyn_interactions.size())};
+        for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
+          for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
+            // Check if this block pair has non-zero interaction
+            auto D0_bl = inputs.D0t(bl1, bl2);
+            if (max_element(nda::abs(D0_bl.data())) < 1.e-13) continue;
 
-              dyn_op_list.push_back(D0_pair);
+            int bl1_size = gf_struct[bl1].second;
+            int bl2_size = gf_struct[bl2].second;
 
-              // Create lambda function to evaluate D0(tau) for this block pair
-              // Make a copy of the specific block for the lambda
-              auto D0_block    = inputs.D0t(bl1, bl2);
-              auto D0_function = [D0_block, i1, i2](double tau) -> double { return real(D0_block[closest_mesh_pt(tau)](i1, i2)); };
-              dyn_interactions.emplace_back(D0_function);
+            for (int i1 = 0; i1 < bl1_size; ++i1) {
+              for (int i2 = 0; i2 < bl2_size; ++i2) {
+                // Check if this specific matrix element is non-zero
+                bool is_nonzero = false;
+                for (auto const &tau_pt : D0_bl.mesh()) {
+                  if (std::abs(D0_bl[tau_pt](i1, i2)) > 1.e-13) {
+                    is_nonzero = true;
+                    break;
+                  }
+                }
+                if (!is_nonzero) continue;
 
-              if (params.verbosity >= 2) {
-                std::cout << "Added D0 density-density interaction for blocks (" << bl1 << "," << bl2 << ") indices (" << i1 << "," << i2 << ")"
-                          << std::endl;
+                // Create operator pair for n_a(tau) * n_b(tau')
+                // n_a = c_dag(bl1,i1) * c(bl1,i1)
+                // n_b = c_dag(bl2,i2) * c(bl2,i2)
+                bosonic_op_pair_t D0_pair = {
+                   .op1     = {.opL = {.block_index = static_cast<int>(bl1), .inner_index = i1, .dagger = true, .linear_index = linindex.at({bl1, i1})},
+                               .opR = {.block_index = static_cast<int>(bl1), .inner_index = i1, .dagger = false, .linear_index = linindex.at({bl1, i1})}},
+                   .op2     = {.opL = {.block_index = static_cast<int>(bl2), .inner_index = i2, .dagger = true, .linear_index = linindex.at({bl2, i2})},
+                               .opR = {.block_index = static_cast<int>(bl2), .inner_index = i2, .dagger = false, .linear_index = linindex.at({bl2, i2})}},
+                   .f_index = static_cast<int>(dyn_interactions.size())};
+
+                dyn_op_list.push_back(D0_pair);
+
+                // Create lambda function to evaluate D0(tau) for this block pair
+                // Make a copy of the specific block for the lambda
+                auto D0_block    = inputs.D0t(bl1, bl2);
+                auto D0_function = [D0_block, i1, i2](double tau) -> double { return real(D0_block[closest_mesh_pt(tau)](i1, i2)); };
+                dyn_interactions.emplace_back(D0_function);
+
+                if (params.verbosity >= 2) {
+                  std::cout << "Added D0 density-density interaction for blocks (" << bl1 << "," << bl2 << ") indices (" << i1 << "," << i2 << ")"
+                            << std::endl;
+                }
               }
             }
           }
@@ -386,10 +433,10 @@ namespace triqs_cthyb {
     }
 
     // Automatically enable dynamical moves if we have dynamical interactions
-    bool has_dyn_interactions = has_Jperp || has_D0;
+    bool has_dyn_interactions = has_Jperp || (has_D0 && !params.analytic_D);
 
     // Initialise Monte Carlo quantities
-    qmc_data data(beta, params, h_diag, linindex, _Delta_tau, n_inner, histo_map, dyn_op_list, dyn_interactions);
+    qmc_data data(beta, params, h_diag, linindex, _Delta_tau, n_inner, histo_map, dyn_op_list, dyn_interactions, analytic_k_n);
     auto qmc =
        mc_tools::mc_generic<mc_weight_t>(params.random_name, params.random_seed, params.verbosity);
 

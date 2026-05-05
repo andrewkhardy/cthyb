@@ -99,6 +99,7 @@ namespace triqs_cthyb {
     h5_write(grp, "move_shift", sp.move_shift);
     h5_write(grp, "move_double", sp.move_double);
     h5_write(grp, "use_trace_estimator", sp.use_trace_estimator);
+    h5_write(grp, "analytic_D", sp.analytic_D);
 
     h5_write(grp, "measure_G_tau", sp.measure_G_tau);
     h5_write(grp, "measure_G_l", sp.measure_G_l);
@@ -166,6 +167,7 @@ namespace triqs_cthyb {
     h5_read(grp, "move_shift", sp.move_shift);
     h5_read(grp, "move_double", sp.move_double);
     h5_read(grp, "use_trace_estimator", sp.use_trace_estimator);
+    h5::try_read(grp, "analytic_D", sp.analytic_D);
 
     h5_read(grp, "measure_G_tau", sp.measure_G_tau);
     h5_read(grp, "measure_G_l", sp.measure_G_l);

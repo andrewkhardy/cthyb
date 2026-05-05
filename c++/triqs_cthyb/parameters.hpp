@@ -123,6 +123,9 @@ namespace triqs_cthyb {
     /// Calculate the full trace or use an estimate?
     bool use_trace_estimator = false;
 
+    /// Analytically integrate out the bosonic density-density bath
+    bool analytic_D = false;
+
     /// Measure G(tau)? :math:`G_{ij}(\tau)=G_{ji}^*(\tau)` is enforced for the resulting G(tau)
     bool measure_G_tau = true;
 

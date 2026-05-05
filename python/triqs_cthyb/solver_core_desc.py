@@ -434,6 +434,11 @@ c.add_member(c_name = "use_trace_estimator",
              initializer = """ false """,
              doc = r"""Calculate the full trace or use an estimate?""")
 
+c.add_member(c_name = "analytic_D",
+             c_type = "bool",
+             initializer = """ false """,
+             doc = r"""Analytically integrate out the bosonic density-density bath""")
+
 c.add_member(c_name = "measure_G_tau",
              c_type = "bool",
              initializer = """ true """,

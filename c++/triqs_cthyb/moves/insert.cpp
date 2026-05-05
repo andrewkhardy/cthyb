@@ -99,10 +99,12 @@ namespace triqs_cthyb {
     // proposition probability
     mc_weight_t t_ratio = std::pow(block_size * config.beta() / double(det.size() + 1), 2);
 
+    double analytic_D_ratio = data.compute_analytic_D_ratio({{tau1, op1}, {tau2, op2}}, {});
+
     // For quick abandon
     double random_number = rng.preview();
     if (random_number == 0.0) return 0;
-    double p_yee = std::abs(t_ratio * det_ratio / data.atomic_weight);
+    double p_yee = std::abs(t_ratio * det_ratio * analytic_D_ratio / data.atomic_weight);
 
     // computation of the new trace after insertion
     std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
@@ -117,7 +119,7 @@ namespace triqs_cthyb {
       TRIQS_RUNTIME_ERROR << "(insert) trace_ratio not finite " << new_atomic_weight << " " << data.atomic_weight << " "
                           << new_atomic_weight / data.atomic_weight << " in config " << config.get_id();
 
-    mc_weight_t p = atomic_weight_ratio * det_ratio;
+    mc_weight_t p = atomic_weight_ratio * det_ratio * analytic_D_ratio;
 
 #ifdef EXT_DEBUG
     std::cerr << "Atomic ratio: " << atomic_weight_ratio << '\t';
