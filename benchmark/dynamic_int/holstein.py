@@ -24,7 +24,7 @@ from triqs.operators import n
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
 parser.add_argument('--U', type=float, default=4.0, help='U parameter')
-parser.add_argument('--J', type=float, default=1.0, help='J parameter')
+parser.add_argument('--L', type=float, default=1.0, help='L parameter')
 parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
 parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
 parser.add_argument('--measure_O_tau', type=int, default=100, help='Minimum insertions for O_tau measurement')
@@ -35,7 +35,7 @@ hopping = 1.0
 w0 = 0.1
 beta = args.beta
 U = args.U
-J = args.J
+L = args.L
 n_tau = 4096
 n_tau_bosonic = 3999
 n_iw = 2048
@@ -59,7 +59,7 @@ Delta = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 g0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 q_tau = GfImTime(indices=[0],  statistic='Boson', beta=beta, n_points=n_tau_bosonic)
 q_iw = make_gf_from_fourier(q_tau)  
-q_iw << Function(lambda w: 2 * J/w0 * w0**2 / (w**2 - w0**2))
+q_iw << Function(lambda w: 2 * L/w0 * w0**2 / (w**2 - w0**2))
 q_tau = make_gf_from_fourier(q_iw)
 Q_tau = Block2Gf(['up', 'down'], ['up', 'down'], [[q_tau, q_tau], [q_tau, q_tau]])
 Q_iw = make_gf_from_fourier(Q_tau)
@@ -93,7 +93,7 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_cthyb_lambda-{J}-U-{U}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}.h5"
+    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_cthyb_lambda-{L}-U-{U}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         A["perturbation_order"] = S.perturbation_order

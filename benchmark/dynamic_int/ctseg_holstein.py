@@ -11,7 +11,7 @@ from triqs_ctseg import Solver
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
 parser.add_argument('--U', type=float, default=4.0, help='U parameter')
-parser.add_argument('--J', type=float, default=1.0, help='J parameter')
+parser.add_argument('--L', type=float, default=1.0, help='L parameter')
 parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
 args = parser.parse_args()
 
@@ -21,7 +21,7 @@ w0 = 0.1
 beta = args.beta
 U = args.U
 
-J = args.J
+L = args.L
 n_tau = 4096
 n_tau_bosonic = 3999
 n_iw = 2048
@@ -45,7 +45,7 @@ Delta = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 g0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 q_tau = GfImTime(indices=[0],  statistic='Boson', beta=beta, n_points=n_tau_bosonic)
 q_iw = make_gf_from_fourier(q_tau)  
-q_iw << Function(lambda w: 2 * J/w0 * w0**2 / (w**2 - w0**2))
+q_iw << Function(lambda w: 2 * L/w0 * w0**2 / (w**2 - w0**2))
 q_tau = make_gf_from_fourier(q_iw)
 Q_tau = Block2Gf(['up', 'down'], ['up', 'down'], [[q_tau, q_tau], [q_tau, q_tau]])
 Q_iw = make_gf_from_fourier(Q_tau)
@@ -77,7 +77,7 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_ctseg_lambda-{J}-U-{U}_b-{beta}.h5"
+    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_ctseg_lambda-{L}-U-{U}_b-{beta}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.results.G_tau
         #A["Sigma_tau"] = S.results.Sigma_tau
@@ -88,9 +88,9 @@ if mpi.is_master_node():
         A['densities'] = S.results.densities
         A["average_sign"] = S.results.average_sign
         if i_1 == 0.0:
-            print("no Jperp_tau, skipping perturbation order data for Jperp_tau and D0_tau")
+            print("no Lperp_tau, skipping perturbation order data for Lperp_tau and D0_tau")
         else:
-            A["perturbation_order_J"] = S.results.pert_order_Jperp
+            A["perturbation_order_L"] = S.results.pert_order_Lperp
 
         A["perturbation_order_D"] = S.results.pert_order_Delta
 
