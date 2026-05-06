@@ -8,15 +8,16 @@
 # Data in spin_spin.ref.h5 is obtained by running this script on 800 cores.
 import sys
 import argparse
-from triqs.gf import *
+from triqs.gfs import *
+import numpy as np
 import triqs.utility.mpi as mpi
 from triqs.gf.descriptors import Function
+from triqs.gf.tools import *
+from triqs.gf.block_gf import *
 from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff
 from triqs_cthyb import Solver
-import matplotlib.pyplot as plt
-from triqs.plot.mpl_interface import oplot
 from triqs.operators import n
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
@@ -31,7 +32,7 @@ parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperatur
 parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
 parser.add_argument('--measure_O_tau', type=int, default=100, help='Minimum insertions for O_tau measurement')
 args, unknown = parser.parse_known_args()
-
+print("what's wrong")
 # Numerical values
 beta = args.beta
 U = args.U
@@ -51,7 +52,7 @@ constr_params = {
     "n_tau_bosonic": n_tau_bosonic,
     "delta_interface": True  # Use Delta_tau interface for dynamical interactions
 }
-
+print("failure mode?")
 # Construct solver
 S = Solver(**constr_params)
 
@@ -88,7 +89,7 @@ solve_params = {
     "h_int": U*n("up", 0)*n("down", 0),
     "h_loc0": -mu * (n("up", 0) + n("down", 0)),
     "length_cycle": 100,
-    "n_warmup_cycles": 100000,
+    "n_warmup_cycles": 50000,
     "n_cycles": n_cycles,
     "measure_pert_order": True,
     "measure_O_tau": (Sz, Sz),
