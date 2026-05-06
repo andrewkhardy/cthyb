@@ -23,9 +23,9 @@ beta = args.beta
 U = args.U
 
 L = args.L
-n_tau = 4096
+n_tau = 4096+3
 n_tau_bosonic = 3999
-n_iw = 1024
+n_iw = 2048
 h_int = U*n("up", 0)*n("down", 0)
 # Solver construction parameters
 gf_struct = [('down', 1), ('up', 1)]
@@ -54,9 +54,11 @@ g0 << SemiCircular(2*hopping)
 ivn = np.array([x.imag for x in Q_iw["up", "up"].mesh.values()])
 zero_freq = np.where(np.abs(ivn) < 1e-10)
 mu = U/2 + np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].data[zero_freq][0,0,0]))/2.0
-Delta << iOmega_n + mu - inverse(g0)
-S.Delta_tau << Fourier(Delta)
+#Delta <<  inverse(g0) - iOmega_n - mu
+print(f"Zero frequency point: {Q_iw['up', 'up'].data[zero_freq][0,0,0]}")
 
+Delta << hopping**2*SemiCircular(2*hopping)
+S.Delta_tau << Fourier(Delta)
 S.D0_tau << Q_tau
 
 
@@ -69,7 +71,7 @@ solve_params = {
     "n_cycles": args.n_cycles,
     "measure_F_tau": True,
     "measure_nn_tau": True,
-    "measure_nn_nu": True,
+    #"measure_nn_nu": True,
     "measure_nn_static": True,
     "measure_pert_order": True
     }
