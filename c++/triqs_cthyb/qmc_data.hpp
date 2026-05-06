@@ -1,3 +1,4 @@
+/*******************************************************************************
  *
  * TRIQS: a Toolbox for Research in Interacting Quantum Systems
  *
@@ -18,11 +19,11 @@
  *
  ******************************************************************************/
 #pragma once
+#include <cmath>
 #include "impurity_trace.hpp"
 #include <triqs/gfs.hpp>
 #include <triqs/mesh.hpp>
 #include <triqs/det_manip.hpp>
-#include <boost/math/special_functions/legendre.hpp>/*******************************************************************************
 
 namespace triqs_cthyb {
   using namespace triqs::gfs;
@@ -213,7 +214,7 @@ namespace triqs_cthyb {
           double x = 2.0 * t_diff / beta - 1.0;
           
           for (int n = 0; n < K_n_size; ++n) {
-             double P_n = boost::math::legendre_p(n, x);
+             double P_n = std::legendre(n, x);
              // factor of 2 because k_n^{ab} term comes from both \alpha_n^{ab} and \alpha_n^{ba} if a!=b (assuming k_n is symmetric, which D0t is)
              // actually, the sum is over ALL \alpha, \beta without restriction.
              // So adding p1 creates two copies in the double sum: (p1, bg) and (bg, p1).
@@ -226,7 +227,7 @@ namespace triqs_cthyb {
         // Since action is +1 (insert) or -1 (remove), inserting adds p1*p1, removing subtracts p1*p1.
         double x_self = -1.0; // t_diff = 0 -> 2*0/beta - 1 = -1
         for (int n = 0; n < K_n_size; ++n) {
-           double P_n = boost::math::legendre_p(n, x_self);
+           double P_n = std::legendre(n, x_self);
            double term = p1.action * p1.S_op * p1.S_op * P_n; // action * (+1)
            d_w += K_n[p1.a][p1.a][n] * term;
         }
@@ -245,7 +246,7 @@ namespace triqs_cthyb {
            
            if (p1.action == p2.action) {
                for (int n = 0; n < K_n_size; ++n) {
-                  double P_n = boost::math::legendre_p(n, x);
+                  double P_n = std::legendre(n, x);
                   double term = 2.0 * p1.action * p1.S_op * p2.S_op * P_n;
                   d_w += K_n[p1.a][p2.a][n] * term;
                }
