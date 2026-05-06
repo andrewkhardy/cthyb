@@ -235,11 +235,15 @@ namespace triqs_cthyb {
         }
         
         // 3. Cross terms between perturbations
-        for (size_t j = i + 1; j < perts.size(); ++j) {
-           auto p2 = perts[j];
-           double t_diff = double(p1.t - p2.t);
-           if (t_diff < 0.0) t_diff += beta;
-           double x = 2.0 * t_diff / beta - 1.0;
+        if (p1.action == p2.action) {
+            triqs::utility::legendre_generator gen_cross;
+            gen_cross.reset(x);
+            for (int n = 0; n < K_n_size; ++n) {
+                double P_n = gen_cross.next();
+                double term = 2.0 * p1.action * p1.S_op * p2.S_op * P_n;
+                d_w += K_n[p1.a][p2.a][n] * term;
+            }
+        }
            // If we insert both: +1 * +1 = +1
            // If we remove both: we are removing their cross term: \alpha_old had (+1 * +1), \alpha_new has 0 -> diff = -1
            // If we insert p1 and remove p2, the \alpha_old had (bg, p2), \alpha_new has (bg, p1). The cross term (p1, p2) is never present!
