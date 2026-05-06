@@ -73,7 +73,8 @@ solve_params = {
     "measure_nn_tau": True,
     #"measure_nn_nu": True,
     "measure_nn_static": True,
-    "measure_pert_order": True
+    "measure_pert_order": True,
+    "lang_firsov": True
     }
 
 # Solve
