@@ -37,7 +37,7 @@ beta = args.beta
 U = args.U
 L = args.L
 n_tau = 4096
-n_tau_bosonic = 3997
+n_tau_bosonic = 3999
 n_iw = 1024
 n_cycles = args.n_cycles
 measure_O_tau_min_ins = args.measure_O_tau
@@ -60,7 +60,7 @@ g0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 q_tau = GfImTime(indices=[0],  statistic='Boson', beta=beta, n_points=n_tau_bosonic)
 q_iw = make_gf_from_fourier(q_tau)  
 q_iw << Function(lambda w: 2 * L/w0 * w0**2 / (w**2 - w0**2))
-q_tau = make_gf_from_fourier(q_iw)
+q_tau << Fourier(q_iw)
 Q_tau = Block2Gf(['up', 'down'], ['up', 'down'], [[q_tau, q_tau], [q_tau, q_tau]])
 Q_iw = make_gf_from_fourier(Q_tau)
 g0 << SemiCircular(2*hopping)

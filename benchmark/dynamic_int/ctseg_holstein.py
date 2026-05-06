@@ -56,8 +56,7 @@ zero_freq = np.where(np.abs(ivn) < 1e-10)
 mu = U/2 - np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].data[zero_freq][0,0,0])/2.0)
 Delta << iOmega_n + mu - inverse(g0)
 S.Delta_tau << Fourier(Delta)
-print(Q_tau)
-print(S.D0_tau)
+
 S.D0_tau << Q_tau
 
 
