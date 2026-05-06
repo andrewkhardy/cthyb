@@ -69,22 +69,27 @@ solve_params = {
     "n_cycles": args.n_cycles,
     "measure_F_tau": False,
     "measure_nn_tau": True,
-    "measure_nn_nu": True,
+    "measure_nn_iw": True,
     "measure_nn_static": True,
     "measure_pert_order": True
     }
 
 # Solve
 S.solve(**solve_params)
-
+print(S.results.F_tau)
+print(S.results.nn_tau)
+print(S.results.nn_nu)
+print(S.results.nn_static)
+print(S.results.densities)
+print(S.results.average_sign)
+print(S.results.pert_order_Delta)
 # Save data
 if mpi.is_master_node():
     filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_ctseg_lambda-{L}-U-{U}_b-{beta}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.results.G_tau
-        #A["Sigma_tau"] = S.results.Sigma_tau
         A['F_tau'] = S.results.F_tau
-        #A['nn_tau'] = S.results.nn_tau
+        A['nn_tau'] = S.results.nn_tau
         A['nn_nu'] = S.results.nn_nu
         A['nn'] = S.results.nn_static
         A['densities'] = S.results.densities
