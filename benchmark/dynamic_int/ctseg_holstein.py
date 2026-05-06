@@ -67,7 +67,7 @@ solve_params = {
     "h_int": h_int,
     "h_loc0": -mu * (n("up", 0) + n("down", 0)),
     "length_cycle": 100,
-    "n_warmup_cycles": 100000,
+    "n_warmup_cycles": 10000,
     "n_cycles": args.n_cycles,
     "measure_F_tau": True,
     "measure_nn_tau": True,

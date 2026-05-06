@@ -77,7 +77,7 @@ solve_params = {
     "h_int": U*n("up", 0)*n("down", 0),
     "h_loc0": -mu * (n("up", 0) + n("down", 0)),
     "length_cycle": 100,
-    "n_warmup_cycles": 100000,
+    "n_warmup_cycles": 10000,
     "n_cycles": n_cycles,
     "measure_pert_order": True,
     "measure_O_tau": (Sz, Sz),
