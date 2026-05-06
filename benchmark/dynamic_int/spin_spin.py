@@ -110,7 +110,7 @@ if mpi.is_master_node():
         A["average_sign"] = S.average_sign
         A["O_tau"] = S.O_tau#[(Sz, Sz)], hopefully allows many measurements eventually? # why use this over G2 blocks? 
         A["Sigma_iw"] = S.Sigma_iw
-        A["Sigma_tau"] = S.Sigma_tau
+        #A["Sigma_tau"] = S.Sigma_tau
         # A['F_tau'] = S.F_tau
         # A['nn_tau'] = S.nn_tau
         # A['nn'] = S.nn_static
