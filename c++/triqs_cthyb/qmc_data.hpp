@@ -23,6 +23,7 @@
 #include <triqs/gfs.hpp>
 #include <triqs/mesh.hpp>
 #include <triqs/det_manip.hpp>
+#include <triqs/utility/legendre.hpp>
 
 namespace triqs_cthyb {
   using namespace triqs::gfs;
@@ -173,7 +174,7 @@ namespace triqs_cthyb {
     qmc_data &operator=(qmc_data const &) = delete;
 
     double compute_lang_firsov_ratio(std::vector<std::pair<time_pt, op_desc>> const& inserted, 
-                                    std::vector<std::pair<time_pt, op_desc>> const& removed) const {
+                                     std::vector<std::pair<time_pt, op_desc>> const& removed) const {
       if (!use_lang_firsov || K_n_size == 0) return 1.0;
 
       double d_w = 0.0;
@@ -184,21 +185,11 @@ namespace triqs_cthyb {
       for (auto const& p : inserted) perts.push_back({p.first, linindex.at({p.second.block_index, p.second.inner_index}), p.second.dagger ? 1 : -1, +1});
       for (auto const& p : removed)  perts.push_back({p.first, linindex.at({p.second.block_index, p.second.inner_index}), p.second.dagger ? 1 : -1, -1});
 
-      // We need to sum over the background operators, excluding the ones to be removed
-      // (because the removed ones are already in `config`, and we will account for them properly)
-      
-      //Compute the change in \sum_{a,b} k_n^{ab} \alpha_n^{ab}.
-      // W = exp( 1/2 \sum_n k_n^{ab} \sum_{x \in a, y \in b} S_x S_y P_n(|t_x - t_y|...) )
-      // versus w_{loc} = exp( \sum_n K_n \alpha_n ), Check factor of 2. 
-      // \Delta W_exp = \sum_n \sum_a \sum_b K_n^{ab} \Delta \alpha_n^{ab}
-      // \alpha^{ab}_{new} - \alpha^{ab}_{old}
-      
       for (size_t i = 0; i < perts.size(); ++i) {
         auto p1 = perts[i];
         
-        // 1. Cross terms with background operators (that are not being removed)
+        // 1. Cross terms with background operators
         for (auto const& [t_bg, op_bg] : config) {
-          // Skip if this background operator is actually one of the ones being removed!
           bool is_removed = false;
           for (auto const& p_r : removed) {
              if (p_r.first == t_bg && p_r.second == op_bg) { is_removed = true; break; }
@@ -211,52 +202,42 @@ namespace triqs_cthyb {
           double t_diff = double(p1.t - t_bg);
           if (t_diff < 0.0) t_diff += beta;
           double x = 2.0 * t_diff / beta - 1.0;
-          triqs::utility::legendre_generator gen;
-          gen.reset(x);
+          
+          triqs::utility::legendre_generator gen_bg;
+          gen_bg.reset(x);
           for (int n = 0; n < K_n_size; ++n) {
-            double P_n = gen.next();
-             // factor of 2 because k_n^{ab} term comes from both \alpha_n^{ab} and \alpha_n^{ba} if a!=b (assuming k_n is symmetric, which D0t is)
-             // actually, the sum is over ALL \alpha, \beta without restriction.
-             // So adding p1 creates two copies in the double sum: (p1, bg) and (bg, p1).
-             double term = 2.0 * p1.action * p1.S_op * S_bg * P_n;
-             d_w += K_n[p1.a][b][n] * term;
+            double P_n = gen_bg.next();
+            double term = 2.0 * p1.action * p1.S_op * S_bg * P_n;
+            d_w += K_n[p1.a][b][n] * term;
           }
         }
         
-        // 2. Self term of the perturbation (p1 with itself)
-        // Since action is +1 (insert) or -1 (remove), inserting adds p1*p1, removing subtracts p1*p1.
-        double x_self = -1.0; // t_diff = 0 -> 2*0/beta - 1 = -1
+        // 2. Self term of the perturbation
+        double x_self = -1.0; 
         triqs::utility::legendre_generator gen_self;
         gen_self.reset(x_self);
         for (int n = 0; n < K_n_size; ++n) {
            double P_n = gen_self.next();
-           double term = p1.action * p1.S_op * p1.S_op * P_n; // action * (+1)
+           double term = p1.action * p1.S_op * p1.S_op * P_n;
            d_w += K_n[p1.a][p1.a][n] * term;
         }
         
         // 3. Cross terms between perturbations
-        if (p1.action == p2.action) {
-            triqs::utility::legendre_generator gen_cross;
-            gen_cross.reset(x);
-            for (int n = 0; n < K_n_size; ++n) {
-                double P_n = gen_cross.next();
-                double term = 2.0 * p1.action * p1.S_op * p2.S_op * P_n;
-                d_w += K_n[p1.a][p2.a][n] * term;
+        for (size_t j = i + 1; j < perts.size(); ++j) {
+            auto p2 = perts[j];
+            if (p1.action == p2.action) {
+                double t_diff = double(p1.t - p2.t);
+                if (t_diff < 0.0) t_diff += beta;
+                double x_cross = 2.0 * t_diff / beta - 1.0;
+                
+                triqs::utility::legendre_generator gen_cross;
+                gen_cross.reset(x_cross);
+                for (int n = 0; n < K_n_size; ++n) {
+                    double P_n = gen_cross.next();
+                    double term = 2.0 * p1.action * p1.S_op * p2.S_op * P_n;
+                    d_w += K_n[p1.a][p2.a][n] * term;
+                }
             }
-        }
-           // If we insert both: +1 * +1 = +1
-           // If we remove both: we are removing their cross term: \alpha_old had (+1 * +1), \alpha_new has 0 -> diff = -1
-           // If we insert p1 and remove p2, the \alpha_old had (bg, p2), \alpha_new has (bg, p1). The cross term (p1, p2) is never present!
-           // Wait. If p1 is inserted, it only crosses with things in configuring AFTER p2 is removed. So it doesn't cross with p2!
-           // So if p1.action != p2.action, their mutual cross-term in \Delta \alpha is ZERO.
-           
-           if (p1.action == p2.action) {
-               for (int n = 0; n < K_n_size; ++n) {
-                  double P_n = std::legendre(n, x);
-                  double term = 2.0 * p1.action * p1.S_op * p2.S_op * P_n;
-                  d_w += K_n[p1.a][p2.a][n] * term;
-               }
-           }
         }
       }
 
