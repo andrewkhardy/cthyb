@@ -190,7 +190,7 @@ namespace triqs_cthyb {
     auto det_ratio = (is_dagger ? det.try_change_row(op_pos_in_det, {tau_new, op_new.inner_index}) :
                                   det.try_change_col(op_pos_in_det, {tau_new, op_new.inner_index}));
 
-    double analytic_D_ratio = data.compute_analytic_D_ratio({{tau_new, op_new}}, {{tau_old, op_old}});
+    double analytic_D_ratio = data.compute_lang_firsov_ratio({{tau_new, op_new}}, {{tau_old, op_old}});
 
     // for quick abandon
     double random_number = rng.preview();

@@ -80,7 +80,7 @@ namespace triqs_cthyb {
 
     op_desc op1 = {.block_index = block_index, .inner_index = det.get_y(num_c).second, .dagger = false, .linear_index = 0};
     op_desc op2 = {.block_index = block_index, .inner_index = det.get_x(num_c_dag).second, .dagger = true, .linear_index = 0};
-    double analytic_D_ratio = data.compute_analytic_D_ratio({}, {{tau1, op1}, {tau2, op2}});
+    double analytic_D_ratio = data.compute_lang_firsov_ratio({}, {{tau1, op1}, {tau2, op2}});
 
     // For quick abandon
     double random_number = rng.preview();

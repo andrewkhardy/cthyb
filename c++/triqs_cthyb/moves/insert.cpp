@@ -99,7 +99,7 @@ namespace triqs_cthyb {
     // proposition probability
     mc_weight_t t_ratio = std::pow(block_size * config.beta() / double(det.size() + 1), 2);
 
-    double analytic_D_ratio = data.compute_analytic_D_ratio({{tau1, op1}, {tau2, op2}}, {});
+    double analytic_D_ratio = data.compute_lang_firsov_ratio({{tau1, op1}, {tau2, op2}}, {});
 
     // For quick abandon
     double random_number = rng.preview();

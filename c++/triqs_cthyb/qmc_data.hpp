@@ -72,17 +72,17 @@ namespace triqs_cthyb {
     //std::vector<gfs::gf<imtime, scalar_valued>> dyn_interactions; // List of dynamic interactions
 
     // Analytic Density-Density bath support
-    // Matrix of k_n polynomials: k_n[a][b][n] where a and b are linear indices.
-    std::vector<std::vector<std::vector<double>>> analytic_k_n; 
-    int analytic_D_N = 0; // size of polynomials
-    bool use_analytic_D = false;
+    // Matrix of k_n polynomials: K_n[a][b][n] where a and b are linear indices.
+    std::vector<std::vector<std::vector<double>>> K_n; 
+    int K_n_size = 0; // size of polynomials
+    bool use_lang_firsov = false;
 
     // Construction
     qmc_data(double beta, solve_parameters_t const &p, atom_diag const &h_diag, std::map<std::pair<int, int>, int> linindex,
              block_gf_const_view<imtime> delta, std::vector<int> n_inner, histo_map_t *histo_map,
              std::vector<bosonic_op_pair_t> const &dyn_op_list_ = {},
              std::vector<std::function<double(double)>> const &dyn_interactions_ = {},
-             std::vector<std::vector<std::vector<double>>> const &analytic_k_n_ = {})
+             std::vector<std::vector<std::vector<double>>> const &K_n_ = {})
        : config(beta),
          tau_seg(beta),
          linindex(linindex),
@@ -94,11 +94,11 @@ namespace triqs_cthyb {
          old_sign(1),
          dyn_op_list(dyn_op_list_),
          dyn_interactions(dyn_interactions_),
-         analytic_k_n(analytic_k_n_) {
+         K_n(K_n_) {
 
-      use_analytic_D = p.analytic_D;
-      if (!analytic_k_n.empty() && !analytic_k_n[0].empty()) {
-        analytic_D_N = analytic_k_n[0][0].size();
+      use_lang_firsov = p.analytic_D;
+      if (!K_n.empty() && !K_n[0].empty()) {
+        K_n_size = K_n[0][0].size();
       }
 
       std::vector<std::vector<std::pair<time_pt, int>>> X(delta.size()), Y(delta.size());
@@ -172,9 +172,9 @@ namespace triqs_cthyb {
     qmc_data(qmc_data const &)            = delete; // Member imp_trace is not copyable
     qmc_data &operator=(qmc_data const &) = delete;
 
-    double compute_analytic_D_ratio(std::vector<std::pair<time_pt, op_desc>> const& inserted, 
+    double compute_lang_firsov_ratio(std::vector<std::pair<time_pt, op_desc>> const& inserted, 
                                     std::vector<std::pair<time_pt, op_desc>> const& removed) const {
-      if (!use_analytic_D || analytic_D_N == 0) return 1.0;
+      if (!use_lang_firsov || K_n_size == 0) return 1.0;
 
       double d_w = 0.0;
       double beta = config.beta();
@@ -187,12 +187,10 @@ namespace triqs_cthyb {
       // We need to sum over the background operators, excluding the ones to be removed
       // (because the removed ones are already in `config`, and we will account for them properly)
       
-      // Let's compute the change in \sum_{a,b} k_n^{ab} \alpha_n^{ab}.
+      //Compute the change in \sum_{a,b} k_n^{ab} \alpha_n^{ab}.
       // W = exp( 1/2 \sum_n k_n^{ab} \sum_{x \in a, y \in b} S_x S_y P_n(|t_x - t_y|...) )
-      // Wait, is it 1/2 or not? The notes say alpha_n = \sum_{\alpha, \beta}.
-      // And w_{loc} = exp( \sum_n k_n \alpha_n ), meaning *no* 1/2 factor. We'll follow the exact eq 66.
-      
-      // \Delta W_exp = \sum_n \sum_a \sum_b k_n^{ab} \Delta \alpha_n^{ab}
+      // versus w_{loc} = exp( \sum_n K_n \alpha_n ), Check factor of 2. 
+      // \Delta W_exp = \sum_n \sum_a \sum_b K_n^{ab} \Delta \alpha_n^{ab}
       // \alpha^{ab}_{new} - \alpha^{ab}_{old}
       
       for (size_t i = 0; i < perts.size(); ++i) {
@@ -214,23 +212,23 @@ namespace triqs_cthyb {
           if (t_diff < 0.0) t_diff += beta;
           double x = 2.0 * t_diff / beta - 1.0;
           
-          for (int n = 0; n < analytic_D_N; ++n) {
+          for (int n = 0; n < K_n_size; ++n) {
              double P_n = std::legendre(n, x);
              // factor of 2 because k_n^{ab} term comes from both \alpha_n^{ab} and \alpha_n^{ba} if a!=b (assuming k_n is symmetric, which D0t is)
              // actually, the sum is over ALL \alpha, \beta without restriction.
              // So adding p1 creates two copies in the double sum: (p1, bg) and (bg, p1).
              double term = 2.0 * p1.action * p1.S_op * S_bg * P_n;
-             d_w += analytic_k_n[p1.a][b][n] * term;
+             d_w += K_n[p1.a][b][n] * term;
           }
         }
         
         // 2. Self term of the perturbation (p1 with itself)
         // Since action is +1 (insert) or -1 (remove), inserting adds p1*p1, removing subtracts p1*p1.
         double x_self = -1.0; // t_diff = 0 -> 2*0/beta - 1 = -1
-        for (int n = 0; n < analytic_D_N; ++n) {
+        for (int n = 0; n < K_n_size; ++n) {
            double P_n = std::legendre(n, x_self);
            double term = p1.action * p1.S_op * p1.S_op * P_n; // action * (+1)
-           d_w += analytic_k_n[p1.a][p1.a][n] * term;
+           d_w += K_n[p1.a][p1.a][n] * term;
         }
         
         // 3. Cross terms between perturbations
@@ -246,10 +244,10 @@ namespace triqs_cthyb {
            // So if p1.action != p2.action, their mutual cross-term in \Delta \alpha is ZERO.
            
            if (p1.action == p2.action) {
-               for (int n = 0; n < analytic_D_N; ++n) {
+               for (int n = 0; n < K_n_size; ++n) {
                   double P_n = std::legendre(n, x);
                   double term = 2.0 * p1.action * p1.S_op * p2.S_op * P_n;
-                  d_w += analytic_k_n[p1.a][p2.a][n] * term;
+                  d_w += K_n[p1.a][p2.a][n] * term;
                }
            }
         }

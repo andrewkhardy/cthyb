@@ -154,7 +154,7 @@ namespace triqs_cthyb {
          std::pow(block_size1 * config.beta() / double(det1.size() + 1), 2) * std::pow(block_size2 * config.beta() / double(det2.size() + 1), 2);
     }
 
-      double analytic_D_ratio = data.compute_analytic_D_ratio({{tau1, op1}, {tau2, op2}, {tau3, op3}, {tau4, op4}}, {});
+      double analytic_D_ratio = data.compute_lang_firsov_ratio({{tau1, op1}, {tau2, op2}, {tau3, op3}, {tau4, op4}}, {});
 
       // For quick abandon
       double random_number = rng.preview();

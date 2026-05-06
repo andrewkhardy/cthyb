@@ -120,7 +120,7 @@ namespace triqs_cthyb {
       op_desc op2 = {.block_index = block_index1, .inner_index = det1.get_x(num_c_dag1).second, .dagger = true, .linear_index = 0};
       op_desc op3 = {.block_index = block_index2, .inner_index = det2.get_y(num_c2).second, .dagger = false, .linear_index = 0};
       op_desc op4 = {.block_index = block_index2, .inner_index = det2.get_x(num_c_dag2).second, .dagger = true, .linear_index = 0};
-      double analytic_D_ratio = data.compute_analytic_D_ratio({}, {{tau1, op1}, {tau2, op2}, {tau3, op3}, {tau4, op4}});
+      double analytic_D_ratio = data.compute_lang_firsov_ratio({}, {{tau1, op1}, {tau2, op2}, {tau3, op3}, {tau4, op4}});
 
       // For quick abandon
       double random_number = rng.preview();

@@ -139,7 +139,7 @@ namespace triqs_cthyb {
         removed.push_back({it->first, it->second});
         inserted.push_back({o.first, o.second});
       }
-      double analytic_D_ratio = data.compute_analytic_D_ratio(inserted, removed);
+      double analytic_D_ratio = data.compute_lang_firsov_ratio(inserted, removed);
 
       // For quick abandon
       double random_number = rng.preview();
