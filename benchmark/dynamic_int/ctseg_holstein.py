@@ -1,4 +1,4 @@
-from triqs.gf import *
+from triqs.gfs import *
 import argparse
 import triqs.utility.mpi as mpi
 from triqs.gf.descriptors import Function

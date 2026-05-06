@@ -8,7 +8,7 @@
 # Data in spin_spin.ref.h5 is obtained by running this script on 800 cores.
 import sys
 import argparse
-from triqs.gf import *
+from triqs.gfs import *
 import numpy as np
 import triqs.utility.mpi as mpi
 from triqs.gf.descriptors import Function
@@ -18,8 +18,6 @@ from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff
 from triqs_cthyb import Solver
-import matplotlib.pyplot as plt
-from triqs.plot.mpl_interface import oplot
 from triqs.operators import n
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
