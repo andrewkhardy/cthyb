@@ -67,9 +67,9 @@ solve_params = {
     "length_cycle": 100,
     "n_warmup_cycles": 100000,
     "n_cycles": args.n_cycles,
-    "measure_F_tau": False,
+    "measure_F_tau": True,
     "measure_nn_tau": True,
-    "measure_nn_iw": True,
+    "measure_nn_nu": True,
     "measure_nn_static": True,
     "measure_pert_order": True
     }
