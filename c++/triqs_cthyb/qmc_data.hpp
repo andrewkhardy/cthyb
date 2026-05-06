@@ -96,7 +96,7 @@ namespace triqs_cthyb {
          dyn_interactions(dyn_interactions_),
          K_n(K_n_) {
 
-      use_lang_firsov = p.analytic_D;
+      use_lang_firsov = p.lang_firsov;
       if (!K_n.empty() && !K_n[0].empty()) {
         K_n_size = K_n[0][0].size();
       }

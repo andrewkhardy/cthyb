@@ -190,12 +190,12 @@ namespace triqs_cthyb {
     auto det_ratio = (is_dagger ? det.try_change_row(op_pos_in_det, {tau_new, op_new.inner_index}) :
                                   det.try_change_col(op_pos_in_det, {tau_new, op_new.inner_index}));
 
-    double analytic_D_ratio = data.compute_lang_firsov_ratio({{tau_new, op_new}}, {{tau_old, op_old}});
+    double lang_firsov_ratio = data.compute_lang_firsov_ratio({{tau_new, op_new}}, {{tau_old, op_old}});
 
     // for quick abandon
     double random_number = rng.preview();
     if (random_number == 0.0) return 0;
-    double p_yee = std::abs(det_ratio * analytic_D_ratio / data.atomic_weight);
+    double p_yee = std::abs(det_ratio * lang_firsov_ratio / data.atomic_weight);
 
     // --- Compute the atomic_weight ratio
     std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
@@ -211,7 +211,7 @@ namespace triqs_cthyb {
                           << new_atomic_weight / data.atomic_weight << " in config " << config.get_id();
 
     // --- Compute the weight
-    mc_weight_t p = atomic_weight_ratio * det_ratio * analytic_D_ratio;
+    mc_weight_t p = atomic_weight_ratio * det_ratio * lang_firsov_ratio;
 
 #ifdef EXT_DEBUG
     std::cerr << "Trace ratio: " << atomic_weight_ratio << '\t';

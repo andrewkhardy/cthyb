@@ -332,7 +332,7 @@ namespace triqs_cthyb {
     std::vector<std::vector<std::vector<double>>> analytic_k_n;
 
     if (has_D0) {
-      if (params.analytic_D) {
+      if (params.lang_firsov) {
           int N_leg = constr_parameters.n_l; 
         auto M_matrix = build_M_matrix(N_leg, beta);
 
@@ -431,7 +431,7 @@ namespace triqs_cthyb {
     }
 
     // Automatically enable dynamical moves if we have dynamical interactions
-    bool has_dyn_interactions = has_Jperp || (has_D0 && !params.analytic_D);
+    bool has_dyn_interactions = has_Jperp || (has_D0 && !params.lang_firsov);
 
     // Initialise Monte Carlo quantities
     qmc_data data(beta, params, h_diag, linindex, _Delta_tau, n_inner, histo_map, dyn_op_list, dyn_interactions, analytic_k_n);

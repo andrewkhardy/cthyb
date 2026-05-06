@@ -154,12 +154,12 @@ namespace triqs_cthyb {
          std::pow(block_size1 * config.beta() / double(det1.size() + 1), 2) * std::pow(block_size2 * config.beta() / double(det2.size() + 1), 2);
     }
 
-      double analytic_D_ratio = data.compute_lang_firsov_ratio({{tau1, op1}, {tau2, op2}, {tau3, op3}, {tau4, op4}}, {});
+      double lang_firsov_ratio = data.compute_lang_firsov_ratio({{tau1, op1}, {tau2, op2}, {tau3, op3}, {tau4, op4}}, {});
 
       // For quick abandon
       double random_number = rng.preview();
       if (random_number == 0.0) return 0;
-      double p_yee = std::abs(t_ratio * det_ratio * analytic_D_ratio / data.atomic_weight);
+      double p_yee = std::abs(t_ratio * det_ratio * lang_firsov_ratio / data.atomic_weight);
 
       // computation of the new atomic_weight after insertion
       std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
@@ -174,7 +174,7 @@ namespace triqs_cthyb {
         TRIQS_RUNTIME_ERROR << "atomic_weight_ratio not finite " << new_atomic_weight << " " << data.atomic_weight << " "
                             << new_atomic_weight / data.atomic_weight << " in config " << config.get_id();
 
-      mc_weight_t p = atomic_weight_ratio * det_ratio * analytic_D_ratio;
+      mc_weight_t p = atomic_weight_ratio * det_ratio * lang_firsov_ratio;
 #ifdef EXT_DEBUG    std::cerr << "Trace ratio: " << atomic_weight_ratio << '\t';
     std::cerr << "Det ratio: " << det_ratio << '\t';
     std::cerr << "Prefactor: " << t_ratio << '\t';
