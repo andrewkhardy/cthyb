@@ -2,8 +2,7 @@
 #include <nda/nda.hpp>
 #include <nda/linalg.hpp>
 #include <vector>
-#include <triqs/gfs/gf.hpp>
-#include <triqs/utility/legendre.hpp>
+#include <cmath>
 
 namespace triqs_cthyb {
 
@@ -41,7 +40,7 @@ inline nda::vector<double> compute_D_legendre_coeffs(
         for (int i = 0; i < n_pt; ++i) {
             double tau = i * dtau;
             double x = 2.0 * tau / beta - 1.0;
-            double P_n_x = triqs::utility::legendre(n, x);
+            double P_n_x = std::legendre(n, x);
             
             double weight = (i == 0 || i == n_pt - 1) ? 0.5 : 1.0;
             sum += weight * D0_eval(tau) * P_n_x * dtau;

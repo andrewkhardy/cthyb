@@ -333,9 +333,7 @@ namespace triqs_cthyb {
 
     if (has_D0) {
       if (params.analytic_D) {
-        int N_leg = params.n_l; 
-        if (N_leg <= 0) N_leg = 50; // fallback default
-        
+          int N_leg = constr_parameters.n_l; 
         auto M_matrix = build_M_matrix(N_leg, beta);
 
         // find total number of linear indices
@@ -363,12 +361,12 @@ namespace triqs_cthyb {
                 auto D0_eval = [D0_bl, i1, i2](double tau) -> double { return real(D0_bl[closest_mesh_pt(tau)](i1, i2)); };
                 
                 auto d_n = compute_D_legendre_coeffs(n_pt_tau, beta, D0_eval, N_leg);
-                auto k_n_vec = nda::matrix<double>(M_matrix * d_n);
+                  nda::vector<double> k_n_vec = M_matrix * d_n;
 
                 int lin1 = linindex.at({bl1, i1});
                 int lin2 = linindex.at({bl2, i2});
                 for (int n = 0; n < N_leg; ++n) {
-                  analytic_k_n[lin1][lin2][n] = k_n_vec(n, 0); // M * d_n yields vector
+                    analytic_k_n[lin1][lin2][n] = k_n_vec(n); // M * d_n yields vector
                 }
               }
             }

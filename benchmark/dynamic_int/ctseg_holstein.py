@@ -12,8 +12,9 @@ from triqs_ctseg import Solver
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
 parser.add_argument('--U', type=float, default=4.0, help='U parameter')
 parser.add_argument('--L', type=float, default=1.0, help='L parameter')
-parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
-args = parser.parse_args()
+parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature') 
+parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
+args, unknown = parser.parse_known_args()
 
 # Numerical values
 hopping = 1.0
@@ -24,7 +25,7 @@ U = args.U
 L = args.L
 n_tau = 4096
 n_tau_bosonic = 3999
-n_iw = 2048
+n_iw = 1024
 h_int = U*n("up", 0)*n("down", 0)
 # Solver construction parameters
 gf_struct = [('down', 1), ('up', 1)]
@@ -64,7 +65,7 @@ solve_params = {
     "h_loc0": -mu * (n("up", 0) + n("down", 0)),
     "length_cycle": 100,
     "n_warmup_cycles": 100000,
-    "n_cycles": 10000000,
+    "n_cycles": args.n_cycles,
     "measure_F_tau": False,
     "measure_nn_tau": True,
     "measure_nn_nu": True,
@@ -87,10 +88,5 @@ if mpi.is_master_node():
         A['nn'] = S.results.nn_static
         A['densities'] = S.results.densities
         A["average_sign"] = S.results.average_sign
-        if i_1 == 0.0:
-            print("no Lperp_tau, skipping perturbation order data for Lperp_tau and D0_tau")
-        else:
-            A["perturbation_order_L"] = S.results.pert_order_Lperp
-
         A["perturbation_order_D"] = S.results.pert_order_Delta
 

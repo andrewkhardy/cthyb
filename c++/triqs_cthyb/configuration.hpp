@@ -116,6 +116,9 @@ namespace triqs_cthyb {
     void erase(time_pt const &t) { oplist_.erase(t); }
     void clear() { oplist_.clear(); }
 
+    oplist_t::iterator find(time_pt const &t) { return oplist_.find(t); }
+    oplist_t::const_iterator find(time_pt const &t) const { return oplist_.find(t); }
+
     oplist_t::iterator begin() { return oplist_.begin(); }
     oplist_t::iterator end() { return oplist_.end(); }
     oplist_t::const_iterator begin() const { return oplist_.begin(); }

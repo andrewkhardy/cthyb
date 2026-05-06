@@ -133,30 +133,36 @@ namespace triqs_cthyb {
       det_ratio *= block_det_ratio;
     }
 
-    // For quick abandon
-    double random_number = rng.preview();
-    if (random_number == 0.0) return 0;
-    double p_yee = std::abs(det_ratio / data.atomic_weight);
+      std::vector<std::pair<time_pt, op_desc>> inserted, removed;
+      for (auto const &o : updated_ops) {
+        auto it = data.config.find(o.first);
+        removed.push_back({it->first, it->second});
+        inserted.push_back({o.first, o.second});
+      }
+      double analytic_D_ratio = data.compute_analytic_D_ratio(inserted, removed);
 
-    data.imp_trace.try_replace(updated_ops);
+      // For quick abandon
+      double random_number = rng.preview();
+      if (random_number == 0.0) return 0;
+      double p_yee = std::abs(det_ratio * analytic_D_ratio / data.atomic_weight);
 
-    // computation of the new trace after insertion
-    std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
-    if (new_atomic_weight == 0.0) {
-#ifdef EXT_DEBUG
-      std::cerr << "trace == 0" << std::endl;
-#endif
-      return 0;
-    }
-    auto atomic_weight_ratio = new_atomic_weight / data.atomic_weight;
-    if (!isfinite(atomic_weight_ratio))
-      TRIQS_RUNTIME_ERROR << "atomic_weight_ratio not finite " << new_atomic_weight << " " << data.atomic_weight << " "
-                          << new_atomic_weight / data.atomic_weight << " in config " << config.get_id();
+      data.imp_trace.try_replace(updated_ops);
 
-    mc_weight_t p = atomic_weight_ratio * det_ratio;
+      // computation of the new trace after insertion
+      std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
+      if (new_atomic_weight == 0.0) {
+  #ifdef EXT_DEBUG
+        std::cerr << "trace == 0" << std::endl;
+  #endif
+        return 0;
+      }
+      auto atomic_weight_ratio = new_atomic_weight / data.atomic_weight;
+      if (!isfinite(atomic_weight_ratio))
+        TRIQS_RUNTIME_ERROR << "atomic_weight_ratio not finite " << new_atomic_weight << " " << data.atomic_weight << " "
+                            << new_atomic_weight / data.atomic_weight << " in config " << config.get_id();
 
-#ifdef EXT_DEBUG
-    std::cerr << "Trace ratio: " << atomic_weight_ratio << '\t';
+      mc_weight_t p = atomic_weight_ratio * det_ratio * analytic_D_ratio;
+#ifdef EXT_DEBUG    std::cerr << "Trace ratio: " << atomic_weight_ratio << '\t';
     std::cerr << "Det ratio: " << det_ratio << '\t';
     std::cerr << "p_yee: " << p_yee << std::endl;
     std::cerr << "Weight: " << p << std::endl;
