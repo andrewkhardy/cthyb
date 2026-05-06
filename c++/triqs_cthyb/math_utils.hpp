@@ -2,7 +2,6 @@
 #include <nda/nda.hpp>
 #include <nda/linalg.hpp>
 #include <vector>
-#include <cmath>
 namespace triqs_cthyb {
 
 inline nda::matrix<double> build_M_matrix(int N, double beta) {
@@ -34,17 +33,19 @@ inline nda::vector<double> compute_D_legendre_coeffs(
     nda::vector<double> d_n = nda::zeros<double>(N);
     double dtau = beta / (n_pt - 1.0);
 
-    for (int n = 0; n < N; ++n) {
-        double sum = 0.0;
-        for (int i = 0; i < n_pt; ++i) {
-            double tau = i * dtau;
-            double x = 2.0 * tau / beta - 1.0;
-            double P_n_x = boost::math::legendre_p(n, x);
-            
+    for (int i = 0; i < n_pt; ++i) {
+        double tau = i * dtau;
+        double x = 2.0 * tau / beta - 1.0;
+        triqs::utility::legendre_generator gen;
+        gen.reset(x);
+        for (int n = 0; n < N; ++n) {
+            double P_n_x = gen.next();
             double weight = (i == 0 || i == n_pt - 1) ? 0.5 : 1.0;
-            sum += weight * D0_eval(tau) * P_n_x * dtau;
+            d_n(n) += weight * D0_eval(tau) * P_n_x * dtau;
         }
-        d_n(n) = (2.0 * n + 1.0) / beta * sum;
+    }
+    for (int n = 0; n < N; ++n) {
+        d_n(n) *= (2.0 * n + 1.0) / beta;
     }
     return d_n;
 }
