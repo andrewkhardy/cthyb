@@ -1,5 +1,3 @@
-#include <cmath>
-/*******************************************************************************
  *
  * TRIQS: a Toolbox for Research in Interacting Quantum Systems
  *
@@ -24,6 +22,7 @@
 #include <triqs/gfs.hpp>
 #include <triqs/mesh.hpp>
 #include <triqs/det_manip.hpp>
+#include <boost/math/special_functions/legendre.hpp>/*******************************************************************************
 
 namespace triqs_cthyb {
   using namespace triqs::gfs;

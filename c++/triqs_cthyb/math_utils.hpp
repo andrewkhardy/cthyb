@@ -2,7 +2,7 @@
 #include <nda/nda.hpp>
 #include <nda/linalg.hpp>
 #include <vector>
-
+#include <boost/math/special_functions/legendre.hpp>
 namespace triqs_cthyb {
 
 inline nda::matrix<double> build_M_matrix(int N, double beta) {
