@@ -26,7 +26,6 @@ parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperatur
 parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
 parser.add_argument('--measure_O_tau', type=int, default=100, help='Minimum insertions for O_tau measurement')
 args, unknown = parser.parse_known_args()
-print("inputs?")
 # Numerical values
 hopping = 1.0
 w0 = 0.1
@@ -47,7 +46,6 @@ constr_params = {
     "n_tau_bosonic": n_tau_bosonic,
     "delta_interface": True  # Use Delta_tau interface for dynamical interactions
 }
-print("success?")
 # Construct solver
 S = Solver(**constr_params)
 # Hybridization Delta(tau)
@@ -55,21 +53,23 @@ Delta = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 g0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 q_tau = GfImTime(indices=[0],  statistic='Boson', beta=beta, n_points=n_tau_bosonic)
 q_iw = make_gf_from_fourier(q_tau)  
-print("crap")
 
 q_iw << Function(lambda w: 2 * L/w0 * w0**2 / (w**2 - w0**2))
-print("crap")
 
 q_tau << Fourier(q_iw)
 Q_tau = Block2Gf(['up', 'down'], ['up', 'down'], [[1*q_tau, -1*q_tau], [-1*q_tau, 1*q_tau]])
 Q_iw = make_gf_from_fourier(Q_tau)
 g0 << SemiCircular(2*hopping)
 ivn = np.array([x.imag for x in Q_iw["up", "up"].mesh.values()])
-print("crap")
 zero_freq = np.where(np.abs(ivn) < 1e-10)
+print(zero_freq)
+print("crap")
 mu = U/2 + np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].data[zero_freq][0,0,0]))/2.0
+print("crap")
+
 Delta << hopping**2*SemiCircular(2*hopping)
 S.Delta_tau << Fourier(Delta)
+print("crap")
 
 S.D0_tau << Q_tau
 
