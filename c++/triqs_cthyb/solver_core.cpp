@@ -233,6 +233,34 @@ namespace triqs_cthyb {
         int    N_leg_early = constr_parameters.n_l;
         double beta_early  = beta;
 
+        int n_orbitals = 0;
+        for (auto const &pair : linindex) n_orbitals = std::max(n_orbitals, pair.second + 1);
+        nda::matrix<double> U_matrix(n_orbitals, n_orbitals);
+        nda::vector<double> mu_vec(n_orbitals);
+        U_matrix = 0.0;
+        mu_vec   = 0.0;
+
+        for (auto const &[term, coeff] : _h_loc) {
+          if (term.size() == 2) {
+            if (term[0].dagger && !term[1].dagger && term[0].indices == term[1].indices) {
+              int idx = fops[term[0].indices];
+              mu_vec(idx) -= real(coeff);
+            }
+          } else if (term.size() == 4) {
+            int i = fops[term[0].indices];
+            int j = fops[term[1].indices];
+            U_matrix(i, j) -= real(coeff);
+          }
+        }
+
+        if (params.verbosity >= 2) {
+          std::cout << "\n Interaction matrix: U =" << std::endl << U_matrix << std::endl;
+          std::cout << "\nOrbital energies: mu - eps = " << mu_vec << std::endl;
+        }
+
+        nda::matrix<double> U_renorm  = U_matrix;
+        nda::vector<double> mu_renorm = mu_vec;
+
         for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
           for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
             auto D0_bl = inputs.D0t(bl1, bl2);
@@ -275,17 +303,26 @@ namespace triqs_cthyb {
                 auto n_1 = c_dag<h_scalar_t>(bl1_name, i1) * c<h_scalar_t>(bl1_name, i1);
                 auto n_2 = c_dag<h_scalar_t>(bl2_name, i2) * c<h_scalar_t>(bl2_name, i2);
 
+                int lin1 = linindex.at({static_cast<int>(bl1), i1});
+                int lin2 = linindex.at({static_cast<int>(bl2), i2});
+
                 if (bl1 == bl2 && i1 == i2) {
                   // Diagonal: chemical-potential shift H -> H - K'(0) * n
                   _h_loc = _h_loc - Kprime_0 * n_1;
+                  mu_renorm(lin1) -= Kprime_0;
                 } else {
                   // Off-diagonal: H -> H - K'(0) * n_1 * n_2
                   // (both (a,b) and (b,a) are visited, giving the total 2*K'(0) factor)
                   _h_loc = _h_loc - Kprime_0 * n_1 * n_2;
+                  U_renorm(lin1, lin2) -= Kprime_0;
                 }
               }
             }
           }
+        }
+        if (params.verbosity >= 2) {
+          std::cout << "\n Renormalized interaction matrix: U =" << std::endl << U_renorm << std::endl;
+          std::cout << "\nRenormalized orbital energies: mu - eps = " << mu_renorm << std::endl;
         }
       }
     }
