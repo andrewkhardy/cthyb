@@ -1,9 +1,9 @@
 from triqs.gfs import *
 import argparse
 import triqs.utility.mpi as mpi
-from triqs.gf.descriptors import Function
-from triqs.gf.tools import *
-from triqs.gf.block_gf import *
+from triqs.gfs.descriptors import Function
+from triqs.gfs.tools import *
+from triqs.gfs.block_gf import *
 from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff
@@ -54,8 +54,6 @@ g0 << SemiCircular(2*hopping)
 ivn = np.array([x.imag for x in Q_iw["up", "up"].mesh.values()])
 zero_freq = np.where(np.abs(ivn) < 1e-10)
 mu = U/2 + np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].data[zero_freq][0,0,0]))/2.0
-#Delta <<  inverse(g0) - iOmega_n - mu
-print(f"Zero frequency point: {Q_iw['up', 'up'].data[zero_freq][0,0,0]}")
 
 Delta << hopping**2*SemiCircular(2*hopping)
 S.Delta_tau << Fourier(Delta)
@@ -87,7 +85,7 @@ print(S.results.average_sign)
 print(S.results.pert_order_Delta)
 # Save data
 if mpi.is_master_node():
-    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_ctseg_lambda-{L}-U-{U}_b-{beta}.h5"
+    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/ctseg_lambda-{L}-U-{U}_b-{beta}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.results.G_tau
         A['F_tau'] = S.results.F_tau

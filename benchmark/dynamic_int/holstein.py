@@ -11,9 +11,9 @@ import argparse
 from triqs.gfs import *
 import numpy as np
 import triqs.utility.mpi as mpi
-from triqs.gf.descriptors import Function
-from triqs.gf.tools import *
-from triqs.gf.block_gf import *
+from triqs.gfs.descriptors import Function
+from triqs.gfs.tools import *
+from triqs.gfs.block_gf import *
 from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff
@@ -36,7 +36,7 @@ U = args.U
 L = args.L
 n_tau = 4096
 n_tau_bosonic = 3999
-n_iw = 1024
+n_iw = 2048
 n_cycles = args.n_cycles
 measure_O_tau_min_ins = args.measure_O_tau
 Sz = 0.5 * ( n('up', 0) - n('down', 0) )
@@ -92,7 +92,7 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_cthyb_lambda-{L}-U-{U}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}.h5"
+    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/cthyb_lambda-{L}-U-{U}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         A["perturbation_order"] = S.perturbation_order

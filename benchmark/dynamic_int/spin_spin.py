@@ -18,7 +18,6 @@ from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff
 from triqs_cthyb import Solver
-from triqs.operators import n
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
 parser.add_argument('--U', type=float, default=4.0, help='U parameter')
@@ -40,6 +39,7 @@ J = args.J
 i_1, i_2, i_3, i_4, i_5 = args.i1, args.i2, args.i3, args.i4, args.i5
 n_tau = 4096
 n_tau_bosonic = 2001
+n_iw = 2048
 n_cycles = args.n_cycles
 measure_O_tau_min_ins = args.measure_O_tau
 Sz = 0.5 * ( n('up', 0) - n('down', 0) )
@@ -60,7 +60,7 @@ with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
     q_tau = Af["dmft_loop/i_000/Q_tau"]
 
 # Hybridization Delta(tau)
-n_iw = 1025
+
 Delta = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 invg0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 Q_tau = GfImTime(indices=[0],  statistic='Boson', beta=beta, n_points=n_tau_bosonic)
