@@ -20,13 +20,13 @@ from triqs.utility.h5diff import h5diff
 from triqs_cthyb import Solver
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
-parser.add_argument('--U', type=float, default=4.0, help='U parameter')
 parser.add_argument('--L', type=float, default=1.0, help='L parameter')
+parser.add_argument('--U', type=float, default=4.0, help='U parameter')
 parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
 parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
 parser.add_argument('--measure_O_tau', type=int, default=100, help='Minimum insertions for O_tau measurement')
 args, unknown = parser.parse_known_args()
-
+print("inputs?")
 # Numerical values
 hopping = 1.0
 w0 = 0.1
@@ -47,7 +47,7 @@ constr_params = {
     "n_tau_bosonic": n_tau_bosonic,
     "delta_interface": True  # Use Delta_tau interface for dynamical interactions
 }
-
+print("success?")
 # Construct solver
 S = Solver(**constr_params)
 
