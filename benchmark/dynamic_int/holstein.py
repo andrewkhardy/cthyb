@@ -50,7 +50,7 @@ constr_params = {
 print("success?")
 # Construct solver
 S = Solver(**constr_params)
-
+print("crap")
 # Hybridization Delta(tau)
 Delta = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 g0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
