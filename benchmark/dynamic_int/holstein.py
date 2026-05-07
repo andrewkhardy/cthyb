@@ -62,12 +62,10 @@ Q_iw = make_gf_from_fourier(Q_tau)
 g0 << SemiCircular(2*hopping)
 ivn = np.array([x.imag for x in Q_iw["up", "up"].mesh.values()])
 zero_freq = np.where(np.abs(ivn) < 1e-10)
-print(zero_freq)
-print("crap")
 mu = U/2 + np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].data[zero_freq][0,0,0]))/2.0
-print("crap")
-
+print("why no delta")
 Delta << hopping**2*SemiCircular(2*hopping)
+print("huh")
 S.Delta_tau << Fourier(Delta)
 print("crap")
 
