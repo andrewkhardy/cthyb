@@ -58,7 +58,7 @@ q_tau = GfImTime(indices=[0],  statistic='Boson', beta=beta, n_points=n_tau_boso
 q_iw = make_gf_from_fourier(q_tau)  
 q_iw << Function(lambda w: 2 * L/w0 * w0**2 / (w**2 - w0**2))
 q_tau << Fourier(q_iw)
-Q_tau = Block2Gf(['up', 'down'], ['up', 'down'], [[1*q_tau, -1*q_tau], [-1*q_tau, 1*q_tau]])
+Q_tau = BlockGf(['up', 'down'], ['up', 'down'], [[1*q_tau, -1*q_tau], [-1*q_tau, 1*q_tau]])
 Q_iw = make_gf_from_fourier(Q_tau)
 g0 << SemiCircular(2*hopping)
 ivn = np.array([x.imag for x in Q_iw["up", "up"].mesh.values()])
