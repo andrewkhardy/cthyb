@@ -50,7 +50,7 @@ constr_params = {
 S = Solver(**constr_params)
 # Hybridization Delta(tau)
 g0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
-Delta = g0.copy()
+delta = g0.copy()
 q_tau = GfImTime(indices=[0],  statistic='Boson', beta=beta, n_points=n_tau_bosonic)
 q_iw = make_gf_from_fourier(q_tau)  
 
@@ -64,10 +64,10 @@ ivn = np.array([x.imag for x in Q_iw["up", "up"].mesh.values()])
 zero_freq = np.where(np.abs(ivn) < 1e-10)
 mu = U/2 + np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].data[zero_freq][0,0,0]))/2.0
 print("OK")
-print(Delta)
+print(delta)
 
-Delta << SemiCircular(2*hopping)
-S.Delta_tau << Fourier(Delta)
+delta << SemiCircular(2*hopping)
+S.Delta_tau << Fourier(delta)
 print("crap")
 
 S.D0_tau << Q_tau
