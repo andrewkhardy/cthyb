@@ -18,9 +18,12 @@ parser.add_argument('--i3', type=float, default=1.0,  help='i3 switch (0 or 1)')
 parser.add_argument('--i4', type=float, default=1.0,  help='i4 switch (0 or 1)')
 parser.add_argument('--i5', type=float, default=1.0,  help='i5 switch (0 or 1)')
 parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
+parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
+
 args = parser.parse_args()
 
 # Numerical values
+n_cycles = args.n_cycles
 beta = args.beta
 U = args.U
 mu = U/2
@@ -73,7 +76,7 @@ solve_params = {
     "h_loc0": -mu * (n("up", 0) + n("down", 0)),
     "length_cycle": 100,
     "n_warmup_cycles": 100000,
-    "n_cycles": 10000000,
+    "n_cycles": n_cycles,
     "measure_F_tau": False,
     "measure_nn_tau": True,
     "measure_nn_nu": True,
