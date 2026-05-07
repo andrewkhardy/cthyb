@@ -207,6 +207,89 @@ namespace triqs_cthyb {
 
     _h_loc  = params.h_int + _h_loc0;
 
+    // ------------------------------------------------------------------
+    // Lang-Firsov: shift _h_loc by K'(0) BEFORE h_diag is constructed.
+    //
+    // In the Lang-Firsov polaron transform the effective local Hamiltonian
+    // acquires a frequency-independent self-energy contribution from the
+    // retarded interaction D0(tau).  The zero-frequency piece K'(0) must
+    // be subtracted from _h_loc so that the Green's function is correct:
+    //
+    //   Diagonal (bl1==bl2, i1==i2):  H -> H - K'(0) * n
+    //   Off-diagonal:                 H -> H - 2*K'(0) * n_1 * n_2
+    //
+    // K'(0) = -beta/2 * (d0 - d1/3)  where d0,d1 are the first two
+    // Legendre coefficients of D0(tau) (bosonic normalisation).
+    // ------------------------------------------------------------------
+    if (params.lang_firsov) {
+      // We need the D0 data; check it quickly before allocating anything.
+      bool _has_D0_early = false;
+      for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1)
+        for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2)
+          if (max_element(nda::abs(inputs.D0t(bl1, bl2).data())) > 1.e-13) { _has_D0_early = true; break; }
+
+      if (_has_D0_early) {
+        int    N_leg_early = constr_parameters.n_l;
+        double beta_early  = beta;
+
+        for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
+          for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
+            auto D0_bl = inputs.D0t(bl1, bl2);
+            if (max_element(nda::abs(D0_bl.data())) < 1.e-13) continue;
+
+            int n_pt_tau_early = D0_bl.mesh().size();
+            int bl1_size = gf_struct[bl1].second;
+            int bl2_size = gf_struct[bl2].second;
+
+            for (int i1 = 0; i1 < bl1_size; ++i1) {
+              for (int i2 = 0; i2 < bl2_size; ++i2) {
+                // Skip zero matrix elements
+                bool elem_nonzero = false;
+                for (auto const &tau_pt : D0_bl.mesh())
+                  if (std::abs(D0_bl[tau_pt](i1, i2)) > 1.e-13) { elem_nonzero = true; break; }
+                if (!elem_nonzero) continue;
+
+                auto D0_eval_early = [D0_bl, i1, i2](double tau) -> double {
+                  return real(D0_bl[closest_mesh_pt(tau)](i1, i2));
+                };
+
+                // Compute Legendre coefficients for D0(tau)
+                auto d_n = compute_D_legendre_coeffs(n_pt_tau_early, beta_early, D0_eval_early, N_leg_early);
+
+                // K'(0) from lowest Legendre coefficients
+                double d0       = d_n(0);
+                double d1       = (N_leg_early > 1) ? d_n(1) : 0.0;
+                double Kprime_0 = -0.5 * beta_early * (d0 - d1 / 3.0);
+
+                if (std::abs(Kprime_0) < 1.e-13) continue;
+
+                if (params.verbosity >= 2)
+                  std::cout << "Lang-Firsov K'(0) shift: K'(0)=" << Kprime_0
+                            << " for blocks (" << bl1 << "," << bl2
+                            << ") indices (" << i1 << "," << i2 << ")" << std::endl;
+
+                auto bl1_name = gf_struct[bl1].first;
+                auto bl2_name = gf_struct[bl2].first;
+
+                auto n_1 = c_dag<h_scalar_t>(bl1_name, i1) * c<h_scalar_t>(bl1_name, i1);
+                auto n_2 = c_dag<h_scalar_t>(bl2_name, i2) * c<h_scalar_t>(bl2_name, i2);
+
+                if (bl1 == bl2 && i1 == i2) {
+                  // Diagonal: chemical-potential shift H -> H - K'(0) * n
+                  _h_loc = _h_loc - Kprime_0 * n_1;
+                } else {
+                  // Off-diagonal: Hubbard-U shift H -> H - 2*K'(0) * n_1 * n_2
+                  _h_loc = _h_loc - 2.0 * Kprime_0 * n_1 * n_2;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    // ------------------------------------------------------------------
+
+
 #ifndef HYBRIDISATION_IS_COMPLEX
     // Check that diagonal components of Delta_tau are real
     for (auto bl : range(gf_struct.size())) {
