@@ -52,7 +52,7 @@ constr_params = {
 S = Solver(**constr_params)
 
 # Hybridization Delta(tau)
-Delta = GfImFreq(indices=[0], beta=beta, points=n_iw)
+Delta = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 g0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
 q_tau = GfImTime(indices=[0],  statistic='Boson', beta=beta, n_points=n_tau_bosonic)
 q_iw = make_gf_from_fourier(q_tau)  
