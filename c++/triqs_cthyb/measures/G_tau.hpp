@@ -39,6 +39,9 @@ namespace triqs_cthyb {
     void accumulate(mc_weight_t s);
     void collect_results(mpi::communicator const &c);
 
+    // Compute the Lang-Firsov shift
+    double lf_shift(long const block, op_t const &y, op_t const &x);
+
     private:
     qmc_data const &data;
     mc_weight_t average_sign;

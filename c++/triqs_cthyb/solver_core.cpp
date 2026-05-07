@@ -290,7 +290,7 @@ namespace triqs_cthyb {
 
                 // Compute Legendre coefficients for D0(tau)
                 auto d_n = fit_legendre_coeffs(n_pt_tau_early, beta_early, D0_eval_early, N_leg_early);
-
+                d_n *= 0.5; // to align with action conventions. 
                 // K'(0) from lowest Legendre coefficients
                 double d0       = d_n(0);
                 double d1       = (N_leg_early > 1) ? d_n(1) : 0.0;

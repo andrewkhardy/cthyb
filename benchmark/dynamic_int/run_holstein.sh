@@ -21,6 +21,6 @@ module load ${MODULES}
 module load triqs/unstable
 ##################### run your code here #####################
 #../CTHYB/benchmark/
-#mpirun -n 120 python holstein.py --L -0.01 --U 4.0  --beta 10.0 --n_cycles 1000000 --measure_O_tau 150
-mpirun -n 120 python ctseg_holstein.py --L -0.0 --U 4.0   --beta 10.0 --n_cycles 1000000
+#mpirun -n 120 python holstein.py --L -0.01 --U 4.0  --beta 10.0 --n_cycles 100000 --measure_O_tau 150
+mpirun -n 120 python ctseg_holstein.py --L -0.0 --U 4.0   --beta 10.0 --n_cycles 100000 
 #mpirun -n 120 python ctint_holstein.py --J 1.0 --U 4.0  --i1 1.0 --i2 0.0 --i3 0.0 --i4 0.0  --i5 0.0 --beta 10.0
