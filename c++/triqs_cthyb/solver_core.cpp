@@ -254,7 +254,7 @@ namespace triqs_cthyb {
                 };
 
                 // Compute Legendre coefficients for D0(tau)
-                auto d_n = compute_D_legendre_coeffs(n_pt_tau_early, beta_early, D0_eval_early, N_leg_early);
+                auto d_n = fit_legendre_coeffs(n_pt_tau_early, beta_early, D0_eval_early, N_leg_early);
 
                 // K'(0) from lowest Legendre coefficients
                 double d0       = d_n(0);
@@ -443,7 +443,7 @@ namespace triqs_cthyb {
 
                 auto D0_eval = [D0_bl, i1, i2](double tau) -> double { return real(D0_bl[closest_mesh_pt(tau)](i1, i2)); };
                 
-                auto d_n = compute_D_legendre_coeffs(n_pt_tau, beta, D0_eval, N_leg);
+                auto d_n = fit_legendre_coeffs(n_pt_tau, beta, D0_eval, N_leg);
                   nda::vector<double> k_n_vec = M_matrix * d_n;
 
                 int lin1 = linindex.at({bl1, i1});

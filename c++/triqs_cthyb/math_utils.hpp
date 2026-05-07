@@ -1,6 +1,7 @@
 #pragma once
 #include <nda/nda.hpp>
 #include <nda/linalg.hpp>
+#include <triqs/utility/legendre.hpp>
 #include <vector>
 namespace triqs_cthyb {
 
@@ -26,9 +27,12 @@ inline nda::matrix<double> build_M_matrix(int N, double beta) {
     return M;
 }
 
-inline nda::vector<double> compute_D_legendre_coeffs(
-    int n_pt, double beta, std::function<double(double)> D0_eval, 
-    int N) 
+// Project a tau-sampled bosonic function onto the Legendre basis via trapezoidal quadrature.
+// Returns the N Legendre coefficients d_n with the standard bosonic normalisation
+// d_n = (2n+1)/beta * integral_0^beta D(tau) P_n(2tau/beta - 1) dtau.
+inline nda::vector<double> fit_legendre_coeffs(
+    int n_pt, double beta, std::function<double(double)> D0_eval,
+    int N)
 {
     nda::vector<double> d_n = nda::zeros<double>(N);
     double dtau = beta / (n_pt - 1.0);
