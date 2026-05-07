@@ -65,20 +65,17 @@ zero_freq = np.where(np.abs(ivn) < 1e-10)
 mu = U/2 + np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].data[zero_freq][0,0,0]))/2.0
 
 Delta << SemiCircular(2*hopping)
-print(S.Delta_tau)
-print(make_gf_from_fourier(Delta))
 S.Delta_tau << Fourier(Delta)
 
 S.D0_tau << Q_tau
 
-print("OK?")
 # Solve parameters
 Sz = 0.5 * ( n('up', 0) - n('down', 0) )
 solve_params = {
     "h_int": U*n("up", 0)*n("down", 0),
     "h_loc0": -mu * (n("up", 0) + n("down", 0)),
     "length_cycle": 100,
-    "n_warmup_cycles": 10000,
+    "n_warmup_cycles": 40000,
     "n_cycles": n_cycles,
     "measure_pert_order": True,
     "measure_O_tau": (Sz, Sz),
