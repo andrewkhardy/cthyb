@@ -6,8 +6,6 @@
 #include <cmath>
 #include <functional>
 
-#include "math_utils.hpp"
-
 using namespace triqs_cthyb;
 
 double analytic_D(double tau, double beta, double w0, double lam_sq) {
