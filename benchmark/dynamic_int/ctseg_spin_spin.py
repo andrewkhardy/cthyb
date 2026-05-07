@@ -1,9 +1,9 @@
-from triqs.gf import *
+from triqs.gfs import *
 import argparse
 import triqs.utility.mpi as mpi
-from triqs.gf.descriptors import Function
-from triqs.gf.tools import *
-from triqs.gf.block_gf import *
+from triqs.gfs.descriptors import Function
+from triqs.gfs.tools import *
+from triqs.gfs.block_gf import *
 from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff

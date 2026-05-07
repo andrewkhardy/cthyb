@@ -216,7 +216,8 @@ namespace triqs_cthyb {
     // be subtracted from _h_loc so that the Green's function is correct:
     //
     //   Diagonal (bl1==bl2, i1==i2):  H -> H - K'(0) * n
-    //   Off-diagonal:                 H -> H - 2*K'(0) * n_1 * n_2
+    //   Off-diagonal:                 H -> H - K'(0) * n_1 * n_2
+    //     (the loop visits both (a,b) and (b,a), so the factor of 2 is implicit)
     //
     // K'(0) = -beta/2 * (d0 - d1/3)  where d0,d1 are the first two
     // Legendre coefficients of D0(tau) (bosonic normalisation).
@@ -278,8 +279,9 @@ namespace triqs_cthyb {
                   // Diagonal: chemical-potential shift H -> H - K'(0) * n
                   _h_loc = _h_loc - Kprime_0 * n_1;
                 } else {
-                  // Off-diagonal: Hubbard-U shift H -> H - 2*K'(0) * n_1 * n_2
-                  _h_loc = _h_loc - 2.0 * Kprime_0 * n_1 * n_2;
+                  // Off-diagonal: H -> H - K'(0) * n_1 * n_2
+                  // (both (a,b) and (b,a) are visited, giving the total 2*K'(0) factor)
+                  _h_loc = _h_loc - Kprime_0 * n_1 * n_2;
                 }
               }
             }

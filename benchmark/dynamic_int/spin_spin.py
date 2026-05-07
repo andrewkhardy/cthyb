@@ -11,9 +11,9 @@ import argparse
 from triqs.gfs import *
 import numpy as np
 import triqs.utility.mpi as mpi
-from triqs.gf.descriptors import Function
-from triqs.gf.tools import *
-from triqs.gf.block_gf import *
+from triqs.gfs.descriptors import Function
+from triqs.gfs.tools import *
+from triqs.gfs.block_gf import *
 from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff
@@ -32,7 +32,6 @@ parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperatur
 parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
 parser.add_argument('--measure_O_tau', type=int, default=100, help='Minimum insertions for O_tau measurement')
 args, unknown = parser.parse_known_args()
-print("what's wrong")
 # Numerical values
 beta = args.beta
 U = args.U
@@ -52,7 +51,6 @@ constr_params = {
     "n_tau_bosonic": n_tau_bosonic,
     "delta_interface": True  # Use Delta_tau interface for dynamical interactions
 }
-print("failure mode?")
 # Construct solver
 S = Solver(**constr_params)
 
