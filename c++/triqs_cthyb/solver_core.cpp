@@ -247,9 +247,15 @@ namespace triqs_cthyb {
               mu_vec(idx) -= real(coeff);
             }
           } else if (term.size() == 4) {
-            int i = fops[term[0].indices];
-            int j = fops[term[1].indices];
-            U_matrix(i, j) -= real(coeff);
+            if (term[0].dagger && term[1].dagger && !term[2].dagger && !term[3].dagger &&
+                term[0].indices == term[3].indices && term[1].indices == term[2].indices) {
+              int i = fops[term[0].indices];
+              int j = fops[term[1].indices];
+              if (i != j) {
+                U_matrix(i, j) += real(coeff);
+                U_matrix(j, i) += real(coeff);
+              }
+            }
           }
         }
 
@@ -309,12 +315,13 @@ namespace triqs_cthyb {
                 if (bl1 == bl2 && i1 == i2) {
                   // Diagonal: chemical-potential shift H -> H - K'(0) * n
                   _h_loc = _h_loc - Kprime_0 * n_1;
-                  mu_renorm(lin1) -= Kprime_0;
+                  mu_renorm(lin1) += Kprime_0;
                 } else {
                   // Off-diagonal: H -> H - K'(0) * n_1 * n_2
                   // (both (a,b) and (b,a) are visited, giving the total 2*K'(0) factor)
                   _h_loc = _h_loc - Kprime_0 * n_1 * n_2;
                   U_renorm(lin1, lin2) -= Kprime_0;
+                  U_renorm(lin2, lin1) -= Kprime_0;
                 }
               }
             }
