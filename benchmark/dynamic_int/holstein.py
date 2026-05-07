@@ -66,8 +66,8 @@ mu = U/2 + np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].d
 print("OK")
 print(delta)
 
-delta << SemiCircular(2*hopping)
-S.Delta_tau << Fourier(delta)
+g0 << SemiCircular(2*hopping)
+S.Delta_tau << Fourier(g0)
 print("crap")
 
 S.D0_tau << Q_tau
