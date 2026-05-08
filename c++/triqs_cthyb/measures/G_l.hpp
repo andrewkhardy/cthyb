@@ -36,6 +36,9 @@ namespace triqs_cthyb {
     measure_G_l(std::optional<G_l_t> &G_l_opt, qmc_data const &data, int n_l, gf_struct_t const &gf_struct);
     void accumulate(mc_weight_t s);
     void collect_results(mpi::communicator const &c);
+    
+    // Compute the Lang-Firsov shift
+    double lf_shift(long const block, op_t const &y, op_t const &x);
 
     private:
     qmc_data const &data;

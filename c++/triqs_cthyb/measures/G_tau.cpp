@@ -56,7 +56,6 @@ namespace triqs_cthyb {
           
           // Apply Lang-Firsov shift
           val *= lf_shift(block_idx, y, x);
-          
           this->G_tau[block_idx][closest_mesh_pt(dtau)](y.second, x.second) += val;
         }
       }
@@ -91,36 +90,27 @@ namespace triqs_cthyb {
   double measure_G_tau::lf_shift(long const block, op_t const &y, op_t const &x) {
     if (!data.use_lang_firsov || data.K_n_size == 0) return 1.0;
 
-    double I_tau = 0.0;
     double beta = data.config.beta();
     
-    // Get the linear orbital index 'a' for the y (annihilation) operator
+    // Get the linear orbital indices 'a' and 'b' for y and x
     int a = data.linindex.at({block, static_cast<int>(y.second)});
+    int b = data.linindex.at({block, static_cast<int>(x.second)});
 
-    for (auto const &[t_bg, op_bg] : data.config) {
-      int b = data.linindex.at({op_bg.block_index, op_bg.inner_index});
-      
-      // S_bg is +1 for c^\dagger and -1 for c (boundaries of the density segments)
-      int S_bg = op_bg.dagger ? 1 : -1;
-      
-      double t_diff = double(y.first - t_bg);
-      if (t_diff < 0.0) t_diff += beta;
-      double poly_arg = 2.0 * t_diff / beta - 1.0;
-      
-      triqs::utility::legendre_generator gen_bg;
-      gen_bg.reset(poly_arg);
-      
-      for (int n = 0; n < data.K_n_size; ++n) {
-        double P_n = gen_bg.next();
-        // The factor of 2.0 mirrors the cross-term logic in compute_lang_firsov_ratio
-        I_tau += data.K_n[a][b][n] * 2.0 * S_bg * P_n;
-      }
+    double dtau = double(y.first - x.first);
+    if (dtau < 0.0) dtau += beta;
+    double poly_arg = 2.0 * dtau / beta - 1.0;
+    
+    triqs::utility::legendre_generator gen;
+    gen.reset(poly_arg);
+    
+    double K_tau = 0.0;
+    for (int n = 0; n < data.K_n_size; ++n) {
+      K_tau += data.K_n[a][b][n] * gen.next();
     }
 
-    // Note: If you are measuring the improved estimator F(tau) (like fprefactor in CTSEG), 
-    // you should return I_tau. If you are reweighting to measure the bare G(tau), 
-    // you may want to return std::exp(I_tau).
-    return I_tau;
+    // Multiply the dressed G(tau) by the analytical bosonic factor B(tau) = exp(-K(tau))
+    // to measure the bare G(tau).
+    return std::exp(-K_tau);
   }
 
 } // namespace triqs_cthyb
