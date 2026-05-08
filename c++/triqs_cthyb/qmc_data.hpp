@@ -207,7 +207,7 @@ namespace triqs_cthyb {
           gen_bg.reset(x);
           for (int n = 0; n < K_n_size; ++n) {
             double P_n = gen_bg.next();
-            double term = 2.0 * p1.action * p1.S_op * S_bg * P_n;
+            double term = 1.0 * p1.action * p1.S_op * S_bg * P_n;
             d_w += K_n[p1.a][b][n] * term;
           }
         }
@@ -234,7 +234,7 @@ namespace triqs_cthyb {
                 gen_cross.reset(x_cross);
                 for (int n = 0; n < K_n_size; ++n) {
                     double P_n = gen_cross.next();
-                    double term = 2.0 * p1.action * p1.S_op * p2.S_op * P_n;
+                    double term = 1.0 * p1.action * p1.S_op * p2.S_op * P_n;
                     d_w += K_n[p1.a][p2.a][n] * term;
                 }
             }
