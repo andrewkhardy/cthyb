@@ -68,7 +68,7 @@ Delta << SemiCircular(2*hopping)
 S.Delta_tau << Fourier(Delta)
 
 S.D0_tau << Q_tau
-
+lang_firsov = False
 # Solve parameters
 Sz = 0.5 * ( n('up', 0) - n('down', 0) )
 solve_params = {
@@ -82,7 +82,7 @@ solve_params = {
     "measure_O_tau_min_ins": measure_O_tau_min_ins,
     "perform_tail_fit": True,
     "fit_max_moment": 3,
-    "lang_firsov": True
+    "lang_firsov": lang_firsov
     }
 
 # Solve
@@ -90,7 +90,7 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/cthyb_lambda-{L}-U-{U}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}.h5"
+    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/cthyb_lambda-{L}-U-{U}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}_lf={lang_firsov}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         A["perturbation_order"] = S.perturbation_order
