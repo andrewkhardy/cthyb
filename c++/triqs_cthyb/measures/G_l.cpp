@@ -48,9 +48,6 @@ namespace triqs_cthyb {
 
         auto val = (y.first >= x.first ? s : -s) * M;
 
-        // Apply Lang-Firsov shift to measure the bare Green's function
-        val *= lf_shift(block_idx, y, x);
-
         for (auto l : G_l[block_idx].mesh()) {
           // Evaluate all polynomial orders
           this->G_l[block_idx][l](y.second, x.second) += val * Tn.next();
@@ -76,32 +73,6 @@ namespace triqs_cthyb {
       id() = 1.0; // this creates an unit matrix
       enforce_discontinuity(G_l_block, id);
     }
-  }
-
-  double measure_G_l::lf_shift(long const block, op_t const &y, op_t const &x) {
-    if (!data.use_lang_firsov || data.K_n_size == 0) return 1.0;
-
-    double beta = data.config.beta();
-    
-    // Get the linear orbital indices 'a' and 'b' for y and x
-    int a = data.linindex.at({block, static_cast<int>(y.second)});
-    int b = data.linindex.at({block, static_cast<int>(x.second)});
-
-    double dtau = double(y.first - x.first);
-    if (dtau < 0.0) dtau += beta;
-    double poly_arg = 2.0 * dtau / beta - 1.0;
-    
-    triqs::utility::legendre_generator gen;
-    gen.reset(poly_arg);
-    
-    double K_tau = 0.0;
-    for (int n = 0; n < data.K_n_size; ++n) {
-      K_tau += data.K_n[a][b][n] * gen.next();
-    }
-
-    // Multiply the dressed G(tau) by the analytical bosonic factor B(tau) = exp(-K(tau))
-    // to measure the bare G(tau).
-    return std::exp(-K_tau);
   }
 
 } // namespace triqs_cthyb
