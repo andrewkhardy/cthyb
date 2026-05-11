@@ -218,7 +218,7 @@ namespace triqs_cthyb {
         gen_self.reset(x_self);
         for (int n = 0; n < K_n_size; ++n) {
            double P_n = gen_self.next();
-           double term = p1.action * p1.S_op * p1.S_op * P_n;
+           double term = 0.5 * p1.action * p1.S_op * p1.S_op * P_n;
            d_w += K_n[p1.a][p1.a][n] * term;
         }
         
