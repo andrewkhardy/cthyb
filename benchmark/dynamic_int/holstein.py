@@ -68,7 +68,7 @@ Delta << SemiCircular(2*hopping)
 S.Delta_tau << Fourier(Delta)
 
 S.D0_tau << Q_tau
-lang_firsov = False
+lang_firsov = True
 # Solve parameters
 Sz = 0.5 * ( n('up', 0) - n('down', 0) )
 solve_params = {
