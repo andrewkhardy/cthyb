@@ -106,7 +106,7 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_cthyb_J-{J}-U-{U}_{i_1}_{i_2}_{i_3}_{i_4}_{i_5}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}.h5"
+    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_cthyb_J-{J}-U-{U}_{i_1}_{i_2}_{i_3}_{i_4}_{i_5}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}_lf={solve_params['lang_firsov']}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         A["perturbation_order"] = S.perturbation_order
