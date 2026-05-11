@@ -1,0 +1,11 @@
+--- c++/triqs_cthyb/solver_core.cpp
++++ b/c++/triqs_cthyb/solver_core.cpp
+@@ -282,7 +282,7 @@
+                 if (!elem_nonzero) continue;
+ 
+                 auto D0_eval_early = [D0_bl, i1, i2](double tau) -> double {
+-                  return real(D0_bl[closest_mesh_pt(tau)](i1, i2));
++                  return real(D0_bl[closest_mesh_pt(tau)](i1, i2)) / 2.0;
+                 };
+ 
+                 // Compute Legendre coefficients for D0(tau)
