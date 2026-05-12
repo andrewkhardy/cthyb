@@ -126,6 +126,9 @@ namespace triqs_cthyb {
     /// Analytically integrate out the bosonic density-density bath
     bool lang_firsov = false;
 
+    /// Number of Legendre coefficients for Lang-Firsov trace and static shift
+    int dyn_n_l = 50;
+
     /// Measure G(tau)? :math:`G_{ij}(\tau)=G_{ji}^*(\tau)` is enforced for the resulting G(tau)
     bool measure_G_tau = true;
 
