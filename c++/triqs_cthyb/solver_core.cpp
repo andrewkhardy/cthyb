@@ -490,7 +490,7 @@ namespace triqs_cthyb {
                 
                 auto d_n = fit_legendre_coeffs(n_pt_tau, beta, D0_eval, N_leg);
                   double d0 = d_n(0);
-                  d_n(0) = -d0;
+                  d_n(0) = 0.0; // Subtract constant part which is already included in the Lang-Firsov shift
                   nda::vector<double> k_n_vec = M_matrix * d_n;
 
                 int lin1 = linindex.at({bl1, i1});
