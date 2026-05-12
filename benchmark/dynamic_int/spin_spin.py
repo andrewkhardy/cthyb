@@ -30,9 +30,11 @@ parser.add_argument('--i5', type=float, default=1.0,  help='i5 switch (0 or 1)')
 parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
 parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
 parser.add_argument('--measure_O_tau', type=int, default=100, help='Minimum insertions for O_tau measurement')
+parser.add_argument('--dyn_n_l', type=int, default=100, help='Number of Legendre polynomials for dynamical interactions')
 args, unknown = parser.parse_known_args()
 # Numerical values
 beta = args.beta
+dyn_n_l = args.dyn_n_l
 U = args.U
 mu = U/2
 J = args.J
@@ -96,7 +98,7 @@ solve_params = {
     "perform_tail_fit": True,
     "fit_max_moment": 3,
     "lang_firsov": True,
-    "dyn_n_l": 100
+    "dyn_n_l": dyn_n_l
     }
 
 # Solve
@@ -104,7 +106,9 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
-    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_cthyb_J-{J}-U-{U}_{i_1}_{i_2}_{i_3}_{i_4}_{i_5}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}_lf={solve_params['lang_firsov']}.h5"
+    #filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_cthyb_J-{J}-U-{U}_{i_1}_{i_2}_{i_3}_{i_4}_{i_5}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}_lf={solve_params['lang_firsov']}.h5"
+    filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin_cthyb_J-{J}-U-{U}_{i_1}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}_lf={solve_params['lang_firsov']}_nl={solve_params['dyn_n_l']}.h5"
+
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         A["perturbation_order"] = S.perturbation_order
