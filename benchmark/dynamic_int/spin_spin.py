@@ -96,6 +96,7 @@ solve_params = {
     "perform_tail_fit": True,
     "fit_max_moment": 3,
     "lang_firsov": True
+    "dyn_n_l": 100
     }
 
 # Solve
