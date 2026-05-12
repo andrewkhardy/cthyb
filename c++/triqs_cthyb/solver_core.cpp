@@ -293,7 +293,7 @@ namespace triqs_cthyb {
                 // K'(0) from lowest Legendre coefficients
                 double d0       = d_n(0);
                 double d1       = (N_leg_early > 1) ? d_n(1) : 0.0;
-                double Kprime_0 = -0.5 * beta_early * (d0 - d1 / 3.0);
+                double Kprime_0 = -1.0 * beta_early * (d0 - d1 / 3.0);
 
                 if (std::abs(Kprime_0) < 1.e-13) continue;
 

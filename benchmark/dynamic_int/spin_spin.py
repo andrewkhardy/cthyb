@@ -62,8 +62,6 @@ with h5.HDFArchive("ctint.ref.h5", 'r') as Af:
 
 # Hybridization Delta(tau)
 n_iw = len(g0.mesh)
-print(n_iw)
-print("WHAT")
 Delta = GfImFreq(indices=[0], beta=beta, n_points=n_iw//2)
 invg0 = GfImFreq(indices=[0], beta=beta, n_points=n_iw//2)
 Q_tau = GfImTime(indices=[0],  statistic='Boson', beta=beta, n_points=n_tau_bosonic)
