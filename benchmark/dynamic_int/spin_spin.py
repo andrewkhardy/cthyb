@@ -93,8 +93,8 @@ solve_params = {
     "measure_pert_order": True,
     "measure_O_tau": (Sz, Sz),
     "measure_O_tau_min_ins": measure_O_tau_min_ins,
-    "perform_tail_fit": True,
-    "fit_max_moment": 3,
+    # "perform_tail_fit": True,
+    # "fit_max_moment": 3,
     "lang_firsov": True,
     "dyn_n_l": dyn_n_l
     }
