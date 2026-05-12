@@ -50,6 +50,7 @@ namespace triqs_cthyb {
         ;
     }
   }
+
 void measure_G_tau::collect_results(mpi::communicator const &c) {
 
     G_tau        = mpi::all_reduce(G_tau, c);
@@ -105,3 +106,5 @@ void measure_G_tau::collect_results(mpi::communicator const &c) {
     asymmetry_G_tau = make_hermitian(G_tau) - G_tau;
     G_tau           = G_tau + asymmetry_G_tau;
   }
+
+} // namespace triqs_cthyb
