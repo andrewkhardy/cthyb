@@ -95,7 +95,7 @@ solve_params = {
     "measure_O_tau_min_ins": measure_O_tau_min_ins,
     "perform_tail_fit": True,
     "fit_max_moment": 3,
-    "lang_firsov": True
+    "lang_firsov": True,
     "dyn_n_l": 100
     }
 
