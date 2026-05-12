@@ -70,10 +70,7 @@ G0.data[:,0,0] = g0.data[:,0,0]
 Q_tau.data[:,0,0] = q_tau.data[:,0,0]
 invg0 << inverse(g0)
 Delta << iOmega_n + mu - invg0
-print(Delta)
-print(S.Delta_tau)
 S.Delta_tau << Fourier(Delta)
-print(S.Delta_tau)
 
 # # Spin-spin interaction (D0(tau) and Jperp(tau))
 # plt.figure()

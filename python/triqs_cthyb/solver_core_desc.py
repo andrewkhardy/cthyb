@@ -439,6 +439,11 @@ c.add_member(c_name = "lang_firsov",
              initializer = """ false """,
              doc = r"""Analytically integrate out the bosonic density-density bath""")
 
+c.add_member(c_name = "dyn_n_l",
+             c_type = "int",
+             initializer = """ 50 """,
+             doc = r"""Number of Legendre coefficients for Lang-Firsov trace and static shift""")
+
 c.add_member(c_name = "measure_G_tau",
              c_type = "bool",
              initializer = """ true """,

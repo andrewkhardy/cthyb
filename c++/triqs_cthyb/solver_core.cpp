@@ -230,7 +230,7 @@ namespace triqs_cthyb {
           if (max_element(nda::abs(inputs.D0t(bl1, bl2).data())) > 1.e-13) { _has_D0_early = true; break; }
 
       if (_has_D0_early) {
-        int    N_leg_early = constr_parameters.n_l;
+        int    N_leg_early = params.dyn_n_l;
         double beta_early  = beta;
 
         int n_orbitals = 0;
@@ -285,7 +285,7 @@ namespace triqs_cthyb {
                 if (!elem_nonzero) continue;
 
                 auto D0_eval_early = [D0_bl, i1, i2](double tau) -> double {
-                  return real(D0_bl[closest_mesh_pt(tau)](i1, i2)) / 2.0;
+                  return real(D0_bl[closest_mesh_pt(tau)](i1, i2)) ;/// 2.0;
                 };
 
                 // Compute Legendre coefficients for D0(tau)
@@ -461,7 +461,7 @@ namespace triqs_cthyb {
 
     if (has_D0) {
       if (params.lang_firsov) {
-          int N_leg = constr_parameters.n_l; 
+          int N_leg = params.dyn_n_l; 
         auto M_matrix = build_M_matrix(N_leg, beta);
 
         // find total number of linear indices
