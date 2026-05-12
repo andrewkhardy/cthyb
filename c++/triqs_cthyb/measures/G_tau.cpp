@@ -51,58 +51,27 @@ namespace triqs_cthyb {
     }
   }
 
-void measure_G_tau::collect_results(mpi::communicator const &c) {
+  void measure_G_tau::collect_results(mpi::communicator const &c) {
 
     G_tau        = mpi::all_reduce(G_tau, c);
     average_sign = mpi::all_reduce(average_sign, c);
 
-    for (int bl_idx = 0; bl_idx < G_tau.size(); ++bl_idx) {
-      auto &G_tau_block = G_tau[bl_idx];
+    for (auto &G_tau_block : G_tau) {
       double beta = G_tau_block.mesh().beta();
       G_tau_block /= -real(average_sign) * beta * G_tau_block.mesh().delta();
 
-      if (data.use_lang_firsov && data.K_n_size > 0) {
-        for (int i = 0; i < G_tau_block.data().shape()[1]; ++i) {
-          for (int j = 0; j < G_tau_block.data().shape()[2]; ++j) {
-            int a = data.linindex.at({bl_idx, i});
-            int b = data.linindex.at({bl_idx, j});
-
-            double K_ii_0 = 0.0;
-            double K_jj_0 = 0.0;
-            triqs::utility::legendre_generator gen_0;
-            gen_0.reset(-1.0);
-            for (int n = 0; n < data.K_n_size; ++n) {
-              double P_n = gen_0.next();
-              K_ii_0 += data.K_n[a][a][n] * P_n;
-              K_jj_0 += data.K_n[b][b][n] * P_n;
-            }
-            double K_0_term = 0.5 * (K_ii_0 + K_jj_0);
-
-            for (auto tau_pt : G_tau_block.mesh()) {
-              double tau = double(tau_pt);
-              double x = 2.0 * tau / beta - 1.0;
-              double K_tau = 0.0;
-              
-              triqs::utility::legendre_generator gen_tau;
-              gen_tau.reset(x);
-              for (int n = 0; n < data.K_n_size; ++n) {
-                K_tau += data.K_n[a][b][n] * gen_tau.next();
-              }
-              
-              G_tau_block[tau_pt](i, j) *= std::exp(K_tau - K_0_term);
-            }
-          }
-        }
-      }
-
+      // Multiply first and last bins by 2 to account for full bins
       int last = G_tau_block.mesh().size() - 1;
       G_tau_block[0] *= 2;
       G_tau_block[last] *= 2;
 
+      // Enforce discontinuity in Green function
       G_tau_block[0] = 0.5 * matrix_t(G_tau_block[0] - 1 - G_tau_block[last]);
       G_tau_block[last] = -1 - G_tau_block[0];
     }
 
+    // We enforce the fundamental Green function property G(tau)[i,j] = G(tau)*[j,i]
+    // and store the symmetry violation separately
     asymmetry_G_tau = make_hermitian(G_tau) - G_tau;
     G_tau           = G_tau + asymmetry_G_tau;
   }
