@@ -311,17 +311,17 @@ namespace triqs_cthyb {
                 int lin1 = linindex.at({static_cast<int>(bl1), i1});
                 int lin2 = linindex.at({static_cast<int>(bl2), i2});
 
-                if (bl1 == bl2 && i1 == i2) {
-                  // Diagonal: chemical-potential shift H -> H - 0.5 * K'(0) * n
-                  _h_loc = _h_loc - 0.5 * Kprime_0 * n_1;
-                  mu_renorm(lin1) += 0.5 * Kprime_0;
-                } else {
-                  // Off-diagonal: H -> H - 0.5 * K'(0) * n_1 * n_2
-                  // (both (a,b) and (b,a) are visited, giving the total 1.0*K'(0) factor)
-                  _h_loc = _h_loc - 0.5 * Kprime_0 * n_1 * n_2;
-                  U_renorm(lin1, lin2) -= 0.5 * Kprime_0;
-                  U_renorm(lin2, lin1) -= 0.5 * Kprime_0;
-                }
+                // if (bl1 == bl2 && i1 == i2) {
+                //   // Diagonal: chemical-potential shift H -> H - 0.5 * K'(0) * n
+                //   _h_loc = _h_loc - 0.5 * Kprime_0 * n_1;
+                //   mu_renorm(lin1) += 0.5 * Kprime_0;
+                // } else {
+                //   // Off-diagonal: H -> H - 0.5 * K'(0) * n_1 * n_2
+                //   // (both (a,b) and (b,a) are visited, giving the total 1.0*K'(0) factor)
+                //   _h_loc = _h_loc - 0.5 * Kprime_0 * n_1 * n_2;
+                //   U_renorm(lin1, lin2) -= 0.5 * Kprime_0;
+                //   U_renorm(lin2, lin1) -= 0.5 * Kprime_0;
+                // }
               }
             }
           }
@@ -490,7 +490,7 @@ namespace triqs_cthyb {
                 
                 auto d_n = fit_legendre_coeffs(n_pt_tau, beta, D0_eval, N_leg);
                   double d0 = d_n(0);
-                  d_n(0) = 0.0; // Subtract constant part which is already included in the Lang-Firsov shift
+                  // d_n(0) = 0.0; // Subtract constant part which is already included in the Lang-Firsov shift
                   nda::vector<double> k_n_vec = M_matrix * d_n;
 
                 int lin1 = linindex.at({bl1, i1});
