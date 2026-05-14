@@ -314,31 +314,16 @@ namespace triqs_cthyb {
                 double K_prime_dyn = (N_leg_early > 1) ? (beta_early * d_n(1) / 6.0) : 0.0;
 
                 if (bl1 == bl2 && i1 == i2) {
-                    // Diagonal: Only the static shift applies.
-                    _h_loc = _h_loc + 0.5 * d0_math * n_1;
-                    mu_renorm(lin1) -= 0.5 * d0_math; 
+                  // Diagonal: chemical-potential shift H -> H - 0.5 * K'(0) * n
+                  _h_loc = _h_loc - 0.5 * Kprime_0 * n_1;
+                  mu_renorm(lin1) += 0.5 * Kprime_0;
                 } else {
-                    // Off-diagonal: Static shift to U, plus dynamical shift to U and mu.
-                    _h_loc = _h_loc + 0.5 * d0_math * n_1 * n_2;
-                    _h_loc = _h_loc - K_prime_dyn * n_1 * n_2;
-                    _h_loc = _h_loc + 0.5 * K_prime_dyn * (n_1 + n_2);
-
-                    U_renorm(lin1, lin2) += (d0_math - 2.0 * K_prime_dyn);
-                    U_renorm(lin2, lin1) += (d0_math - 2.0 * K_prime_dyn);
-                    mu_renorm(lin1) -= 0.5 * K_prime_dyn;
-                    mu_renorm(lin2) -= 0.5 * K_prime_dyn;
+                  // Off-diagonal: H -> H - 0.5 * K'(0) * n_1 * n_2
+                  // (both (a,b) and (b,a) are visited, giving the total 1.0*K'(0) factor)
+                  _h_loc = _h_loc - 0.5 * Kprime_0 * n_1 * n_2;
+                  U_renorm(lin1, lin2) -= 0.5 * Kprime_0;
+                  U_renorm(lin2, lin1) -= 0.5 * Kprime_0;
                 }
-                // if (bl1 == bl2 && i1 == i2) {
-                //   // Diagonal: chemical-potential shift H -> H - 0.5 * K'(0) * n
-                //   _h_loc = _h_loc - 0.5 * Kprime_0 * n_1;
-                //   mu_renorm(lin1) += 0.5 * Kprime_0;
-                // } else {
-                //   // Off-diagonal: H -> H - 0.5 * K'(0) * n_1 * n_2
-                //   // (both (a,b) and (b,a) are visited, giving the total 1.0*K'(0) factor)
-                //   _h_loc = _h_loc - 0.5 * Kprime_0 * n_1 * n_2;
-                //   U_renorm(lin1, lin2) -= 0.5 * Kprime_0;
-                //   U_renorm(lin2, lin1) -= 0.5 * Kprime_0;
-                // }
               }
             }
           }
