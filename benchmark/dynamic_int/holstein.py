@@ -59,7 +59,7 @@ q_iw << Function(lambda w: 2 * L/w0 * w0**2 / (w**2 - w0**2))
 q_tau << Fourier(q_iw)
 q_tau_mean = np.mean(q_tau.data[:, 0, 0])
 print(q_tau_mean)
-#q_tau.data[:, 0, 0] = q_tau.data[:, 0, 0] - q_tau_mean
+q_tau.data[:, 0, 0] = q_tau.data[:, 0, 0] - q_tau_mean
 Q_tau = Block2Gf(['up', 'down'], ['up', 'down'], [[1*q_tau, 1*q_tau], [1*q_tau, 1*q_tau]])
 Q_iw = make_gf_from_fourier(Q_tau)
 g0 << SemiCircular(2*hopping)
