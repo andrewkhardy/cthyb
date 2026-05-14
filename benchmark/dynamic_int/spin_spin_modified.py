@@ -85,7 +85,7 @@ Q_tau.data[:, 0, 0] = Q_tau.data[:, 0, 0] - q_tau_mean
 # Spin-spin interaction (D0(tau) and Jperp(tau))
 S.Jperp_tau << -(J) * Q_tau * i_1
 S.D0_tau["up", "up"] << -0.25*J*Q_tau * i_2
-S.D0_tau["down", "down"] << -0.25*J*Q_tau * i_35
+S.D0_tau["down", "down"] << -0.25*J*Q_tau * i_3
 S.D0_tau["up", "down"] << 0.25*J*Q_tau * i_4
 S.D0_tau["down", "up"] << 0.25*J*Q_tau * i_5
 
