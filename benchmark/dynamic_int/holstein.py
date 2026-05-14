@@ -60,7 +60,6 @@ q_tau << Fourier(q_iw)
 q_tau_mean = np.mean(q_tau.data[:, 0, 0])
 print(q_tau_mean)
 #q_tau.data[:, 0, 0] = q_tau.data[:, 0, 0] - q_tau_mean
-q_iw << make_gf_from_fourier(q_tau)
 Q_tau = Block2Gf(['up', 'down'], ['up', 'down'], [[1*q_tau, 1*q_tau], [1*q_tau, 1*q_tau]])
 Q_iw = make_gf_from_fourier(Q_tau)
 g0 << SemiCircular(2*hopping)
@@ -84,8 +83,8 @@ solve_params = {
     "measure_pert_order": True,
     "measure_O_tau": (Sz, Sz),
     "measure_O_tau_min_ins": measure_O_tau_min_ins,
-    "perform_tail_fit": True,
-    "fit_max_moment": 3,
+    # "perform_tail_fit": True,
+    # "fit_max_moment": 3,
     "lang_firsov": lang_firsov
     }
 
@@ -102,6 +101,7 @@ if mpi.is_master_node():
         A["O_tau"] = S.O_tau#[(Sz, Sz)], hopefully allows many measurements eventually? # why use this over G2 blocks? 
         A["Sigma_iw"] = S.Sigma_iw
         A["Sigma_tau"] = S.Sigma_tau
+        A["K_n"] = S.K_n
         # A['F_tau'] = S.F_tau
         # A['nn_tau'] = S.nn_tau
         # A['nn'] = S.nn_static

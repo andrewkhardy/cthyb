@@ -128,6 +128,11 @@ c.add_member(c_name = "solve_parameters",
              read_only= True,
              doc = r"""Parameters passed to the solve function of the solver (see also :ref:`solve_parameters`).""")
 
+c.add_member(c_name = "K_n",
+             c_type = "std::vector<std::vector<std::vector<double>>>",
+             read_only= True,
+             doc = r"""Analytic density-density bath coefficients K_n[a][b][n].""")
+
 c.add_constructor("""(**constr_parameters_t)""", doc = r"""Construct a CTHYB solver
 
 

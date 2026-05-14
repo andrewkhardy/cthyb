@@ -78,6 +78,9 @@ namespace triqs_cthyb {
     /// Parameters passed to the solve function of the solver (see also :ref:`solve_parameters`).
     solve_parameters_t solve_parameters;
 
+    /// Analytic density-density bath coefficients K_n[a][b][n].
+    std::vector<std::vector<std::vector<double>>> K_n;
+
     /**
      * Construct a CTHYB solver
      *
@@ -212,6 +215,7 @@ namespace triqs_cthyb {
       h5_write(grp, "auto_corr_time", s._auto_corr_time);
       h5_write(grp, "solve_status", s._solve_status);
       h5_write(grp, "Delta_infty_vec", s.Delta_infty_vec);
+      h5_write(grp, "K_n", s.K_n);
     }
 
     // Function that read all containers to hdf5 file
@@ -235,6 +239,7 @@ namespace triqs_cthyb {
       h5::try_read(grp, "auto_corr_time", s._auto_corr_time);
       h5::try_read(grp, "solve_status", s._solve_status);
       h5::try_read(grp, "Delta_infty_vec", s.Delta_infty_vec);
+      h5::try_read(grp, "K_n", s.K_n);
 
       return s;
     }

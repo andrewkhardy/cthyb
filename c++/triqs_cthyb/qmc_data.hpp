@@ -177,7 +177,7 @@ namespace triqs_cthyb {
                                      std::vector<std::pair<time_pt, op_desc>> const& removed) const {
       if (!use_lang_firsov || K_n_size == 0) return 1.0;
 
-      double d_w = 0.0;
+      double weight_dyn = 0.0;
       double beta = config.beta();
 
       struct perturb { time_pt t; int a; int S_op; int action; };
@@ -208,7 +208,7 @@ namespace triqs_cthyb {
           for (int n = 0; n < K_n_size; ++n) {
             double P_n = gen_bg.next();
             double term = 1.0 * p1.action * p1.S_op * S_bg * P_n;
-            d_w += K_n[p1.a][b][n] * term;
+            weight_dyn += K_n[p1.a][b][n] * term;
           }
         }
         
@@ -219,7 +219,7 @@ namespace triqs_cthyb {
         for (int n = 0; n < K_n_size; ++n) {
            double P_n = gen_self.next();
            double term = 0.5 * p1.action * p1.S_op * p1.S_op * P_n;
-           d_w += K_n[p1.a][p1.a][n] * term;
+           weight_dyn += K_n[p1.a][p1.a][n] * term;
         }
         
         // 3. Cross terms between perturbations
@@ -235,13 +235,13 @@ namespace triqs_cthyb {
                 for (int n = 0; n < K_n_size; ++n) {
                     double P_n = gen_cross.next();
                     double term = 1.0 * p1.action * p1.S_op * p2.S_op * P_n;
-                    d_w += K_n[p1.a][p2.a][n] * term;
+                    weight_dyn += K_n[p1.a][p2.a][n] * term;
                 }
             }
         }
       }
 
-      return std::exp(d_w);
+      return std::exp(weight_dyn);
     }
 
     void update_sign() {
