@@ -310,8 +310,6 @@ namespace triqs_cthyb {
 
                 int lin1 = linindex.at({static_cast<int>(bl1), i1});
                 int lin2 = linindex.at({static_cast<int>(bl2), i2});
-                double d0_math = beta_early * d_n(0);
-                double K_prime_dyn = (N_leg_early > 1) ? (beta_early * d_n(1) / 6.0) : 0.0;
 
                 if (bl1 == bl2 && i1 == i2) {
                   // Diagonal: chemical-potential shift H -> H - 0.5 * K'(0) * n
@@ -459,7 +457,7 @@ namespace triqs_cthyb {
       if (params.verbosity >= 2) { std::cout << "Added Jperp (spin-spin) dynamical interaction." << std::endl; }
     }
 
-    std::vector<std::vector<std::vector<double>>> analytic_k_n;
+    K_n = {};
 
     if (has_D0) {
       if (params.lang_firsov) {
@@ -469,7 +467,7 @@ namespace triqs_cthyb {
         // find total number of linear indices
         int max_linindex = 0;
         for (auto const& pair : linindex) max_linindex = std::max(max_linindex, pair.second);
-        analytic_k_n.resize(max_linindex + 1, std::vector<std::vector<double>>(max_linindex + 1, std::vector<double>(N_leg, 0.0)));
+        K_n.resize(max_linindex + 1, std::vector<std::vector<double>>(max_linindex + 1, std::vector<double>(N_leg, 0.0)));
 
         for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
           for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
@@ -491,14 +489,14 @@ namespace triqs_cthyb {
                 auto D0_eval = [D0_bl, i1, i2](double tau) -> double { return real(D0_bl[closest_mesh_pt(tau)](i1, i2)); };
                 
                 auto d_n = fit_legendre_coeffs(n_pt_tau, beta, D0_eval, N_leg);
-                  double d0 = d_n(0);
-                  d_n(0) = 0.0; // Subtract constant part which is already included in the Lang-Firsov shift
+                  // double d0 = d_n(0);
+                  // d_n(0) = 0.0; // Subtract constant part which is already included in the Lang-Firsov shift
                   nda::vector<double> k_n_vec = M_matrix * d_n;
 
                 int lin1 = linindex.at({bl1, i1});
                 int lin2 = linindex.at({bl2, i2});
                 for (int n = 0; n < N_leg; ++n) {
-                    analytic_k_n[lin1][lin2][n] = k_n_vec(n); // M * d_n yields vector
+                    K_n[lin1][lin2][n] = k_n_vec(n); // M * d_n yields vector
                 }
               }
             }
@@ -566,7 +564,7 @@ namespace triqs_cthyb {
     bool has_dyn_interactions = has_Jperp || (has_D0 && !params.lang_firsov);
 
     // Initialise Monte Carlo quantities
-    qmc_data data(beta, params, h_diag, linindex, _Delta_tau, n_inner, histo_map, dyn_op_list, dyn_interactions, analytic_k_n);
+    qmc_data data(beta, params, h_diag, linindex, _Delta_tau, n_inner, histo_map, dyn_op_list, dyn_interactions, K_n);
     auto qmc =
        mc_tools::mc_generic<mc_weight_t>(params.random_name, params.random_seed, params.verbosity);
 
