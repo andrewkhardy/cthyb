@@ -79,12 +79,13 @@ S.Delta_tau << Fourier(Delta)
 # Shift Q_tau so its integral over beta is exactly zero
 q_tau_mean = np.mean(Q_tau.data[:, 0, 0])
 print(q_tau_mean)
+print("Shifting Q_tau by its mean value to ensure zero integral over beta.")
 Q_tau.data[:, 0, 0] = Q_tau.data[:, 0, 0] - q_tau_mean
 
 # Spin-spin interaction (D0(tau) and Jperp(tau))
 S.Jperp_tau << -(J) * Q_tau * i_1
 S.D0_tau["up", "up"] << -0.25*J*Q_tau * i_2
-S.D0_tau["down", "down"] << -0.25*J*Q_tau * i_3
+S.D0_tau["down", "down"] << -0.25*J*Q_tau * i_35
 S.D0_tau["up", "down"] << 0.25*J*Q_tau * i_4
 S.D0_tau["down", "up"] << 0.25*J*Q_tau * i_5
 
