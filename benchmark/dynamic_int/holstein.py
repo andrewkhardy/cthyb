@@ -58,15 +58,15 @@ q_iw << Function(lambda w: 2 * L/w0 * w0**2 / (w**2 - w0**2))
 
 q_tau << Fourier(q_iw)
 q_tau_mean = np.mean(q_tau.data[:, 0, 0])
-print(q_tau_mean)
+print(q_tau_mean, "q_tau_mean")
+q_tau.data[:, 0, 0] = q_tau.data[:, 0, 0] - q_tau_mean
+
 Q_tau = Block2Gf(['up', 'down'], ['up', 'down'], [[1*q_tau, 1*q_tau], [1*q_tau, 1*q_tau]])
 Q_iw = make_gf_from_fourier(Q_tau)
 g0 << SemiCircular(2*hopping)
 ivn = np.array([x.imag for x in Q_iw["up", "up"].mesh.values()])
 zero_freq = np.where(np.abs(ivn) < 1e-10)
 mu = U/2 + np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].data[zero_freq][0,0,0]))/2.0
-#q_tau.data[:, 0, 0] = q_tau.data[:, 0, 0] - q_tau_mean
-#Q_tau = Block2Gf(['up', 'down'], ['up', 'down'], [[1*q_tau, 1*q_tau], [1*q_tau, 1*q_tau]])
 Delta << SemiCircular(2*hopping)
 S.Delta_tau << Fourier(Delta)
 
