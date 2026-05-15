@@ -173,71 +173,66 @@ namespace triqs_cthyb {
     qmc_data(qmc_data const &)            = delete; // Member imp_trace is not copyable
     qmc_data &operator=(qmc_data const &) = delete;
 
-  double compute_lang_firsov_ratio(std::vector<std::pair<time_pt, op_desc>> const& inserted, 
-                                  std::vector<std::pair<time_pt, op_desc>> const& removed) const {
-    if (!use_lang_firsov || K_n_size == 0) return 1.0;
+double compute_lang_firsov_ratio(std::vector<std::pair<time_pt, op_desc>> const& inserted, 
+                                 std::vector<std::pair<time_pt, op_desc>> const& removed) const {
+  if (!use_lang_firsov || K_n_size == 0) return 1.0;
 
-    double delta_W = 0.0;
-    double const beta = config.beta();
+  double delta_W = 0.0;
+  double const beta = config.beta();
 
-    auto eval_K = [&](auto const& op1, auto const& op2, double tau1, double tau2) {
-      int a = linindex.at({op1.block_index, op1.inner_index});
-      int b = linindex.at({op2.block_index, op2.inner_index});
-      double t_diff = double(tau1 - tau2);
-      if (t_diff < 0.0) t_diff += beta;
-      
-      triqs::utility::legendre_generator gen;
-      gen.reset(2.0 * t_diff / beta - 1.0);
-      double val = 0.0;
-      for (int n = 0; n < K_n_size; ++n) {
-        val += K_n[a][b][n] * gen.next();
+  auto eval_K = [&](auto const& op1, auto const& op2, double tau1, double tau2) {
+    int a = linindex.at({op1.block_index, op1.inner_index});
+    int b = linindex.at({op2.block_index, op2.inner_index});
+    double t_diff = double(tau1 - tau2);
+    if (t_diff < 0.0) t_diff += beta;
+    
+    triqs::utility::legendre_generator gen;
+    gen.reset(2.0 * t_diff / beta - 1.0);
+    double val = 0.0;
+    for (int n = 0; n < K_n_size; ++n) {
+      val += K_n[a][b][n] * gen.next();
+    }
+    double s1 = op1.dagger ? 1.0 : -1.0;
+    double s2 = op2.dagger ? 1.0 : -1.0;
+    return s1 * s2 * val;
+  };
+
+  auto interact_bg = [&](auto const& pert, double action) {
+    for (auto const& [t_bg, op_bg] : config) {
+      bool is_removed = false;
+      for (auto const& p_r : removed) {
+        if (p_r.first == t_bg && p_r.second == op_bg) { is_removed = true; break; }
       }
-      double s1 = op1.dagger ? 1.0 : -1.0;
-      double s2 = op2.dagger ? 1.0 : -1.0;
-      return s1 * s2 * val;
-    };
-
-    auto interact_bg = [&](auto const& pert, double action) {
-      for (auto const& [t_bg, op_bg] : config) {
-        bool is_removed = false;
-        for (auto const& p_r : removed) {
-          if (p_r.first == t_bg && p_r.second == op_bg) { is_removed = true; break; }
-        }
-        if (!is_removed) {
-          delta_W += action * eval_K(pert.second, op_bg, pert.first, t_bg);
-        }
-      }
-    };
-
-    for (auto const& p_in : inserted) interact_bg(p_in, 1.0);
-    for (auto const& p_rm : removed) interact_bg(p_rm, -1.0);
-
-    auto self_interact = [&](auto const& pert, double action) {
-      int a = linindex.at({pert.second.block_index, pert.second.inner_index});
-      triqs::utility::legendre_generator gen;
-      gen.reset(-1.0);
-      double val = 0.0;
-      for (int n = 0; n < K_n_size; ++n) val += K_n[a][a][n] * gen.next();
-      delta_W += action * 0.5 * val;
-    };
-
-    for (auto const& p_in : inserted) self_interact(p_in, 1.0);
-    for (auto const& p_rm : removed) self_interact(p_rm, -1.0);
-
-    for (size_t i = 0; i < inserted.size(); ++i) {
-      for (size_t j = i + 1; j < inserted.size(); ++j) {
-        delta_W += 1.0 * eval_K(inserted[i].second, inserted[j].second, inserted[i].first, inserted[j].first);
+      if (!is_removed) {
+        delta_W += action * eval_K(pert.second, op_bg, pert.first, t_bg);
       }
     }
+  };
 
-    for (size_t i = 0; i < removed.size(); ++i) {
-      for (size_t j = i + 1; j < removed.size(); ++j) {
-        delta_W += -1.0 * eval_K(removed[i].second, removed[j].second, removed[i].first, removed[j].first);
-      }
-    }
-
-    return std::exp(delta_W);
+  for (auto const& p_in : inserted) {
+    interact_bg(p_in, 1.0);
+    delta_W += 0.5 * eval_K(p_in.second, p_in.second, p_in.first, p_in.first);
   }
+
+  for (auto const& p_rm : removed) {
+    interact_bg(p_rm, -1.0);
+    delta_W -= 0.5 * eval_K(p_rm.second, p_rm.second, p_rm.first, p_rm.first);
+  }
+
+  for (size_t i = 0; i < inserted.size(); ++i) {
+    for (size_t j = i + 1; j < inserted.size(); ++j) {
+      delta_W += 1.0 * eval_K(inserted[i].second, inserted[j].second, inserted[i].first, inserted[j].first);
+    }
+  }
+
+  for (size_t i = 0; i < removed.size(); ++i) {
+    for (size_t j = i + 1; j < removed.size(); ++j) {
+      delta_W -= 1.0 * eval_K(removed[i].second, removed[j].second, removed[i].first, removed[j].first);
+    }
+  }
+
+  return std::exp(delta_W);
+}
 
     void update_sign() {
 
