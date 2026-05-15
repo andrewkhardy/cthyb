@@ -64,10 +64,10 @@ S.Delta_tau << Fourier(Delta)
 
 # Spin-spin interaction (D0(tau) and Jperp(tau))
 S.Jperp_tau << -(J) * Q_tau * i_1
-S.D0_tau["up", "up"] << -0.25*J*Q_tau *i_2
-S.D0_tau["down", "down"] << -0.25*J*Q_tau *i_3
-S.D0_tau["up", "down"] << 0.25*J*Q_tau * i_4
-S.D0_tau["down", "up"] << 0.25*J*Q_tau * i_5
+S.D0_tau["up", "up"]     << 0.25*J*Q_tau *i_2
+S.D0_tau["down", "down"] << 0.25*J*Q_tau *i_3
+S.D0_tau["up", "down"]   << -0.25*J*Q_tau * i_4
+S.D0_tau["down", "up"]   << -0.25*J*Q_tau * i_5
 
 
 # Solve parameters
