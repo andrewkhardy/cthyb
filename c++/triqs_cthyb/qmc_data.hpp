@@ -180,7 +180,7 @@ double compute_lang_firsov_ratio(std::vector<std::pair<time_pt, op_desc>> const&
   double delta_W = 0.0;
   double const beta = config.beta();
 
-  auto eval_K = [&](auto const& op1, auto const& op2, double tau1, double tau2) {
+  auto eval_K = [&](auto const& op1, auto const& op2, auto const& tau1, auto const& tau2) {
     int a = linindex.at({op1.block_index, op1.inner_index});
     int b = linindex.at({op2.block_index, op2.inner_index});
     double t_diff = double(tau1 - tau2);
