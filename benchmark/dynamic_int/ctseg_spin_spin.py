@@ -93,7 +93,7 @@ if mpi.is_master_node():
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.results.G_tau
         #A["Sigma_tau"] = S.results.Sigma_tau
-        A['F_tau'] = S.results.F_tau
+        #A['F_tau'] = S.results.F_tau
         A['nn_tau'] = S.results.nn_tau
         A['nn_nu'] = S.results.nn_nu
         A['nn'] = S.results.nn_static
