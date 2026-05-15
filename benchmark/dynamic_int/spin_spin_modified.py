@@ -80,14 +80,14 @@ S.Delta_tau << Fourier(Delta)
 q_tau_mean = np.mean(Q_tau.data[:, 0, 0])
 print(q_tau_mean)
 print("Shifting Q_tau by its mean value to ensure zero integral over beta.")
-#Q_tau.data[:, 0, 0] = Q_tau.data[:, 0, 0] - q_tau_mean
+Q_tau.data[:, 0, 0] = Q_tau.data[:, 0, 0] - q_tau_mean
 
 # Spin-spin interaction (D0(tau) and Jperp(tau))
 S.Jperp_tau << -(J) * Q_tau * i_1
-S.D0_tau["up", "up"] << -0.25*J*Q_tau * i_2
-S.D0_tau["down", "down"] << -0.25*J*Q_tau * i_3
-S.D0_tau["up", "down"] << 0.25*J*Q_tau * i_4
-S.D0_tau["down", "up"] << 0.25*J*Q_tau * i_5
+S.D0_tau["up", "up"]     << 0.25*J*Q_tau * i_2
+S.D0_tau["down", "down"] << 0.25*J*Q_tau * i_3
+S.D0_tau["up", "down"]   << -0.25*J*Q_tau * i_4
+S.D0_tau["down", "up"]   << -0.25*J*Q_tau * i_5
 
 # Solve parameters
 Sz = 0.5 * ( n('up', 0) - n('down', 0) )
@@ -120,6 +120,7 @@ if mpi.is_master_node():
         A["average_sign"] = S.average_sign
         A["O_tau"] = S.O_tau#[(Sz, Sz)], hopefully allows many measurements eventually? # why use this over G2 blocks? 
         A["Sigma_iw"] = S.Sigma_iw
+        A["K_n"] = S.K_n
         #A["Sigma_tau"] = S.Sigma_tau
         # A['F_tau'] = S.F_tau
         # A['nn_tau'] = S.nn_tau
