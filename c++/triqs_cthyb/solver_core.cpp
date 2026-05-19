@@ -542,7 +542,7 @@ namespace triqs_cthyb {
                 // Create lambda function to evaluate D0(tau) for this block pair
                 // Make a copy of the specific block for the lambda
                 auto D0_block    = inputs.D0t(bl1, bl2);
-                auto D0_function = [D0_block, i1, i2](double tau) -> double { return real(D0_block[closest_mesh_pt(tau)](i1, i2)) / 2.0; };
+                auto D0_function = [D0_block, i1, i2](double tau) -> double { return real(D0_block[closest_mesh_pt(tau)](i1, i2)) ; };
                 dyn_interactions.emplace_back(D0_function);
 
                 if (params.verbosity >= 2) {
