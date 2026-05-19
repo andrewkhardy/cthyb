@@ -321,7 +321,7 @@ namespace triqs_cthyb {
                 //   _h_loc = _h_loc - 0.5 * Kprime_0 * n_1 * n_2;
                 //   U_renorm(lin1, lin2) -= 0.5 * Kprime_0;
                 //   U_renorm(lin2, lin1) -= 0.5 * Kprime_0;
-                }
+                //}
               }
             }
           }
