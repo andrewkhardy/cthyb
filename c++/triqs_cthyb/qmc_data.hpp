@@ -221,13 +221,13 @@ double compute_lang_firsov_ratio(std::vector<std::pair<time_pt, op_desc>> const&
 
   for (size_t i = 0; i < inserted.size(); ++i) {
     for (size_t j = i + 1; j < inserted.size(); ++j) {
-      delta_W += 1.0 * eval_K(inserted[i].second, inserted[j].second, inserted[i].first, inserted[j].first);
+      delta_W += 0.5 * eval_K(inserted[i].second, inserted[j].second, inserted[i].first, inserted[j].first);
     }
   }
 
   for (size_t i = 0; i < removed.size(); ++i) {
     for (size_t j = i + 1; j < removed.size(); ++j) {
-      delta_W -= 1.0 * eval_K(removed[i].second, removed[j].second, removed[i].first, removed[j].first);
+      delta_W -= 0.5 * eval_K(removed[i].second, removed[j].second, removed[i].first, removed[j].first); // 0.5 in action definition
     }
   }
 
