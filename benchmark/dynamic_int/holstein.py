@@ -33,7 +33,7 @@ hopping = 1.0
 w0 = 0.1
 beta = args.beta
 lang_firsov = args.lang_firsov
-
+dyn_n_l = args.dyn_n_l
 U = args.U
 L = args.L
 n_tau = 4096
