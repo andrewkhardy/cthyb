@@ -25,12 +25,15 @@ parser.add_argument('--U', type=float, default=4.0, help='U parameter')
 parser.add_argument('--beta', type=float, default=10.0, help='Inverse temperature')
 parser.add_argument('--n_cycles', type=int, default=1000000, help='Number of MC cycles')
 parser.add_argument('--measure_O_tau', type=int, default=100, help='Minimum insertions for O_tau measurement')
+parser.add_argument("--dyn_n_l", type=int, default=10, help="Number of Legendre polynomials for dynamical interactions")
 parser.add_argument("--lang_firsov", type=bool, default=False, help="Whether to use Lang-Firsov approach for dynamical interactions")
 args, unknown = parser.parse_known_args()
 # Numerical values
 hopping = 1.0
 w0 = 0.1
 beta = args.beta
+lang_firsov = args.lang_firsov
+
 U = args.U
 L = args.L
 n_tau = 4096
@@ -72,7 +75,6 @@ Delta << SemiCircular(2*hopping)
 S.Delta_tau << Fourier(Delta)
 
 S.D0_tau << Q_tau
-lang_firsov = args.lang_firsov
 # Solve parameters
 Sz = 0.5 * ( n('up', 0) - n('down', 0) )
 solve_params = {
@@ -86,6 +88,7 @@ solve_params = {
     "measure_O_tau_min_ins": measure_O_tau_min_ins,
     # "perform_tail_fit": True,
     # "fit_max_moment": 3,
+    "dyn_n_l": dyn_n_l,
     "lang_firsov": lang_firsov
     }
 
