@@ -53,7 +53,7 @@ namespace triqs_cthyb {
     }
 
     // The ratio for the dynamic interaction
-    double dyn_term_ratio = -1 * data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2));
+    double dyn_term_ratio = data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2));
 
     // Proposal probability ratio
     mc_weight_t direct_probability  = (2.0 / (config.beta() * config.beta())) * (1.0 / data.dyn_op_list.size());

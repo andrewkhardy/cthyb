@@ -52,7 +52,7 @@ namespace triqs_cthyb {
     //delete_op_pair(tau2, dyn_pair.op2);
 
     // The ratio for the dynamic interaction (inverse of insertion)
-    double dyn_term_ratio = -1.0 / data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2));
+    double dyn_term_ratio = 1.0 / data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2));
 
     // Proposal probability ratio (inverse of insertion)
     // Proposal probability ratio
