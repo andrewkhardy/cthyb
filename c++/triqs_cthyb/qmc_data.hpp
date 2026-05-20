@@ -210,7 +210,7 @@ double compute_lang_firsov_ratio(
     }
   };
   for (auto const& [t, op] : inserted) background_interaction(op, t, -1.0);
-  for (auto const& [t, op] : removed)  background_interaction(op, t, +1.0);
+  for (auto const& [t, op] : removed)  background_interaction(op, t, -1.0);
 
   // 2. Cross-interactions within inserted/removed sets (each pair once, i < j)
   // Note: diagonal terms K(0) = 0 by the Dirichlet boundary condition.
@@ -220,7 +220,7 @@ double compute_lang_firsov_ratio(
         delta_W += sign * eval_K(ops[i].second, ops[j].second, ops[i].first, ops[j].first);
   };
   cross(inserted, -1.0);
-  cross(removed,  +1.0);
+  cross(removed,  -1.0);
 
   return std::exp(delta_W);
 }
