@@ -141,6 +141,9 @@ namespace triqs_cthyb {
     /// Minumum of operator insertions in: O_tau by insertion measure
     int measure_O_tau_min_ins = 10;
 
+    /// Measure density-density correlator from Lang-Firsov K coefficients
+    bool measure_D0_corr = false;
+
     /// Measure G^4(tau,tau',tau'') with three fermionic times.
     bool measure_G2_tau = false;
 
