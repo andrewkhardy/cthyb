@@ -209,30 +209,25 @@ double compute_lang_firsov_ratio(std::vector<std::pair<time_pt, op_desc>> const&
     }
   };
 
-  // for (auto const& p_in : inserted) {
-  //   interact_bg(p_in, 1.0);
-  //   delta_W += 0.5 * eval_K(p_in.second, p_in.second, p_in.first, p_in.first);
-  // }
-
-  // for (auto const& p_rm : removed) {
-  //   interact_bg(p_rm, -1.0);
-  //   delta_W -= 0.5 * eval_K(p_rm.second, p_rm.second, p_rm.first, p_rm.first);
-  // }
+  for (auto const& p_in : inserted) interact_bg(p_in, 1.0);
+  for (auto const& p_rm : removed) interact_bg(p_rm, -1.0);
 
   for (size_t i = 0; i < inserted.size(); ++i) {
     for (size_t j = i + 1; j < inserted.size(); ++j) {
-      delta_W += eval_K(inserted[i].second, inserted[j].second, inserted[i].first, inserted[j].first);
+      delta_W += 1.0 * eval_K(inserted[i].second, inserted[j].second, inserted[i].first, inserted[j].first);
     }
   }
 
   for (size_t i = 0; i < removed.size(); ++i) {
     for (size_t j = i + 1; j < removed.size(); ++j) {
-      delta_W -= eval_K(removed[i].second, removed[j].second, removed[i].first, removed[j].first);
+      delta_W -= 1.0 * eval_K(removed[i].second, removed[j].second, removed[i].first, removed[j].first);
     }
   }
 
   return std::exp(delta_W);
 }
+
+
 
     void update_sign() {
 
