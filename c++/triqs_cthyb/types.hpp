@@ -61,6 +61,10 @@ namespace triqs_cthyb {
   using G_iw_t           = block_gf<imfreq, matrix_valued>;
   using G_l_t            = block_gf<triqs::gfs::legendre, matrix_valued>;
 
+  // Density-density correlator (bosonic)
+  using Q_tau_t = block2_gf<imtime, matrix_valued>;
+  using Q_l_t   = block2_gf<triqs::gfs::legendre, matrix_valued>;
+
   // Two-particle Green's function types
   using imtime_cube_mesh_t = prod<imtime, imtime, imtime>;
   using G2_tau_t           = block2_gf<imtime_cube_mesh_t, tensor_valued<4>>;

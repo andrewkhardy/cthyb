@@ -47,6 +47,12 @@ namespace triqs_cthyb {
     /// General operator Green's function :math:`O(\tau)` in imaginary time.
     std::optional<gf<imtime, scalar_valued>> O_tau;
 
+    /// Density-density correlator :math:`Q(\tau) = \langle n(\tau) n(0) \rangle` in imaginary time.
+    std::optional<Q_tau_t> Q_tau;
+
+    /// Density-density correlator in Legendre representation.
+    std::optional<Q_l_t> Q_l;
+
     // -- Two-particle Green's functions
 
     /// Two-particle Green's function :math:`G^{(2)}(\tau_1,\tau_2,\tau_3)` (three Fermionic imaginary times)

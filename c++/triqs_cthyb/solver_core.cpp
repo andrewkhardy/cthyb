@@ -42,6 +42,7 @@
 #include "./measures/G_tau.hpp"
 #include "./measures/G_l.hpp"
 #include "./measures/O_tau_ins.hpp"
+#include "./measures/D0_corr.hpp"
 #include "./measures/perturbation_hist.hpp"
 #include "./measures/density_matrix.hpp"
 #include "./measures/average_sign.hpp"
@@ -708,6 +709,16 @@ namespace triqs_cthyb {
       qmc.add_measure(
          measure_O_tau_ins{O_tau, data, n_tau, O1, O2, params.measure_O_tau_min_ins, qmc.get_rng()},
          "O_tau insertion measure");
+    }
+
+    if (params.measure_D0_corr) {
+      if (!params.lang_firsov)
+        TRIQS_RUNTIME_ERROR << "measure_D0_corr requires lang_firsov=true";
+      if (data.K_n_size == 0)
+        TRIQS_RUNTIME_ERROR << "measure_D0_corr requires non-empty K_n (check D0_tau and dyn_n_l)";
+
+      qmc.add_measure(measure_D0_corr{Q_l, Q_tau, data, n_tau, params.dyn_n_l, gf_struct},
+                      "D0 density-density correlator measure");
     }
 
     if (params.measure_G_tau) {

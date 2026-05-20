@@ -190,7 +190,9 @@ double compute_lang_firsov_ratio(
                     time_pt const& tau1, time_pt const& tau2) -> double {
     int const a = linindex.at({op1.block_index, op1.inner_index});
     int const b = linindex.at({op2.block_index, op2.inner_index});
-    double t    = std::abs(double(tau1 - tau2));
+    double t = double(tau1 - tau2);
+    if (t < 0.0) t += beta;
+    if (t > beta) t -= beta;
     if (t > beta / 2.0) t = beta - t;
     triqs::utility::legendre_generator leg;
     leg.reset(2.0 * t / beta - 1.0);
@@ -209,7 +211,7 @@ double compute_lang_firsov_ratio(
       if (!is_removed) delta_W += sign * eval_K(op, op_bg, t, t_bg);
     }
   };
-  for (auto const& [t, op] : inserted) background_interaction(op, t, -1.0);
+  for (auto const& [t, op] : inserted) background_interaction(op, t, +1.0);
   for (auto const& [t, op] : removed)  background_interaction(op, t, -1.0);
 
   // 2. Cross-interactions within inserted/removed sets (each pair once, i < j)
@@ -219,7 +221,7 @@ double compute_lang_firsov_ratio(
       for (size_t j = i + 1; j < ops.size(); ++j)
         delta_W += sign * eval_K(ops[i].second, ops[j].second, ops[i].first, ops[j].first);
   };
-  cross(inserted, -1.0);
+  cross(inserted, +1.0);
   cross(removed,  -1.0);
 
   return std::exp(delta_W);
