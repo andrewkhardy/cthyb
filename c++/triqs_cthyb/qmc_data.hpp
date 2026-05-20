@@ -173,8 +173,8 @@ namespace triqs_cthyb {
     qmc_data(qmc_data const &)            = delete; // Member imp_trace is not copyable
     qmc_data &operator=(qmc_data const &) = delete;
 
-/// Ratio of dynamical MC weights w^dyn_loc for a proposed operator update (Eq. 11.22):
-///   exp{ Σ_{op pairs (α,β)} s_α s_β K_{i(α)j(β)}(τ̃_α - τ̃_β) }
+/// Ratio of dynamical MC weights w^dyn_loc for a proposed operator update:
+///   exp{ Σ_{op pairs (α,β)} s_α s_β K_{i(α)j(β)}(τ_α - τ_β) }
 double compute_lang_firsov_ratio(
     std::vector<std::pair<time_pt, op_desc>> const& inserted,
     std::vector<std::pair<time_pt, op_desc>> const& removed) const {
@@ -202,15 +202,15 @@ double compute_lang_firsov_ratio(
   };
 
   // 1. Interactions with the persistent background (config ops not being removed)
-  auto bg_interaction = [&](op_desc const& op, time_pt const& t, double sign) {
+  auto background_interaction = [&](op_desc const& op, time_pt const& t, double sign) {
     for (auto const& [t_bg, op_bg] : config) {
       bool is_removed = std::any_of(removed.begin(), removed.end(),
         [&](auto const& r) { return r.first == t_bg && r.second == op_bg; });
       if (!is_removed) delta_W += sign * eval_K(op, op_bg, t, t_bg);
     }
   };
-  for (auto const& [t, op] : inserted) bg_interaction(op, t, +1.0);
-  for (auto const& [t, op] : removed)  bg_interaction(op, t, -1.0);
+  for (auto const& [t, op] : inserted) background_interaction(op, t, +1.0);
+  for (auto const& [t, op] : removed)  background_interaction(op, t, -1.0);
 
   // 2. Cross-interactions within inserted/removed sets (each pair once, i < j)
   // Note: diagonal terms K(0) = 0 by the Dirichlet boundary condition.
@@ -219,8 +219,8 @@ double compute_lang_firsov_ratio(
       for (size_t j = i + 1; j < ops.size(); ++j)
         delta_W += sign * eval_K(ops[i].second, ops[j].second, ops[i].first, ops[j].first);
   };
-  cross(inserted, +1.0);
-  cross(removed,  -1.0);
+  cross(inserted, -1.0);
+  cross(removed,  +1.0);
 
   return std::exp(delta_W);
 }
