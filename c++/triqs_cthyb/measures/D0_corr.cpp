@@ -32,7 +32,7 @@ namespace triqs_cthyb {
     Q_l()   = 0.0;
     Q_tau() = 0.0;
 
-    alpha_n = nda::zeros<mc_weight_t>({n_lin, n_lin, n_leg});
+    alpha_n = nda::zeros<mc_weight_t>(std::array<long, 3>{n_lin, n_lin, n_leg});
   }
 
   void measure_D0_corr::accumulate(mc_weight_t s) {
@@ -66,7 +66,7 @@ namespace triqs_cthyb {
         double const weight = s * s1 * s2;
 
         for (int n = 0; n < n_leg; ++n) {
-          double val = weight * leg.next();
+          mc_weight_t val = weight * leg.next();
           alpha_n(a, b, n) += val;
           if (a != b) alpha_n(b, a, n) += val;
         }
@@ -84,7 +84,7 @@ namespace triqs_cthyb {
     double beta = data.config.beta();
     nda::matrix<double> M = build_M_matrix(n_leg, beta);
 
-    nda::array<mc_weight_t, 3> q_n = nda::zeros<mc_weight_t>({n_lin, n_lin, n_leg});
+    nda::array<mc_weight_t, 3> q_n = nda::zeros<mc_weight_t>(std::array<long, 3>{n_lin, n_lin, n_leg});
 
     for (int a = 0; a < n_lin; ++a) {
       for (int b = 0; b < n_lin; ++b) {
