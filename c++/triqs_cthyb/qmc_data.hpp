@@ -173,59 +173,58 @@ namespace triqs_cthyb {
     qmc_data(qmc_data const &)            = delete; // Member imp_trace is not copyable
     qmc_data &operator=(qmc_data const &) = delete;
 
-double compute_lang_firsov_ratio(std::vector<std::pair<time_pt, op_desc>> const& inserted, 
-                                 std::vector<std::pair<time_pt, op_desc>> const& removed) const {
+/// Ratio of dynamical MC weights w^dyn_loc for a proposed operator update (Eq. 11.22):
+///   exp{ Σ_{op pairs (α,β)} s_α s_β K_{i(α)j(β)}(τ̃_α - τ̃_β) }
+double compute_lang_firsov_ratio(
+    std::vector<std::pair<time_pt, op_desc>> const& inserted,
+    std::vector<std::pair<time_pt, op_desc>> const& removed) const {
+
   if (!use_lang_firsov || K_n_size == 0) return 1.0;
 
-  double delta_W = 0.0;
   double const beta = config.beta();
+  double delta_W    = 0.0;
 
-  auto eval_K = [&](auto const& op1, auto const& op2, auto const& tau1, auto const& tau2) {
-    int a = linindex.at({op1.block_index, op1.inner_index});
-    int b = linindex.at({op2.block_index, op2.inner_index});
-    double t_diff = double(tau1 - tau2);
-    if (t_diff < 0.0) t_diff += beta;
-    
-    triqs::utility::legendre_generator gen;
-    gen.reset(2.0 * t_diff / beta - 1.0);
+  // s_α s_β K_{i(α)j(β)}(τ_α - τ_β) reconstructed from Legendre coefficients.
+  // Time difference is folded into [0, β/2] to enforce K(τ) = K(β - τ).
+  auto eval_K = [&](op_desc const& op1, op_desc const& op2,
+                    time_pt const& tau1, time_pt const& tau2) -> double {
+    int const a = linindex.at({op1.block_index, op1.inner_index});
+    int const b = linindex.at({op2.block_index, op2.inner_index});
+    double t    = std::abs(double(tau1 - tau2));
+    if (t > beta / 2.0) t = beta - t;
+    triqs::utility::legendre_generator leg;
+    leg.reset(2.0 * t / beta - 1.0);
     double val = 0.0;
-    for (int n = 0; n < K_n_size; ++n) {
-      val += K_n[a][b][n] * gen.next();
-    }
-    double s1 = op1.dagger ? 1.0 : -1.0;
-    double s2 = op2.dagger ? 1.0 : -1.0;
+    for (int n = 0; n < K_n_size; ++n) val += K_n[a][b][n] * leg.next();
+    double const s1 = op1.dagger ? +1.0 : -1.0;
+    double const s2 = op2.dagger ? +1.0 : -1.0;
     return s1 * s2 * val;
   };
 
-  auto interact_bg = [&](auto const& pert, double action) {
+  // 1. Interactions with the persistent background (config ops not being removed)
+  auto bg_interaction = [&](op_desc const& op, time_pt const& t, double sign) {
     for (auto const& [t_bg, op_bg] : config) {
-      bool is_removed = false;
-      for (auto const& p_r : removed) {
-        if (p_r.first == t_bg && p_r.second == op_bg) { is_removed = true; break; }
-      }
-      if (!is_removed) {
-        delta_W += action * eval_K(pert.second, op_bg, pert.first, t_bg);
-      }
+      bool is_removed = std::any_of(removed.begin(), removed.end(),
+        [&](auto const& r) { return r.first == t_bg && r.second == op_bg; });
+      if (!is_removed) delta_W += sign * eval_K(op, op_bg, t, t_bg);
     }
   };
+  for (auto const& [t, op] : inserted) bg_interaction(op, t, +1.0);
+  for (auto const& [t, op] : removed)  bg_interaction(op, t, -1.0);
 
-  for (auto const& p_in : inserted) interact_bg(p_in, 1.0);
-  for (auto const& p_rm : removed) interact_bg(p_rm, -1.0);
-
-  for (size_t i = 0; i < inserted.size(); ++i) {
-    for (size_t j = i + 1; j < inserted.size(); ++j) {
-      delta_W += 1.0 * eval_K(inserted[i].second, inserted[j].second, inserted[i].first, inserted[j].first);
-    }
-  }
-
-  for (size_t i = 0; i < removed.size(); ++i) {
-    for (size_t j = i + 1; j < removed.size(); ++j) {
-      delta_W -= 1.0 * eval_K(removed[i].second, removed[j].second, removed[i].first, removed[j].first);
-    }
-  }
+  // 2. Cross-interactions within inserted/removed sets (each pair once, i < j)
+  // Note: diagonal terms K(0) = 0 by the Dirichlet boundary condition.
+  auto cross = [&](auto const& ops, double sign) {
+    for (size_t i = 0; i < ops.size(); ++i)
+      for (size_t j = i + 1; j < ops.size(); ++j)
+        delta_W += sign * eval_K(ops[i].second, ops[j].second, ops[i].first, ops[j].first);
+  };
+  cross(inserted, +1.0);
+  cross(removed,  -1.0);
 
   return std::exp(delta_W);
 }
+
 
 
 
