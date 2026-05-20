@@ -152,7 +152,7 @@ namespace triqs_cthyb {
           if (p.verbosity >= 2) {
             std::cerr << "WARNING: The Delta(tau) block number " << bl << " is not real in tau space\n";
             std::cerr << "WARNING: max(Im[Delta(tau)]) = " << max_element(abs(imag(delta[bl].data()))) << "\n";
-            std::cerr << "WARNING: Dissregarding the imaginary component in the calculation.\n";
+            std::cerr << "WARNING: Disregarding the imaginary component in the calculation.\n";
           }
         }
         auto delta_functor = delta_block_adaptor(real(delta[bl]));
@@ -210,7 +210,7 @@ double compute_lang_firsov_ratio(
     }
   };
   for (auto const& [t, op] : inserted) background_interaction(op, t, +1.0);
-  for (auto const& [t, op] : removed)  background_interaction(op, t, -1.0);
+  for (auto const& [t, op] : removed)  background_interaction(op, t, +1.0);
 
   // 2. Cross-interactions within inserted/removed sets (each pair once, i < j)
   // Note: diagonal terms K(0) = 0 by the Dirichlet boundary condition.
@@ -219,7 +219,7 @@ double compute_lang_firsov_ratio(
       for (size_t j = i + 1; j < ops.size(); ++j)
         delta_W += sign * eval_K(ops[i].second, ops[j].second, ops[i].first, ops[j].first);
   };
-  cross(inserted, -1.0);
+  cross(inserted, +1.0);
   cross(removed,  +1.0);
 
   return std::exp(delta_W);
