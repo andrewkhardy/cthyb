@@ -77,7 +77,7 @@ solve_params = {
     "length_cycle": 100,
     "n_warmup_cycles": 100000,
     "n_cycles": n_cycles,
-    "measure_F_tau": False,
+    "measure_F_tau": True,
     "measure_nn_tau": True,
     "measure_nn_nu": True,
     "measure_nn_static": True,
@@ -93,7 +93,7 @@ if mpi.is_master_node():
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.results.G_tau
         #A["Sigma_tau"] = S.results.Sigma_tau
-        #A['F_tau'] = S.results.F_tau
+        A['F_tau'] = S.results.F_tau
         A['nn_tau'] = S.results.nn_tau
         A['nn_nu'] = S.results.nn_nu
         A['nn'] = S.results.nn_static
