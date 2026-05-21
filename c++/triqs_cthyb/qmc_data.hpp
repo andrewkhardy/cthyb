@@ -206,8 +206,10 @@ double compute_lang_firsov_ratio(
   // 1. Interactions with the persistent background (config ops not being removed)
   auto background_interaction = [&](op_desc const& op, time_pt const& t, double sign) {
     for (auto const& [t_bg, op_bg] : config) {
-      bool is_removed = std::any_of(removed.begin(), removed.end(),
-        [&](auto const& r) { return r.first == t_bg && r.second == op_bg; });
+      bool is_removed = std::any_of(removed.begin(), removed.end(), [&](auto const& r) {
+        return r.first == t_bg && r.second.block_index == op_bg.block_index && r.second.inner_index == op_bg.inner_index
+           && r.second.dagger == op_bg.dagger;
+      });
       if (!is_removed) delta_W += sign * eval_K(op, op_bg, t, t_bg);
     }
   };
