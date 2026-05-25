@@ -63,6 +63,16 @@ c.add_member(c_name = "O_tau",
              read_only= True,
              doc = r"""General operator Green's function :math:`O(\tau)` in imaginary time.""")
 
+c.add_member(c_name = "Q_tau",
+             c_type = "std::optional<Q_tau_t>",
+             read_only= True,
+             doc = r"""Density-density correlator :math:`Q(\tau)` in imaginary time.""")
+
+c.add_member(c_name = "Q_l",
+             c_type = "std::optional<Q_l_t>",
+             read_only= True,
+             doc = r"""Density-density correlator in Legendre representation.""")
+
 c.add_member(c_name = "G2_tau",
              c_type = "std::optional<G2_tau_t>",
              read_only= True,
@@ -468,6 +478,11 @@ c.add_member(c_name = "measure_O_tau_min_ins",
              c_type = "int",
              initializer = """ 10 """,
              doc = r"""Minumum of operator insertions in: O_tau by insertion measure""")
+
+c.add_member(c_name = "measure_D0_corr",
+             c_type = "bool",
+             initializer = """ false """,
+             doc = r"""Measure density-density correlator from Lang-Firsov K coefficients""")
 
 c.add_member(c_name = "measure_G2_tau",
              c_type = "bool",

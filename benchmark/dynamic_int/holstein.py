@@ -89,7 +89,8 @@ solve_params = {
     # "perform_tail_fit": True,
     # "fit_max_moment": 3,
     "dyn_n_l": dyn_n_l,
-    "lang_firsov": lang_firsov
+    "lang_firsov": lang_firsov,
+    "measure_D0_corr": True
     }
 
 # Solve
@@ -106,6 +107,8 @@ if mpi.is_master_node():
         A["Sigma_iw"] = S.Sigma_iw
         #A["Sigma_tau"] = S.Sigma_tau
         A["K_n"] = S.K_n
+        A["Q_tau"] = S.Q_tau
+        A["Q_l"] = S.Q_l
         # A['F_tau'] = S.F_tau
         # A['nn_tau'] = S.nn_tau
         # A['nn'] = S.nn_static
