@@ -91,7 +91,7 @@ namespace triqs_cthyb {
         for (int n = 0; n < n_leg; ++n) {
           mc_weight_t sum = 0.0;
           for (int p = 0; p < n_leg; ++p) sum += M(p, n) * (alpha_n(a, b, p) / norm);
-          q_n(a, b, n) = sum / (2.0 * n + 1.0);
+          q_n(a, b, n) = sum / (beta * (2.0 * n + 1.0));
         }
       }
     }
