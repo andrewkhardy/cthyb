@@ -67,8 +67,12 @@ namespace triqs_cthyb {
 
         for (int n = 0; n < n_leg; ++n) {
           mc_weight_t val = weight * leg.next();
-          alpha_n(a, b, n) += val;
-          if (a != b) alpha_n(b, a, n) += val;
+          if (a == b) {
+            alpha_n(a, b, n) += 2.0 * val;
+          } else {
+            alpha_n(a, b, n) += val;
+            alpha_n(b, a, n) += val;
+          }
         }
       }
     }
