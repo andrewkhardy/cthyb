@@ -43,17 +43,23 @@ namespace triqs_cthyb {
     ops.reserve(data.config.size());
     for (auto const &entry : data.config) ops.push_back(entry);
 
-    if (ops.size() < 2) return;
+    if (ops.empty()) return;
 
     double beta = data.config.beta();
     triqs::utility::legendre_generator leg;
 
     for (size_t i = 0; i < ops.size(); ++i) {
+      auto const &[t1, op1] = ops[i];
+      int const a = data.linindex.at({op1.block_index, op1.inner_index});
+      leg.reset(-1.0);
+      for (int n = 0; n < n_leg; ++n) {
+        mc_weight_t val = s * leg.next();
+        alpha_n(a, a, n) += val;
+      }
+
       for (size_t j = i + 1; j < ops.size(); ++j) {
-        auto const &[t1, op1] = ops[i];
         auto const &[t2, op2] = ops[j];
 
-        int const a = data.linindex.at({op1.block_index, op1.inner_index});
         int const b = data.linindex.at({op2.block_index, op2.inner_index});
 
         double dt = std::abs(double(t1 - t2));
