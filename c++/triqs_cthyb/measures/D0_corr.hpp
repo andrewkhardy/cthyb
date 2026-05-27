@@ -27,6 +27,9 @@ namespace triqs_cthyb {
     Q_l_t::view_type Q_l;
     Q_tau_t::view_type Q_tau;
     nda::array<mc_weight_t, 3> alpha_n;
+    // Bug 5 fix: accumulate weighted occupancy per orbital to subtract
+    // the disconnected piece <n_a><n_b> in collect_results.
+    nda::array<mc_weight_t, 1> n_mean;
     int n_leg;
     int n_lin;
   };
