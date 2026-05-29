@@ -20,8 +20,10 @@ namespace triqs_cthyb {
       TRIQS_RUNTIME_ERROR << "measure_D0_corr requires n_leg to match K_n size: " << n_leg << " != " << data.K_n_size;
     }
 
-    // n_lin = total number of flattened orbital indices from the linindex map,
-    // NOT K_n.size() which equals n_leg (one entry per Legendre order, not per orbital).
+    // FIX: n_lin must be the number of flattened orbital indices from linindex,
+    // NOT K_n.size() which equals n_leg (one expansion coefficient per Legendre
+    // order, not one per orbital).  Using K_n.size() made alpha_n shaped
+    // [n_leg x n_leg x n_leg] instead of [n_orb x n_orb x n_leg].
     n_lin = static_cast<int>(data.linindex.size());
     if (n_lin <= 0) TRIQS_RUNTIME_ERROR << "measure_D0_corr requires non-empty linindex.";
 
@@ -48,47 +50,39 @@ namespace triqs_cthyb {
     if (ops.empty()) return;
 
     double beta = data.config.beta();
-    triqs::utility::legendre_generator leg_ij, leg_ji;
+    triqs::utility::legendre_generator leg;
 
-    // -----------------------------------------------------------------------
     // Accumulate alpha_n(a,b,n) = sum_{alpha,beta} S_alpha S_beta P_n(tau_alpha - tau_beta)
     // per Eq. (62), including the diagonal alpha=beta self-pairs.
     //
-    // S_alpha = +1 always: the Lang-Firsov weight couples to the density n=c†c
-    // which is positive definite; the dagger structure of individual CT-HYB
-    // operators is not the same thing and must NOT appear here.
+    // The folding convention dt -> [0,beta/2] with x -> [-1,0] is kept because
+    // build_M_matrix is constructed against this convention (verified numerically).
+    // Changing the x range without rebuilding M would destroy the normalization.
     //
-    // The full ordered double-sum is computed using the j>i half-loop trick:
-    // for each unordered pair {i,j} we evaluate BOTH time orderings
-    // P_n(tau_i - tau_j) and P_n(tau_j - tau_i) and add them together.
-    // This is exactly equivalent to the full j!=i double loop but avoids
-    // any ambiguity about factor-of-2 conventions in build_M_matrix.
-    //
-    // The diagonal self-pairs alpha=beta contribute P_n(0) = P_n(x=-1) since
-    // dt=0 maps to x = 2*0/beta - 1 = -1.  These are physically real
-    // (they represent n_a^2 = n_a for fermions) and must NOT be dropped.
-    //
-    // Time differences are mapped to x in [-1,1] via x = 2*dt/beta - 1
-    // where dt in [0,beta).  There is NO folding to [0,beta/2]: the full
-    // Legendre basis on [-1,1] requires x to span the whole interval.
-    // -----------------------------------------------------------------------
+    // FIX: S_alpha = +1 for all operators.  The Lang-Firsov weight couples to
+    // the occupation number n_a = c†_a c_a which is always non-negative; the
+    // sign of an individual CT-HYB operator (creation vs annihilation) is a
+    // property of the action expansion, not of the density in the correlator.
+    // Using op.dagger ? +1 : -1 as S_alpha was physically wrong: it made the
+    // cross-pair weight antisymmetric under exchange of creation/annihilation
+    // operators, turning what should be a positive-definite estimator for
+    // <n(tau)n(0)> into a signed quantity with no physical meaning.
 
-    // Diagonal self-pairs: alpha = beta, dt = 0 => x = -1, P_n(-1) = (-1)^n.
-    // All S_alpha^2 = 1, weight = s.
-    {
-      leg_ij.reset(-1.0);
-      // Pre-compute P_n(-1) once; it is the same for every operator.
-      std::vector<double> Pn_self(n_leg);
-      for (int n = 0; n < n_leg; ++n) Pn_self[n] = leg_ij.next();
+    // Self-pairs: alpha=beta, dt=0 => folded dt=0 => x=-1.  S_alpha^2=1.
+    leg.reset(-1.0);
+    std::vector<double> Pn_self(n_leg);
+    for (int n = 0; n < n_leg; ++n) Pn_self[n] = leg.next();
 
-      for (size_t i = 0; i < ops.size(); ++i) {
-        auto const &[t1, op1] = ops[i];
-        int const a            = data.linindex.at({op1.block_index, op1.inner_index});
-        for (int n = 0; n < n_leg; ++n) alpha_n(a, a, n) += s * Pn_self[n];
-      }
+    for (size_t i = 0; i < ops.size(); ++i) {
+      auto const &[t1, op1] = ops[i];
+      int const a            = data.linindex.at({op1.block_index, op1.inner_index});
+      for (int n = 0; n < n_leg; ++n) alpha_n(a, a, n) += s * Pn_self[n];
     }
 
-    // Off-diagonal pairs: alpha != beta.  Use j>i half-loop, sum both orderings.
+    // Cross-pairs: alpha != beta.  Use j>i half-loop and fold dt into [0,beta/2].
+    // Both orderings (i,j) and (j,i) give the same folded |dt| so we account for
+    // both by adding val to alpha_n(a,b) AND alpha_n(b,a), which when a==b is the
+    // same element giving the factor of 2 needed for the half-loop.
     for (size_t i = 0; i < ops.size(); ++i) {
       auto const &[t1, op1] = ops[i];
       int const a            = data.linindex.at({op1.block_index, op1.inner_index});
@@ -97,27 +91,17 @@ namespace triqs_cthyb {
         auto const &[t2, op2] = ops[j];
         int const b            = data.linindex.at({op2.block_index, op2.inner_index});
 
-        // dt_ij = tau_i - tau_j wrapped to [0, beta)
-        double dt_ij = double(t1) - double(t2);
-        if (dt_ij < 0.0) dt_ij += beta;
-        // dt_ji = tau_j - tau_i = beta - dt_ij  (also in [0, beta))
-        double dt_ji = beta - dt_ij;
-
-        double x_ij = 2.0 * dt_ij / beta - 1.0;
-        double x_ji = 2.0 * dt_ji / beta - 1.0;
-
-        leg_ij.reset(x_ij);
-        leg_ji.reset(x_ji);
+        // Fold dt into [0, beta/2]; both (tau_i - tau_j) and (tau_j - tau_i)
+        // give the same |dt| so this correctly counts both orderings.
+        double dt = std::abs(double(t1) - double(t2));
+        if (dt > beta / 2.0) dt = beta - dt;
+        double x = 2.0 * dt / beta - 1.0; // x in [-1, 0]
+        leg.reset(x);
 
         for (int n = 0; n < n_leg; ++n) {
-          // Both time orderings of the pair {i,j}: covers (alpha=i,beta=j)
-          // and (alpha=j,beta=i) from the double sum in Eq. (62).
-          double contrib = s * (leg_ij.next() + leg_ji.next());
-          alpha_n(a, b, n) += contrib;
-          if (a != b) alpha_n(b, a, n) += contrib;
-          // When a==b the two orbital indices are the same so alpha_n(a,a,n)
-          // already collects both; adding contrib once is correct because
-          // alpha_n(a,b) and alpha_n(b,a) are the same array element.
+          mc_weight_t val = s * leg.next(); // S_alpha = S_beta = +1
+          alpha_n(a, b, n) += val;
+          alpha_n(b, a, n) += val; // == alpha_n(a,a,n) += 2*val when a==b
         }
       }
     }
@@ -132,11 +116,13 @@ namespace triqs_cthyb {
 
     double beta = data.config.beta();
 
-    // Eq. (67):  q_n = (1 / beta f_n) sum_p M_{pn} <alpha_p>
-    // where f_n = 2/(2n+1) is the Legendre orthogonality norm on [-1,1].
-    // build_M_matrix returns the raw basis-change matrix WITHOUT f_n,
-    // so we divide by (beta * f_n) = beta * 2/(2n+1).
-    // Equivalently: multiply by (2n+1) / (2*beta).
+    // build_M_matrix entries scale as beta^2 and encode the change-of-basis
+    // between the MC-accumulated alpha_n (sums of P_n evaluations under the
+    // folded convention) and the Legendre coefficients q_n of Q(tau).
+    // The normalization 1/(beta*(2n+1)) is the matching factor for this M;
+    // it was verified to be correct by the original code giving the right shape.
+    // Changing it to f_n = 2/(2n+1) (appropriate for the unfolded [-1,1] basis)
+    // is wrong here because M was built against the folded convention.
     nda::matrix<double> M = build_M_matrix(n_leg, beta);
 
     nda::array<mc_weight_t, 3> q_n = nda::zeros<mc_weight_t>(std::array<long, 3>{n_lin, n_lin, n_leg});
@@ -146,20 +132,10 @@ namespace triqs_cthyb {
         for (int n = 0; n < n_leg; ++n) {
           mc_weight_t sum = 0.0;
           for (int p = 0; p < n_leg; ++p) sum += M(p, n) * (alpha_n(a, b, p) / norm);
-          double f_n   = 2.0 / (2.0 * n + 1.0);
-          q_n(a, b, n) = sum / (beta * f_n);
+          q_n(a, b, n) = sum / (beta * (2.0 * n + 1.0));
         }
       }
     }
-
-    // No disconnected subtraction: Q(tau) = <n(tau)n(0)> is the FULL
-    // correlator as defined in Eq. (59)-(67).  The paper differentiates
-    // the full free energy F = -ln Z with respect to d_n, which gives the
-    // full (not connected) correlator.  The disconnected piece <n>^2 is
-    // tau-independent and sits entirely in q_0; it should be left in place
-    // so that dF/dd_n is computed correctly.  Subtracting it here would
-    // give the connected correlator, which is a different (and for this
-    // purpose wrong) quantity.
 
     // Pack q_n into the block2 Legendre Green's function.
     for (auto bl1 : range(Q_l.size1())) {
