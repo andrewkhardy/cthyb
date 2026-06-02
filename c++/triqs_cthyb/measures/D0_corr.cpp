@@ -47,32 +47,23 @@ namespace triqs_cthyb {
 
     double beta = data.config.beta();
 
-    auto cross = [&](auto const& op1, auto const& op2, auto const& t1, auto const& t2) {
-      int const a = data.linindex.at({op1.block_index, op1.inner_index});
-      int const b = data.linindex.at({op2.block_index, op2.inner_index});
-      double const s1 = op1.dagger ? +1.0 : -1.0;
-      double const s2 = op2.dagger ? +1.0 : -1.0;
-
-      double dt = double(t1 - t2);
-      if (dt < 0.0) dt += beta;
-
-      triqs::utility::legendre_generator leg;
-      leg.reset(2.0 * dt / beta - 1.0);
-
-      for (int n = 0; n < n_leg; ++n) {
-        mc_weight_t val = s * s1 * s2 * leg.next();
-        alpha_n(a, b, n) += val;
-        
-        // The reverse ordering (t2 - t1) maps to -x.
-        // P_n(-x) = P_n(x) for even n, and -P_n(x) for odd n.
-        mc_weight_t val_rev = (n % 2 == 0) ? val : -val;
-        alpha_n(b, a, n) += val_rev;
-      }
-    };
-
     for (size_t i = 0; i < ops.size(); ++i) {
-      for (size_t j = i + 1; j < ops.size(); ++j) {
-        cross(ops[i].second, ops[j].second, ops[i].first, ops[j].first);
+      for (size_t j = 0; j < ops.size(); ++j) {
+        int const a = data.linindex.at({ops[i].second.block_index, ops[i].second.inner_index});
+        int const b = data.linindex.at({ops[j].second.block_index, ops[j].second.inner_index});
+        double const s1 = ops[i].second.dagger ? +1.0 : -1.0;
+        double const s2 = ops[j].second.dagger ? +1.0 : -1.0;
+
+        double dt = double(ops[i].first - ops[j].first);
+        if (dt < 0.0) dt += beta;
+        if (dt > beta) dt -= beta;
+
+        triqs::utility::legendre_generator leg;
+        leg.reset(2.0 * dt / beta - 1.0);
+
+        for (int n = 0; n < n_leg; ++n) {
+          alpha_n(a, b, n) += s * s1 * s2 * leg.next();
+        }
       }
     }
   }
@@ -95,7 +86,7 @@ namespace triqs_cthyb {
         for (int n = 0; n < n_leg; ++n) {
           mc_weight_t sum = 0.0;
           for (int p = 0; p < n_leg; ++p) sum += M(p, n) * (alpha_n(a, b, p) / norm);
-          q_n(a, b, n) = sum / (beta * (2.0 * n + 1.0));
+          q_n(a, b, n) = sum * (2.0 * n + 1.0) / (beta * beta);
         }
       }
     }
