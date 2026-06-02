@@ -76,6 +76,7 @@ namespace triqs_cthyb {
     for (size_t i = 0; i < ops.size(); ++i) {
       auto const &[t1, op1] = ops[i];
       int const a            = data.linindex.at({op1.block_index, op1.inner_index});
+      // S_alpha * S_alpha = 1, so no sign needed here
       for (int n = 0; n < n_leg; ++n) alpha_n(a, a, n) += s * Pn_self[n];
     }
 
@@ -87,9 +88,11 @@ namespace triqs_cthyb {
       auto const &[t1, op1] = ops[i];
       int const a            = data.linindex.at({op1.block_index, op1.inner_index});
 
+      double s1 = op1.dagger ? 1.0 : -1.0;
       for (size_t j = i + 1; j < ops.size(); ++j) {
         auto const &[t2, op2] = ops[j];
         int const b            = data.linindex.at({op2.block_index, op2.inner_index});
+        double s2 = op2.dagger ? 1.0 : -1.0;
 
         // Fold dt into [0, beta/2]; both (tau_i - tau_j) and (tau_j - tau_i)
         // give the same |dt| so this correctly counts both orderings.
@@ -99,7 +102,7 @@ namespace triqs_cthyb {
         leg.reset(x);
 
         for (int n = 0; n < n_leg; ++n) {
-          mc_weight_t val = s * leg.next(); // S_alpha = S_beta = +1
+          mc_weight_t val = s * s1 * s2 * leg.next(); // Restore operator signs!
           alpha_n(a, b, n) += val;
           alpha_n(b, a, n) += val; // == alpha_n(a,a,n) += 2*val when a==b
         }
@@ -132,7 +135,7 @@ namespace triqs_cthyb {
         for (int n = 0; n < n_leg; ++n) {
           mc_weight_t sum = 0.0;
           for (int p = 0; p < n_leg; ++p) sum += M(p, n) * (alpha_n(a, b, p) / norm);
-          q_n(a, b, n) = sum / (beta * (2.0 * n + 1.0));
+          q_n(a, b, n) = sum * (2.0 * n + 1.0) / (beta * beta);
         }
       }
     }
