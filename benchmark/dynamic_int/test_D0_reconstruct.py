@@ -113,12 +113,21 @@ q_n_test4 = M @ alpha_n
 alpha_true = (2.0 * np.arange(N_leg) + 1.0) / beta * alpha_n
 q_n_test5 = M @ alpha_true
 
+# Test 6: Code's formula but divided by beta instead of beta^2
+q_n_test6 = np.zeros(N_leg)
+for n in range(N_leg):
+    s = 0.0
+    for p in range(N_leg):
+        s += M[p, n] * alpha_n[p]
+    q_n_test6[n] = s * (2.0 * n + 1.0) / beta
+
 print("Exact q_0:", q_n_exact[0])
 print("Test 1 q_0:", q_n_test1[0])
 print("Test 2 q_0:", q_n_test2[0])
 print("Test 3 q_0:", q_n_test3[0])
 print("Test 4 q_0:", q_n_test4[0])
 print("Test 5 q_0:", q_n_test5[0])
+print("Test 6 q_0:", q_n_test6[0])
 
 print("\nExact q_1:", q_n_exact[1])
 print("Test 1 q_1:", q_n_test1[1])
@@ -126,6 +135,7 @@ print("Test 2 q_1:", q_n_test2[1])
 print("Test 3 q_1:", q_n_test3[1])
 print("Test 4 q_1:", q_n_test4[1])
 print("Test 5 q_1:", q_n_test5[1])
+print("Test 6 q_1:", q_n_test6[1])
 
 # Let's check the error for all N_leg
 err1 = np.max(np.abs(q_n_exact - q_n_test1))
@@ -133,9 +143,11 @@ err2 = np.max(np.abs(q_n_exact - q_n_test2))
 err3 = np.max(np.abs(q_n_exact - q_n_test3))
 err4 = np.max(np.abs(q_n_exact - q_n_test4))
 err5 = np.max(np.abs(q_n_exact - q_n_test5))
+err6 = np.max(np.abs(q_n_exact - q_n_test6))
 print("\nMax errors:")
 print("Test 1 (code):", err1)
 print("Test 2 (-code):", err2)
 print("Test 3 (M @ alpha):", err3)
 print("Test 4 (Pure M @ alpha):", err4)
 print("Test 5 (M @ alpha_true):", err5)
+print("Test 6 (beta normalization):", err6)

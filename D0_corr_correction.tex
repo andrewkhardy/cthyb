@@ -1,0 +1,71 @@
+\documentclass{article}
+\usepackage{amsmath, amssymb}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+
+\title{Correction to the \texttt{D0\_corr} Measurement in CT-HYB}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+The \texttt{D0\_corr} measurement is designed to reconstruct the density-density correlation function $Q(\tau) = \langle n(\tau)n(0) \rangle$ from the dynamical weights of the Lang-Firsov implementation. However, the original code produced a result with incorrect concavity (e.g., a hump instead of a bowl shape). This document explains the mathematical origin of this error and the necessary correction.
+
+\section{Mathematical Analysis}
+
+\subsection{Sign Convention of the Dynamical Weight}
+According to the original paper (Eq.~61), the dynamical weight is expressed as an exponential of the pairwise interaction:
+\begin{equation}
+w^{dyn}_{loc} = \exp\left( \sum_n k_n \sum_{\alpha,\beta} S_\alpha S_\beta P_n(\tau_\alpha - \tau_\beta) \right) = \exp\left( \sum_n k_n \alpha_n \right)
+\end{equation}
+where $\alpha_n = \sum_{\alpha,\beta} S_\alpha S_\beta P_n(\tau_\alpha - \tau_\beta)$.
+In Eq.~64 of the paper, the derivative of the free energy $F = -\ln Z$ with respect to the coefficients $k_n$ is stated as:
+\begin{equation}
+\frac{\partial F}{\partial k_n} = \langle \alpha_n \rangle \label{eq:wrong_sign}
+\end{equation}
+However, using the standard path integral definition $Z = \int \dots w^{dyn}_{loc}$, the derivative should be:
+\begin{equation}
+\frac{\partial F}{\partial k_n} = -\frac{1}{Z} \frac{\partial Z}{\partial k_n} = - \langle \alpha_n \rangle
+\end{equation}
+This missing minus sign in Eq.~\eqref{eq:wrong_sign} propagates into the subsequent extraction of the correlation coefficients $q_n$. 
+
+\subsection{Derivation of the Correlation Coefficients}
+Using the chain rule, the derivative of the free energy with respect to the retarded interaction coefficients $d_n$ is:
+\begin{equation}
+\frac{\partial F}{\partial d_n} = \sum_p \frac{\partial F}{\partial k_p} \frac{\partial k_p}{\partial d_n}
+\end{equation}
+Since $K(\tau)$ is related to the retarded interaction $D(\tau)$ by $K''(\tau) = D(\tau)$, we have the mapping $k_p = \sum_n M_{pn} d_n$, which implies $\frac{\partial k_p}{\partial d_n} = M_{pn}$. Thus:
+\begin{equation}
+\frac{\partial F}{\partial d_n} = -\sum_p M_{pn} \langle \alpha_p \rangle
+\end{equation}
+On the other hand, from the source action $S_{int} = -\frac{1}{2} \iint n(\tau) D(\tau-\tau') n(\tau') d\tau d\tau'$, taking the derivative with respect to $d_n$ gives:
+\begin{equation}
+\frac{\partial F}{\partial d_n} = \frac{1}{2} \iint \langle n(\tau) n(\tau') \rangle P_n(x_{\tau - \tau'}) d\tau d\tau' = \frac{\beta^2}{2(2n+1)} q_n
+\end{equation}
+Equating the two expressions for $\frac{\partial F}{\partial d_n}$ yields the corrected formula for $q_n$:
+\begin{equation}
+q_n = - \frac{2n+1}{\beta^2} \sum_p M_{pn} (2\langle \tilde{\alpha}_p \rangle) = - \frac{2n+1}{\beta^2} \sum_p M_{pn} \langle \alpha_p^{\text{code}} \rangle \label{eq:corrected_qn}
+\end{equation}
+where we have absorbed the factor of 2 into $\alpha_p^{\text{code}}$ which sums over all pairs (including $i > j$).
+
+\section{The Code Correction}
+The original implementation in \texttt{D0\_corr.cpp} missed the global minus sign derived in Eq.~\eqref{eq:corrected_qn}, computing instead $q_n = + \frac{2n+1}{\beta^2} \sum_p M_{pn} \langle \alpha_p^{\text{code}} \rangle$. 
+
+To fix the concavity, the coefficient computation in \texttt{collect\_results()} is modified to include the missing minus sign:
+\begin{verbatim}
+// In measures/D0_corr.cpp
+q_n(a, b, n) = -sum * (2.0 * n + 1.0) / (beta * beta);
+\end{verbatim}
+
+\section{Note on the $q_0$ Coefficient and Static Shift}
+It is worth noting that integration by parts $\iint n' n' P_n = - \iint n n P_n''$ fundamentally loses information about the average density (the constant of integration). 
+As a result, the reconstruction matrix $M_{pn}$ forces Dirichlet-like boundary conditions on the integrated kernel, meaning the formula above computes the \textit{fluctuating} part of the correlation function.
+The true $q_0$ mode should contain the static density-density correlation $\langle n_a n_b \rangle$:
+\begin{equation}
+q_0^{\text{true}} = q_0^{\text{dynamic}} + \langle n_a n_b \rangle = - \frac{1}{\beta^2} \sum_p M_{p0} \langle \alpha_p^{\text{code}} \rangle + \langle n_a n_b \rangle
+\end{equation}
+While the added minus sign perfectly restores the correct positive $q_2$ mode (and thus the bowl-shaped concavity), a fully quantitative absolute shift in $Q(\tau)$ requires ensuring the correct static expectation value $\langle n_a n_b \rangle$ is added to $q_0$.
+
+\end{document}
