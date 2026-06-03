@@ -101,7 +101,11 @@ namespace triqs_cthyb {
             for (int i2 = 0; i2 < Q_l(bl1, bl2).target_shape()[1]; ++i2) {
               int lin1 = data.linindex.at({static_cast<int>(bl1), i1});
               int lin2 = data.linindex.at({static_cast<int>(bl2), i2});
-              Q_l(bl1, bl2)[l](i1, i2) = q_n(lin1, lin2, l.index());
+              if (l.index() < n_leg) {
+                Q_l(bl1, bl2)[l](i1, i2) = q_n(lin1, lin2, l.index());
+              } else {
+                Q_l(bl1, bl2)[l](i1, i2) = 0.0;
+              }
             }
           }
         }
