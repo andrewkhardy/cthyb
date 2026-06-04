@@ -91,6 +91,18 @@ namespace triqs_cthyb {
       }
     }
 
+    // Enforce KMS symmetry: Q_ab(tau) = Q_ba(beta - tau) => q_n(a, b) = (-1)^n q_n(b, a)
+    nda::array<mc_weight_t, 3> q_n_symm = nda::zeros<mc_weight_t>(std::array<long, 3>{n_lin, n_lin, n_leg});
+    for (int a = 0; a < n_lin; ++a) {
+      for (int b = 0; b < n_lin; ++b) {
+        for (int n = 0; n < n_leg; ++n) {
+          double sign = (n % 2 == 0) ? 1.0 : -1.0;
+          q_n_symm(a, b, n) = 0.5 * (q_n(a, b, n) + sign * q_n(b, a, n));
+        }
+      }
+    }
+    q_n = q_n_symm;
+
     // Pack q_n into the block2 Legendre Green's function and reconstruct Q_tau
     for (auto bl1 : range(Q_l.size1())) {
       for (auto bl2 : range(Q_l.size2())) {
