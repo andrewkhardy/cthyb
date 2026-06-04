@@ -49,6 +49,7 @@ namespace triqs_cthyb {
 
     for (size_t i = 0; i < ops.size(); ++i) {
       for (size_t j = 0; j < ops.size(); ++j) {
+        if (i == j) continue; // do I need this line
         int const a = data.linindex.at({ops[i].second.block_index, ops[i].second.inner_index});
         int const b = data.linindex.at({ops[j].second.block_index, ops[j].second.inner_index});
         double const s1 = ops[i].second.dagger ? +1.0 : -1.0;
