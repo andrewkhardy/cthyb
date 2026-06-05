@@ -37,8 +37,8 @@ lang_firsov = args.lang_firsov
 dyn_n_l = args.dyn_n_l
 U = args.U
 L = args.L
-n_tau = 4096
-n_tau_bosonic = 4096
+n_tau = 4096*2
+n_tau_bosonic = 4096*2
 n_iw = 1025
 n_cycles = args.n_cycles
 measure_O_tau_min_ins = args.measure_O_tau
@@ -71,7 +71,7 @@ Q_iw = make_gf_from_fourier(Q_tau)
 g0 << SemiCircular(2*hopping)
 ivn = np.array([x.imag for x in Q_iw["up", "up"].mesh.values()])
 zero_freq = np.where(np.abs(ivn) < 1e-10)
-mu = U/2 + np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].data[zero_freq][0,0,0]))/4.0
+mu = U/2 + np.real((Q_iw["up", "up"].data[zero_freq][0,0,0]+Q_iw["up", "down"].data[zero_freq][0,0,0]))/2.0
 Delta << SemiCircular(2*hopping)
 S.Delta_tau << Fourier(Delta)
 
