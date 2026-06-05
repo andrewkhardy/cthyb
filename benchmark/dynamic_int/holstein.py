@@ -18,6 +18,7 @@ from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff
 from triqs_cthyb import Solver
+from triqs.atom_diag import trace_rho_op
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
 parser.add_argument('--L', type=float, default=1.0, help='L parameter')
@@ -90,7 +91,9 @@ solve_params = {
     # "fit_max_moment": 3,
     "dyn_n_l": dyn_n_l,
     "lang_firsov": lang_firsov,
-    "measure_D0_corr": True
+    "measure_D0_corr": True,
+    "measure_density_matrix": True,
+    "use_norm_as_weight": True,
     }
 
 # Solve
@@ -98,18 +101,30 @@ S.solve(**solve_params)
 
 # Save data
 if mpi.is_master_node():
+    # Compute SzSz constant offset from density matrix
+    rho = S.density_matrix
+    h_loc_diag = S.h_loc_diagonalization
+    n_up_val = trace_rho_op(rho, n("up", 0), h_loc_diag).real
+    n_dn_val = trace_rho_op(rho, n("down", 0), h_loc_diag).real
+    double_occ = trace_rho_op(rho, n("up", 0) * n("down", 0), h_loc_diag).real
+    SzSz_offset = 0.25 * (n_up_val + n_dn_val - 2.0 * double_occ)
+    print(f"n_up = {n_up_val:.6f}")
+    print(f"n_down = {n_dn_val:.6f}")
+    print(f"<n_up*n_down> = {double_occ:.6f}")
+    print(f"SzSz_offset = <Sz^2> = {SzSz_offset:.6f}")
+
     filename = f"/mnt/home/ahardy/ceph/CTHYB_Data/cthyb_lambda-{L}-U-{U}_b-{beta}_nw-{solve_params['n_cycles']}_mins-{solve_params['measure_O_tau_min_ins']}_lf={lang_firsov}.h5"
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         A["perturbation_order"] = S.perturbation_order
         A["average_sign"] = S.average_sign
-        A["O_tau"] = S.O_tau#[(Sz, Sz)], hopefully allows many measurements eventually? # why use this over G2 blocks? 
+        A["O_tau"] = S.O_tau
         A["Sigma_iw"] = S.Sigma_iw
-        #A["Sigma_tau"] = S.Sigma_tau
         A["K_n"] = S.K_n
         A["Q_tau"] = S.Q_tau
         A["Q_l"] = S.Q_l
-        # A['F_tau'] = S.F_tau
-        # A['nn_tau'] = S.nn_tau
-        # A['nn'] = S.nn_static
+        A["n_up"] = n_up_val
+        A["n_down"] = n_dn_val
+        A["double_occ"] = double_occ
+        A["SzSz_offset"] = SzSz_offset
     print(f"Results saved to {filename}")
