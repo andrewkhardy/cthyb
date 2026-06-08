@@ -89,6 +89,23 @@ if mpi.is_master_node():
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.results.G_tau
         A['F_tau'] = S.results.F_tau
+        
+        # Save density and double occupancy measurements
+        n_up_val = float(S.results.densities["up"][0])
+        n_dn_val = float(S.results.densities["down"][0])
+        double_occ = float(S.results.nn_static[("up", "down")][0, 0])
+        SzSz_offset = 0.25 * (n_up_val + n_dn_val - 2.0 * double_occ)
+        
+        A["n_up"] = n_up_val
+        A["n_down"] = n_dn_val
+        A["double_occ"] = double_occ
+        A["SzSz_offset"] = SzSz_offset
+        
+        print(f"n_up = {n_up_val:.6f}")
+        print(f"n_down = {n_dn_val:.6f}")
+        print(f"<n_up*n_down> = {double_occ:.6f}")
+        print(f"SzSz_offset = <Sz^2> = {SzSz_offset:.6f}")
+        print(f"Results saved to {filename}")
         A['nn_tau'] = S.results.nn_tau
         A['nn_nu'] = S.results.nn_nu
         A['nn'] = S.results.nn_static
