@@ -238,4 +238,25 @@ class Solver(SolverCore):
 
                 self.Sigma_iw = dyson(G0_iw=G0_iw, G_iw=self.G_iw)
 
+        if self.last_solve_parameters.get("measure_D0_corr", False) and self.last_solve_parameters.get("measure_density_matrix", False):
+            if hasattr(self, 'Q_tau') and self.Q_tau is not None and hasattr(self, 'Q_l') and self.Q_l is not None:
+                from triqs.operators import c, c_dag
+                from triqs.atom_diag import trace_rho_op
+                import numpy as np
+
+                for bl1, bl2 in self.Q_tau.indices:
+                    size1 = self.Q_tau[bl1, bl2].target_shape[0]
+                    size2 = self.Q_tau[bl1, bl2].target_shape[1]
+                    offset = np.zeros((size1, size2), dtype=float)
+                    for i1 in range(size1):
+                        for i2 in range(size2):
+                            if bl1 == bl2 and i1 == i2:
+                                op = c_dag(bl1, i1) * c(bl1, i1)
+                            else:
+                                op = c_dag(bl1, i1) * c(bl1, i1) * c_dag(bl2, i2) * c(bl2, i2)
+                            offset[i1, i2] = trace_rho_op(self.density_matrix, op, self.h_loc_diagonalization).real
+                    
+                    self.Q_l[bl1, bl2].data[0, :, :] += offset
+                    self.Q_tau[bl1, bl2].data[:] += offset
+
         return solve_status
