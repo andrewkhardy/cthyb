@@ -79,11 +79,43 @@ namespace triqs_cthyb {
 
   struct op_desc_pair_t { // NOLINT
     op_desc opL, opR;     // FIXME Need only block and inner index ? what about linear index ?
+
+    bool operator==(op_desc_pair_t const &op) const = default;
+    static std::string hdf5_format() { return "op_desc_pair_t"; }
+    friend void h5_write(h5::group g, std::string const &name, op_desc_pair_t const &op) {
+      auto gr = g.create_group(name);
+      h5::write_hdf5_format(gr, op);
+      h5::write(gr, "opL", op.opL);
+      h5::write(gr, "opR", op.opR);
+    }
+    friend void h5_read(h5::group g, std::string const &name, op_desc_pair_t &op) {
+      h5::group gr = g.open_group(name);
+      h5::assert_hdf5_format(gr, op);
+      h5::read(g, "opL", op.opL);
+      h5::read(g, "opR", op.opR);
+    }
   };
 
   struct bosonic_op_pair_t { // NOLINT
     op_desc_pair_t op1, op2;
     int f_index; // index of the function f associated to this pair
+
+    bool operator==(bosonic_op_pair_t const &op) const = default;
+    static std::string hdf5_format() { return "bosonic_op_pair_t"; }
+    friend void h5_write(h5::group g, std::string const &name, bosonic_op_pair_t const &op) {
+      auto gr = g.create_group(name);
+      h5::write_hdf5_format(gr, op);
+      h5::write(gr, "op1", op.op1);
+      h5::write(gr, "op2", op.op2);
+      h5::write(gr, "f_index", op.f_index);
+    }
+    friend void h5_read(h5::group g, std::string const &name, bosonic_op_pair_t &op) {
+      h5::group gr = g.open_group(name);
+      h5::assert_hdf5_format(gr, op);
+      h5::read(g, "op1", op.op1);
+      h5::read(g, "op2", op.op2);
+      h5::read(g, "f_index", op.f_index);
+    }
   };
   // FIXME : a list of this from user input
   // user intput : this list + the functions f ! stored in qmc_data
@@ -103,6 +135,23 @@ namespace triqs_cthyb {
     struct dyn_bosonic_pair_t { // NOLINT
       bosonic_op_pair_t ops;
       time_pt tau1, tau2;
+
+      bool operator==(dyn_bosonic_pair_t const &op) const = default;
+      static std::string hdf5_format() { return "dyn_bosonic_pair_t"; }
+      friend void h5_write(h5::group g, std::string const &name, dyn_bosonic_pair_t const &op) {
+        auto gr = g.create_group(name);
+        h5::write_hdf5_format(gr, op);
+        h5::write(gr, "ops", op.ops);
+        h5::write(gr, "tau1", op.tau1);
+        h5::write(gr, "tau2", op.tau2);
+      }
+      friend void h5_read(h5::group g, std::string const &name, dyn_bosonic_pair_t &op) {
+        h5::group gr = g.open_group(name);
+        h5::assert_hdf5_format(gr, op);
+        h5::read(g, "ops", op.ops);
+        h5::read(g, "tau1", op.tau1);
+        h5::read(g, "tau2", op.tau2);
+      }
     };
     using dyn_oplist_t = std::vector<dyn_bosonic_pair_t>;
 
@@ -146,16 +195,16 @@ namespace triqs_cthyb {
     /// Clear the configuration (remove all operators).
     void clear() { oplist_.clear(); }
 
-    oplist_t::iterator find(time_pt const &t) { return oplist_.find(t); }
-    oplist_t::const_iterator find(time_pt const &t) const { return oplist_.find(t); }
+    C2PY_IGNORE oplist_t::iterator find(time_pt const &t) { return oplist_.find(t); }
+    C2PY_IGNORE oplist_t::const_iterator find(time_pt const &t) const { return oplist_.find(t); }
 
-    oplist_t::iterator begin() { return oplist_.begin(); }
-    oplist_t::iterator end() { return oplist_.end(); }
-    oplist_t::const_iterator begin() const { return oplist_.begin(); }
-    oplist_t::const_iterator end() const { return oplist_.end(); }
+    C2PY_IGNORE oplist_t::iterator begin() { return oplist_.begin(); }
+    C2PY_IGNORE oplist_t::iterator end() { return oplist_.end(); }
+    C2PY_IGNORE oplist_t::const_iterator begin() const { return oplist_.begin(); }
+    C2PY_IGNORE oplist_t::const_iterator end() const { return oplist_.end(); }
 
     // Find the n-th operator associated to an hybridiation in the configuration with given block_index and dagger
-    time_pt find_nth_hybridization_op(int n, int block_index, bool dagger) {
+    C2PY_IGNORE time_pt find_nth_hybridization_op(int n, int block_index, bool dagger) {
       int i = 0;
       for (auto const &[tau, op] : oplist_)
         if (op.dagger == dagger && op.block_index == block_index && ++i == n + 1) return tau;
@@ -177,6 +226,7 @@ namespace triqs_cthyb {
       h5::write(gr, "beta", c.beta_);
       h5::write(gr, "id", c.id_);
       h5::write(gr, "oplist", c.oplist_);
+      if (c.dyn_oplist.size() > 0) h5::write(gr, "dyn_oplist", c.dyn_oplist);
     }
 
     /// Read a configuration from an hdf5 file.
@@ -187,14 +237,16 @@ namespace triqs_cthyb {
       auto beta   = h5::read<double>(gr, "beta");
       auto id     = h5::read<long>(gr, "id");
       auto oplist = h5::read<oplist_t>(gr, "oplist");
-      return configuration(beta, id, std::move(oplist));
+      auto c = configuration(beta, id, std::move(oplist));
+      if (gr.has_key("dyn_oplist")) h5::read(gr, "dyn_oplist", c.dyn_oplist);
+      return c;
     }
 
     /// Get the ID of the current configuration (for debug purposes).
-    long get_id() const { return id_; } // Get the id of the current configuration
+    C2PY_IGNORE long get_id() const { return id_; } // Get the id of the current configuration
 
     /// Finalize the configuration after a Monte Carlo move (increment the ID and save the configuration if needed).
-    void finalize() {
+    C2PY_IGNORE void finalize() {
       id_++;
 #ifdef SAVE_CONFIGS
       if (id < NUM_CONFIGS_TO_SAVE) h5_write(configs_hfile, "c_" + std::to_string(id), *this);
@@ -202,10 +254,10 @@ namespace triqs_cthyb {
     }
 
     //private:
-    double beta_;
-    long id_; // configuration id, for debug purposes
-    oplist_t oplist_;
-    dyn_oplist_t dyn_oplist;
+    C2PY_IGNORE double beta_;
+    C2PY_IGNORE long id_; // configuration id, for debug purposes
+    C2PY_IGNORE oplist_t oplist_;
+    C2PY_IGNORE dyn_oplist_t dyn_oplist;
 
 #ifdef SAVE_CONFIGS
     // HDF5 file to save configurations

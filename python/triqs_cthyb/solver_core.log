@@ -1,0 +1,40 @@
+-- [1;32mNote:  [0mFound Flatiron/h5 Storable concept. Will generate h5 code for all wrapped classes satisfying this concept.
+-- [1;33mRejecting: [0mtriqs_cthyb::solver_core::h5_read_construct [[C2PY_IGNORE]]
+-- [1;32mModule: [0mtriqs_cthyb.solver_core
+-- [1;32mEnum: [0mtriqs_cthyb::block_order
+-- [1;32mClass: [0mtriqs_cthyb::constr_parameters_t [Python: ConstrParametersT]
+-- [1;32m         -- [0mSynthesize constructor from pydict
+-- [1;32mClass: [0mtriqs_cthyb::solve_parameters_t [Python: SolveParametersT]
+-- [1;32m         -- [0mSynthesize constructor from pydict
+-- [1;32mClass: [0mtriqs_cthyb::solver_core [Python: SolverCore]
+-- [1;32m  Method: [0m__init__
+-- [1;32m        . [0mtriqs_cthyb::solver_core(const triqs_cthyb::constr_parameters_t& p)
+-- [1;32m  Method: [0msolve
+-- [1;32m        . [0mtriqs_cthyb::solver_core::solve(const triqs_cthyb::solve_parameters_t& p)
+-- [1;32m  Property: [0mD0_tau
+-- [1;32m  Property: [0mDelta_infty
+-- [1;32m  Property: [0mDelta_tau
+-- [1;32m  Property: [0mG0_iw
+-- [1;32m  Property: [0mJperp_tau
+-- [1;32m  Property: [0mauto_corr_time
+-- [1;32m  Property: [0mauto_corr_time_converged
+-- [1;32m  Property: [0maverage_order
+-- [1;32m  Property: [0maverage_sign
+-- [1;32m  Property: [0mdensity_matrix
+-- [1;32m  Property: [0mh_loc
+-- [1;32m  Property: [0mh_loc0
+-- [1;32m  Property: [0mh_loc_diagonalization
+-- [1;32m  Property: [0mhybridisation_is_complex
+-- [1;32m  Property: [0mlast_configuration
+-- [1;32m  Property: [0mlast_constr_parameters
+-- [1;32m  Property: [0mlast_solve_parameters
+-- [1;32m  Property: [0mlocal_hamiltonian_is_complex
+-- [1;32m  Property: [0mperformance_analysis
+-- [1;32m  Property: [0msolve_status
+-- [1;34m[Success] [0m
+--    Generated Python bindings: /home/andrewhardy/Documents/CCQ/cthyb_dyn/python/triqs_cthyb/solver_core.wrap.cxx [included in /home/andrewhardy/Documents/CCQ/cthyb_dyn/python/triqs_cthyb/solver_core.cpp]
+--              headers        : /home/andrewhardy/Documents/CCQ/cthyb_dyn/python/triqs_cthyb/solver_core.wrap.hxx [to be used with other modules, cf doc]
+-- Running clang-format ...
+-- Done.
+--    Generated the depfile /home/andrewhardy/Documents/CCQ/cthyb_dyn/build/python/triqs_cthyb/solver_core.cpp.d
+   
