@@ -1,8 +1,8 @@
 #!/bin/env python
 
 from h5 import *
-from triqs.gf import *
-from triqs.gf.gf_fnt import rebinning_tau
+from triqs.gfs import *
+from triqs.gfs.gf_fnt import rebinning_tau
 from triqs.plot.mpl_interface import plt, oplot
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -38,12 +38,12 @@ for use_blocks, use_qn in ((False,False),(True,False),(False,True),(True,True)):
             bn, i = mkind(spin)
             GF = rebinning_tau(arch['G_tau'][bn],500)
             if use_blocks:
-                oplot(GF, name=name + "," + {'up':"$\\uparrow\\uparrow$",'dn':"$\downarrow\downarrow$"}[spin])
+                oplot(GF, name=name + "," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
             else:
                 i = spin_names.index(i)
-                oplot(GF[i,i], name=name + "," + {'up':"$\\uparrow\\uparrow$",'dn':"$\downarrow\downarrow$"}[spin])
-            oplot(ed_arch[spin], name="ED," + {'up':"$\\uparrow\\uparrow$",'dn':"$\downarrow\downarrow$"}[spin])
-            oplot(pyed_arch[spin], name="PYED," + {'up':"$\\uparrow\\uparrow$",'dn':"$\downarrow\downarrow$"}[spin])
+                oplot(GF[i,i], name=name + "," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
+            oplot(ed_arch[spin], name="ED," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
+            oplot(pyed_arch[spin], name="PYED," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
 
         setup_fig()
         pp.savefig(plt.gcf())

@@ -755,7 +755,7 @@ namespace triqs_cthyb {
 
     qmc.add_measure(measure_average_sign{data, _average_sign}, "Average sign");
     qmc.add_measure(measure_average_order{data, _average_order}, "Average order");
-    qmc.add_measure(measure_auto_corr_time{data, _auto_corr_time}, "Auto-correlation time");
+    qmc.add_measure(measure_auto_corr_time{data, _auto_corr_time, _auto_corr_time_converged}, "Auto-correlation time");
 
     // --------------------------------------------------------------------------
 
@@ -769,7 +769,9 @@ namespace triqs_cthyb {
       sign *= det / std::abs(det);
     }
 
-    // Run! The empty (starting) configuration has sign = 1
+    // Run! The empty (starting) configuration has sign = 1.
+    // Note: mc_generic continues running after the requested cycles are done until all
+    // MPI ranks have finished (continue_after_ncycles_done defaults to true in triqs).
     _solve_status =
        qmc.warmup_and_accumulate(params.n_warmup_cycles, params.n_cycles, params.length_cycle,
                                  triqs::utility::clock_callback(params.max_time), sign);
@@ -781,7 +783,10 @@ namespace triqs_cthyb {
     if (params.verbosity >= 2) {
       std::cout << "Average sign: " << _average_sign << std::endl;
       std::cout << "Average order: " << _average_order << std::endl;
-      std::cout << "Auto-correlation time: " << _auto_corr_time << std::endl;
+      if (_auto_corr_time_converged)
+        std::cout << "Auto-correlation time: " << _auto_corr_time << " cycles" << std::endl;
+      else
+        std::cout << "Auto-correlation time: >~ " << _auto_corr_time << " cycles (not converged, run longer)" << std::endl;
     }
 
     // Copy local (real or complex) G_tau back to complex G_tau

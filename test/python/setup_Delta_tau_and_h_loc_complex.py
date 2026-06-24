@@ -6,11 +6,11 @@ Author: Hugo U.R. Strand """
 
 import numpy as np
 
-from triqs_cthyb import SolverCore
+from triqs_cthyb import Solver
 
 from triqs.operators import n, c, c_dag, Operator
 import triqs.utility.mpi as mpi
-from triqs.gf import Gf, MeshImFreq, MeshImTime, iOmega_n, inverse, Fourier
+from triqs.gfs import Gf, MeshImFreq, MeshImTime, iOmega_n, inverse, Fourier
 from h5 import HDFArchive
 from triqs.utility.h5diff import h5diff
 
@@ -22,12 +22,12 @@ target_shape = [2, 2]
 nw = 124
 nt = 6 * nw + 1
 
-S = SolverCore(beta=beta, gf_struct=gf_struct, n_iw=nw, n_tau=nt)
+S = Solver(beta=beta, gf_struct=gf_struct, n_iw=nw, n_tau=nt)
 
 h_int = n('0', 0) * n('0', 1)
 
-wmesh = MeshImFreq(beta=beta, S='Fermion', n_max=nw)
-tmesh = MeshImTime(beta=beta, S='Fermion', n_max=nt)
+wmesh = MeshImFreq(beta=beta, statistic='Fermion', n_iw=nw)
+tmesh = MeshImTime(beta=beta, statistic='Fermion', n_tau=nt)
 
 Delta_iw = Gf(mesh=wmesh, target_shape=target_shape)
 

@@ -5,7 +5,7 @@ from triqs.operators.util.U_matrix import U_matrix_slater
 from triqs.operators.util.hamiltonians import h_int_slater
 from triqs.operators.util.observables import *
 from h5 import HDFArchive
-from triqs.gf import *
+from triqs.gfs import *
 from triqs.atom_diag import quantum_number_eigenvalues
 #from atom_diag import * # quantum_number_eigenvalues
 from triqs_cthyb import *
@@ -47,12 +47,12 @@ H += 0.22*Sz
 H += 0.33*Lz
 
 # Construct the solver
-S = SolverCore(beta=beta, gf_struct=gf_struct, n_iw=1025, n_tau=10000)
+S = Solver(beta=beta, gf_struct=gf_struct, n_iw=1025, n_tau=10000)
 
 # Set G0(iw)
 S.G0_iw << inverse(iOmega_n)
 
-S.solve(h_int=H, **p)
+S.solve(h_int=H, perform_post_proc=False, **p)
 
 obs = {'E':H,'N':N,'S2':S2,'Sz':Sz,'L2':L2,'Lz':Lz} #,'LS':LS}
 res = dict ( (name, [item for v in quantum_number_eigenvalues(op,S.h_loc_diagonalization) for item in v ]) for (name,op) in obs.items())
