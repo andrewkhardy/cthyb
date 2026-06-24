@@ -65,6 +65,7 @@ namespace triqs_cthyb {
     h5_write(grp, "gf_struct", cp.gf_struct);
     h5_write(grp, "n_iw", cp.n_iw);
     h5_write(grp, "n_tau", cp.n_tau);
+    h5_write(grp, "n_tau_bosonic", cp.n_tau_bosonic);
     h5_write(grp, "n_l", cp.n_l);
     h5_write(grp, "delta_interface", cp.delta_interface);
   }
@@ -74,6 +75,7 @@ namespace triqs_cthyb {
     h5_read(grp, "beta", cp.beta);
     h5_read(grp, "n_iw", cp.n_iw);
     h5_read(grp, "n_tau", cp.n_tau);
+    h5::try_read(grp, "n_tau_bosonic", cp.n_tau_bosonic);
     h5_read(grp, "n_l", cp.n_l);
     h5::try_read(grp, "delta_interface", cp.delta_interface);
     triqs::gfs::h5_read_gf_struct(grp, "gf_struct", cp.gf_struct);
@@ -100,8 +102,10 @@ namespace triqs_cthyb {
     h5_write(grp, "move_double", sp.move_double);
     h5_write(grp, "use_trace_estimator", sp.use_trace_estimator);
     h5_write(grp, "lang_firsov", sp.lang_firsov);
+    h5_write(grp, "dyn_n_l", sp.dyn_n_l);
 
     h5_write(grp, "measure_G_tau", sp.measure_G_tau);
+    h5_write(grp, "measure_D0_corr", sp.measure_D0_corr);
     h5_write(grp, "measure_G_l", sp.measure_G_l);
     h5_write(grp, "measure_O_tau", sp.measure_O_tau);
     h5_write(grp, "measure_O_tau_min_ins", sp.measure_O_tau_min_ins);
@@ -168,8 +172,10 @@ namespace triqs_cthyb {
     h5_read(grp, "move_double", sp.move_double);
     h5_read(grp, "use_trace_estimator", sp.use_trace_estimator);
     h5::try_read(grp, "lang_firsov", sp.lang_firsov);
+    h5::try_read(grp, "dyn_n_l", sp.dyn_n_l);
 
     h5_read(grp, "measure_G_tau", sp.measure_G_tau);
+    h5::try_read(grp, "measure_D0_corr", sp.measure_D0_corr);
     h5_read(grp, "measure_G_l", sp.measure_G_l);
     if( grp.has_key("measure_O_tau") ) h5_read(grp, "measure_O_tau", sp.measure_O_tau);
     h5_read(grp, "measure_O_tau_min_ins", sp.measure_O_tau_min_ins);

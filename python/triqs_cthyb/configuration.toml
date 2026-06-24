@@ -1,4 +1,4 @@
 package_name = "triqs_cthyb"
 documentation = "MC configuration for triqs_cthyb."
 namespaces = "triqs_cthyb"
-match_names = "triqs_cthyb::(op_desc|configuration)"
+match_names = "triqs_cthyb::(op_desc|configuration|op_desc_pair_t|bosonic_op_pair_t|configuration::dyn_bosonic_pair_t)"

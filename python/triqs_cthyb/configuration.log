@@ -1,0 +1,45 @@
+-- [1;32mNote:  [0mFound Flatiron/h5 Storable concept. Will generate h5 code for all wrapped classes satisfying this concept.
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::configuration [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::find [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::find [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::begin [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::end [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::begin [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::end [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::find_nth_hybridization_op [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::h5_read_construct [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::get_id [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::finalize [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::beta_ [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::id_ [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::oplist_ [[C2PY_IGNORE]]
+-- [1;33mRejecting: [0mtriqs_cthyb::configuration::dyn_oplist [[C2PY_IGNORE]]
+-- [1;32mModule: [0mtriqs_cthyb.configuration
+-- [1;32mClass: [0mtriqs_cthyb::op_desc [Python: OpDesc]
+-- [1;32m         -- [0mSynthesize constructor from pydict
+-- [1;32mClass: [0mtriqs_cthyb::op_desc_pair_t [Python: OpDescPairT]
+-- [1;32m         -- [0mSynthesize constructor from pydict
+-- [1;32mClass: [0mtriqs_cthyb::bosonic_op_pair_t [Python: BosonicOpPairT]
+-- [1;32m         -- [0mSynthesize constructor from pydict
+-- [1;32mClass: [0mtriqs_cthyb::configuration [Python: Configuration]
+-- [1;32m  Method: [0m__init__
+-- [1;32m        . [0mtriqs_cthyb::configuration(double beta,long id)
+-- [1;32m  Method: [0mclear
+-- [1;32m        . [0mtriqs_cthyb::configuration::clear()
+-- [1;32m  Method: [0merase
+-- [1;32m        . [0mtriqs_cthyb::configuration::erase(const triqs::utility::time_pt& t)
+-- [38;5;212mDoc warning: [0mFunction triqs_cthyb::configuration::erase contains a doc string for parameter tau which is not an argument
+-- [1;32m  Method: [0minsert
+-- [1;32m        . [0mtriqs_cthyb::configuration::insert(triqs::utility::time_pt tau,triqs_cthyb::op_desc op)
+-- [1;32m  Method: [0mreplace
+-- [1;32m        . [0mtriqs_cthyb::configuration::replace(triqs::utility::time_pt tau,triqs_cthyb::op_desc op)
+-- [1;32m  Property: [0mbeta
+-- [1;32mClass: [0mtriqs_cthyb::configuration::dyn_bosonic_pair_t [Python: DynBosonicPairT]
+-- [1;32m         -- [0mSynthesize constructor from pydict
+-- [1;34m[Success] [0m
+--    Generated Python bindings: /home/andrewhardy/Documents/CCQ/cthyb_dyn/python/triqs_cthyb/configuration.wrap.cxx [included in /home/andrewhardy/Documents/CCQ/cthyb_dyn/python/triqs_cthyb/configuration.cpp]
+--              headers        : /home/andrewhardy/Documents/CCQ/cthyb_dyn/python/triqs_cthyb/configuration.wrap.hxx [to be used with other modules, cf doc]
+-- Running clang-format ...
+-- Done.
+--    Generated the depfile /home/andrewhardy/Documents/CCQ/cthyb_dyn/build/python/triqs_cthyb/configuration.cpp.d
+   
