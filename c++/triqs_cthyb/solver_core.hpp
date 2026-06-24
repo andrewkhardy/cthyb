@@ -27,6 +27,7 @@
 #include <triqs/stat/histograms.hpp>
 #include <triqs/atom_diag/atom_diag.hpp>
 #include <triqs/atom_diag/functions.hpp>
+#include <triqs/utility/macros.hpp>
 #include <optional>
 
 #include "types.hpp"
@@ -36,7 +37,7 @@
 
 namespace triqs_cthyb {
 
-  /// Core class of the cthyb solver
+  /// Continuous-time hybridization-expansion quantum Monte Carlo solver.
   class solver_core : public container_set_t {
 
     double beta;            // inverse temperature
@@ -52,7 +53,8 @@ namespace triqs_cthyb {
     histo_map_t _performance_analysis;                // Histograms used for performance analysis
     mc_weight_t _average_sign;                        // average sign of the QMC
     double _average_order;                            // average perturbation order
-    double _auto_corr_time;                           // Auto-correlation time
+    double _auto_corr_time;                           // Auto-correlation time in units of MC cycles
+    bool _auto_corr_time_converged = true;            // Whether the auto-correlation time estimate has saturated
     int _solve_status;                                // Status of the solve upon exit: 0 for clean termination, > 0 otherwise.
     std::optional<configuration> _last_configuration; // Final configuration of the run
 
@@ -72,21 +74,20 @@ namespace triqs_cthyb {
     container_set_t const &container_set() const { return static_cast<container_set_t const &>(*this); }
 
     public:
-    /// Parameters passed to the solver constructor (see also :ref:`constr_parameters`).
+    /// Parameters used for constructing the solver.
     constr_parameters_t constr_parameters;
 
-    /// Parameters passed to the solve function of the solver (see also :ref:`solve_parameters`).
+    /// Parameters passed to the solve method.
     solve_parameters_t solve_parameters;
 
     /// Analytic density-density bath coefficients K_n[a][b][n].
     std::vector<std::vector<std::vector<double>>> K_n;
 
     /**
-     * Construct a CTHYB solver
+     * Construct a CTHYB solver.
      *
-     * @param p Set of parameters specific to the CTHYB solver
+     * @param p Parameters used for constructing the solver.
      */
-    CPP2PY_ARG_AS_DICT
     solver_core(constr_parameters_t const &p);
 
     // Delete assignement operator because of const members
@@ -96,41 +97,32 @@ namespace triqs_cthyb {
     solver_core &operator=(solver_core &&p)      = default;
 
     /**
-     * Solve method that performs CTHYB calculation
+     * Solve the impurity problem.
      *
-     * @param p Set of parameters for the CTHYB calculation
+     * @param p Parameters controlling the Monte Carlo simulation and measurements.
      */
-    CPP2PY_ARG_AS_DICT
     void solve(solve_parameters_t const &p);
 
-    /// The local Hamiltonian of the problem: :math:`H_{loc}` used in the last call to ``solve()``.
-    many_body_op_t const &h_loc() const { return _h_loc; }
+    /// The local Hamiltonian \f$ H_{loc} \f$ used in the last solve.
+    many_body_op_t h_loc() const { return _h_loc; }
 
     /// The noninteracting part of the local Hamiltonian.
-    many_body_op_t const &h_loc0() const { return _h_loc0; }
+    many_body_op_t h_loc0() const { return _h_loc0; }
 
-    /// Set of parameters used in the construction of the ``solver_core`` class.
+    /// Parameters used for constructing the solver.
     constr_parameters_t last_constr_parameters() const { return constr_parameters; }
 
-    /// Set of parameters used in the last call to ``solve()``.
+    /// Parameters used in the last solve.
     solve_parameters_t last_solve_parameters() const { return solve_parameters; }
 
-    /// :math:`G_0^{-1}(i\omega_n = \infty)` in Matsubara Frequency.
+    /// \f$ G_0^{-1}(i\omega_n = \infty) \f$ in Matsubara frequencies.
     [[deprecated("Use h_loc0() instead.")]]
     std::vector<matrix<dcomplex>> Delta_infty() {
       if (delta_interface) TRIQS_RUNTIME_ERROR << "Delta_infty cannot be accessed when using the Delta interface";
       return Delta_infty_vec.value();
     }
 
-    /// Get a copy of the last container set.
-    // HACK TO GET CPP2PY TO WRAP THE container_set_t struct.
-    /*
-    CPP2PY_ARG_AS_DICT
-    void set_container_set(container_set_t &cs) { static_cast<container_set_t &>(*this) = cs; }
-    container_set_t last_container_set() { return static_cast<container_set_t>(*this); }
-    */
-
-    /// :math:`\Delta(\tau)` in imaginary time.
+    /// Hybridization function \f$ \Delta(\tau) \f$ in imaginary time.
     block_gf_view<imtime> Delta_tau() { return _Delta_tau; }
 
     /// Dynamical spin-spin interaction :math:`\mathcal{J}_\perp(\tau)`
@@ -139,7 +131,7 @@ namespace triqs_cthyb {
     /// Dynamical density-density interaction :math:`D_0(\tau)`
     block2_gf_view<imtime> D0_tau() { return inputs.D0t; }
 
-    /// :math:`G_0(i\omega)` in imaginary frequencies.
+    /// Non-interacting Green's function \f$ G_0(i\omega) \f$ in Matsubara frequencies.
     block_gf_view<imfreq> G0_iw() {
       if (delta_interface) TRIQS_RUNTIME_ERROR << "G0_iw cannot be accessed when using the Delta interface";
       return _G0_iw.value();
@@ -149,30 +141,33 @@ namespace triqs_cthyb {
     //block_gf_view<imtime> atomic_gf() const { return ::triqs_cthyb::atomic_gf(h_diag, beta, gf_struct, _Delta_tau[0].mesh().size()); }
 
     /// Accumulated density matrix.
-    std::vector<matrix_t> const &density_matrix() const { return _density_matrix; }
+    std::vector<matrix_t> density_matrix() const { return _density_matrix; }
 
-    /// Diagonalization of :math:`H_{loc}`.
+    /// Diagonalization of \f$ H_{loc} \f$.
     atom_diag const &h_loc_diagonalization() const { return h_diag; }
 
     /// Histograms related to the performance analysis.
-    histo_map_t const &get_performance_analysis() const { return _performance_analysis; }
+    C2PY_PROPERTY_GET(performance_analysis) histo_map_t get_performance_analysis() const { return _performance_analysis; }
 
     /// Monte Carlo average sign.
     mc_weight_t average_sign() const { return _average_sign; }
 
-    /// Average perturbation order
+    /// Average perturbation order.
     double average_order() const { return _average_order; }
 
-    /// Auto-correlation time
+    /// Auto-correlation time in units of MC cycles.
     double auto_corr_time() const { return _auto_corr_time; }
 
-    /// Status of the ``solve()`` on exit.
+    /// Whether the auto-correlation time estimate has saturated (false: it is only a lower bound, run longer).
+    bool auto_corr_time_converged() const { return _auto_corr_time_converged; }
+
+    /// Status of the solve on exit.
     int solve_status() const { return _solve_status; }
 
     /// Final configuration of the last solve call.
-    auto const &last_configuration() const { return _last_configuration; }
+    std::optional<configuration> last_configuration() const { return _last_configuration; }
 
-    /// is cthyb compiled with support for complex hybridization?
+    /// Is the solver compiled with support for complex hybridization?
     bool hybridisation_is_complex() const {
 #ifdef HYBRIDISATION_IS_COMPLEX
       return true;
@@ -181,7 +176,7 @@ namespace triqs_cthyb {
 #endif
     }
 
-    /// is cthyb compiled with support for complex local Hamiltonian
+    /// Is the solver compiled with support for a complex local Hamiltonian?
     bool local_hamiltonian_is_complex() const {
 #ifdef LOCAL_HAMILTONIAN_IS_COMPLEX
       return true;
@@ -190,7 +185,6 @@ namespace triqs_cthyb {
 #endif
     }
 
-    CPP2PY_IGNORE
     static std::string hdf5_format() { return "CTHYB_SolverCore"; }
 
     // Function that writes the solver_core to hdf5 file
@@ -213,14 +207,14 @@ namespace triqs_cthyb {
       h5_write(grp, "average_sign", s._average_sign);
       h5_write(grp, "average_order", s._average_order);
       h5_write(grp, "auto_corr_time", s._auto_corr_time);
+      h5_write(grp, "auto_corr_time_converged", s._auto_corr_time_converged);
       h5_write(grp, "solve_status", s._solve_status);
       h5_write(grp, "Delta_infty_vec", s.Delta_infty_vec);
       h5_write(grp, "K_n", s.K_n);
     }
 
     // Function that read all containers to hdf5 file
-    CPP2PY_IGNORE
-    static solver_core h5_read_construct(h5::group h5group, std::string subgroup_name) {
+    C2PY_IGNORE static solver_core h5_read_construct(h5::group h5group, std::string subgroup_name) {
       h5::group grp          = subgroup_name.empty() ? h5group : h5group.open_group(subgroup_name);
       auto constr_parameters = h5::h5_read<constr_parameters_t>(grp, "constr_parameters");
       auto s                 = solver_core{constr_parameters};
@@ -237,6 +231,7 @@ namespace triqs_cthyb {
       h5::try_read(grp, "average_sign", s._average_sign);
       h5::try_read(grp, "average_order", s._average_order);
       h5::try_read(grp, "auto_corr_time", s._auto_corr_time);
+      h5::try_read(grp, "auto_corr_time_converged", s._auto_corr_time_converged);
       h5::try_read(grp, "solve_status", s._solve_status);
       h5::try_read(grp, "Delta_infty_vec", s.Delta_infty_vec);
       h5::try_read(grp, "K_n", s.K_n);

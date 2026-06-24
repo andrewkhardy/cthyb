@@ -23,10 +23,14 @@ r"""
 DOC
 
 """
+# triqs::stat::histogram so that Solver.perturbation_order(_total) and performance_analysis can be used
+from triqs.stat.histograms import Histogram
 from .solver import Solver
-from .solver_core import SolverCore
-from .configuration import Configuration
+from .solver_core import SolverCore, ConstrParametersT, SolveParametersT
+from .configuration import Configuration, OpDesc
 from .util import estimate_nfft_buf_size
+from .solve_generic import solve_generic, TailFitParams, LegendreParams, CRMParams
 
-__all__ = ['Solver', 'SolverCore',
-           'estimate_nfft_buf_size']
+__all__ = ['Solver', 'SolverCore', 'ConstrParametersT', 'SolveParametersT', 'Configuration', "OpDesc",
+           'estimate_nfft_buf_size',
+           'solve_generic', 'TailFitParams', 'LegendreParams', 'CRMParams']

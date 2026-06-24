@@ -6,11 +6,11 @@ Author: Hugo U.R. Strand """
 
 import numpy as np
 
-from triqs_cthyb import SolverCore
+from triqs_cthyb import SolverCore, ConstrParametersT, SolveParametersT
 
 from triqs.operators import n, c, c_dag, Operator
 import triqs.utility.mpi as mpi
-from triqs.gf import Gf, MeshImFreq, MeshImTime, iOmega_n, inverse, Fourier
+from triqs.gfs import Gf, MeshImFreq, MeshImTime, iOmega_n, inverse, Fourier
 
 beta = 10.0
 
@@ -20,12 +20,12 @@ target_shape = [2, 2]
 nw = 48
 nt = 3 * nw
 
-S = SolverCore(beta=beta, gf_struct=gf_struct, n_iw=nw, n_tau=nt)
+S = SolverCore(ConstrParametersT(beta=beta, gf_struct=gf_struct, n_iw=nw, n_tau=nt))
 
 h_int = n('0', 0) * n('0', 1)
 
-wmesh = MeshImFreq(beta=beta, S='Fermion', n_max=nw)
-tmesh = MeshImTime(beta=beta, S='Fermion', n_max=nt)
+wmesh = MeshImFreq(beta=beta, statistic='Fermion', n_iw=nw)
+tmesh = MeshImTime(beta=beta, statistic='Fermion', n_tau=nt)
 
 Delta_iw = Gf(mesh=wmesh, target_shape=target_shape)
 
@@ -61,12 +61,12 @@ G0_iw << inverse( iOmega_n - Delta_iw - E_loc )
 
 S.G0_iw << G0_iw
 
-S.solve(
+S.solve(SolveParametersT(
     h_int = h_int,
     length_cycle = 10,
     n_warmup_cycles = 1,
     n_cycles = 1,
-    )
+    ))
 
 h_loc_ref = S.h_loc - h_int
 
