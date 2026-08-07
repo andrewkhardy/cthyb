@@ -268,6 +268,28 @@ namespace triqs_cthyb {
         nda::matrix<double> U_renorm  = U_matrix;
         nda::vector<double> mu_renorm = mu_vec;
 
+        // Lang-Firsov eligibility check.
+        //
+        // The polaron transform is only exact if the density operator n_a it
+        // displaces the boson by is individually conserved, [h_loc, n_a] = 0
+        // -- see the Double Expansion notes. This is a *symbolic* operator-algebra
+        // check on the local Hamiltonian itself, evaluated once against the
+        // Hamiltonian as it stood before any Lang-Firsov shift was applied (the
+        // shift terms are themselves built from density operators, which never
+        // change whether some other n_a commutes with h_loc, but checking against
+        // a fixed snapshot avoids any doubt about ordering).
+        //
+        // Deliberately NOT implemented via atom_diag::quantum_number_eigenvalues[_checked]:
+        // that route requires diagonalizing h_loc first and checking diagonality of
+        // the operator's matrix in whatever eigenbasis autopartition happens to
+        // choose, which gives false negatives for legitimately-commuting operators
+        // whenever h_loc has a degenerate eigenspace not resolved along n_a's own
+        // eigenvalues -- and, if fed a *non*-commuting operator as a qn_vector hint
+        // (exactly the case we need to detect and reject here), can corrupt memory
+        // during atom_diag construction. See minimal_repro_atom_diag_segfault.py.
+        many_body_op_t const h_loc_pre_shift = _h_loc;
+        auto commutes_with_hloc = [&](many_body_op_t const &op) { return (op * h_loc_pre_shift - h_loc_pre_shift * op).is_almost_zero(); };
+
         for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
           for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
             auto D0_bl = inputs.D0t(bl1, bl2);
@@ -308,6 +330,15 @@ namespace triqs_cthyb {
 
                 auto n_1 = c_dag<h_scalar_t>(bl1_name, i1) * c<h_scalar_t>(bl1_name, i1);
                 auto n_2 = c_dag<h_scalar_t>(bl2_name, i2) * c<h_scalar_t>(bl2_name, i2);
+
+                if (!commutes_with_hloc(n_1) || !commutes_with_hloc(n_2))
+                  TRIQS_RUNTIME_ERROR << "lang_firsov=true was requested, but the D0 channel coupling blocks (" << bl1_name << "," << i1 << ") and ("
+                                      << bl2_name << "," << i2
+                                      << ") is not Lang-Firsov eligible: the corresponding density operator does not commute with h_loc "
+                                         "(h_loc mixes this orbital with another, e.g. via an off-diagonal / hopping / crystal-field term). "
+                                         "The analytic Lang-Firsov resummation is only exact for density channels that are individually "
+                                         "conserved quantities of h_loc; use the stochastic double expansion (lang_firsov=false) for this "
+                                         "dynamical interaction instead.";
 
                 int lin1 = linindex.at({static_cast<int>(bl1), i1});
                 int lin2 = linindex.at({static_cast<int>(bl2), i2});
