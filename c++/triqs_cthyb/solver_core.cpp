@@ -219,14 +219,31 @@ namespace triqs_cthyb {
     // list unconditionally (classify_dyn_vertices never evaluates eligibility), so
     // this flag remains the master on/off switch it always was.
     //
+    // Before the per-vertex classification, look for a total-density decomposition:
+    // a group of density vertices that couples uniformly and completely to every
+    // off-diagonal orbital pair among them is exactly a coupling to N_total = sum_a
+    // n_a, which is Lang-Firsov-eligible whenever N_total commutes with h_loc -- even
+    // for a full Hubbard-Kanamori h_loc, where spin-flip/pair-hopping break each n_a
+    // individually. If found and eligible, that group is removed from the vertex list
+    // handled per-vertex below and handled once as a whole (see dynamical_interactions.hpp).
+    //
     // Lang-Firsov's K'(0) static shift must be applied here, before h_diag is built
     // below; the K_n kernel and the stochastic dyn_op_list/dyn_interactions catalog
     // for the remaining vertices are built later, once n_inner/histo_map etc. are
     // finalized.
     // ------------------------------------------------------------------
-    auto dyn_vertices            = collect_dyn_vertices(inputs.dyn_vertices, inputs.D0t, inputs.Jperpt, gf_struct);
-    auto classified_dyn_vertices = classify_dyn_vertices(dyn_vertices, _h_loc, fops, linindex, params.lang_firsov);
+    auto dyn_vertices = collect_dyn_vertices(inputs.dyn_vertices, inputs.D0t, inputs.Jperpt, gf_struct);
+
+    auto total_density_decomposition = find_total_density_decomposition(dyn_vertices, fops, linindex);
+    bool use_total_density_decomposition =
+       params.lang_firsov && total_density_decomposition.found
+       && (total_density_decomposition.total_density_op * _h_loc - _h_loc * total_density_decomposition.total_density_op).is_almost_zero();
+
+    auto const &vertices_for_classification = use_total_density_decomposition ? total_density_decomposition.remaining_vertices : dyn_vertices;
+    auto classified_dyn_vertices = classify_dyn_vertices(vertices_for_classification, _h_loc, fops, linindex, params.lang_firsov);
     apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
+    if (use_total_density_decomposition)
+      apply_total_density_shift(_h_loc, total_density_decomposition, beta, params.dyn_n_l, params.verbosity);
     // ------------------------------------------------------------------
 
 
@@ -303,6 +320,7 @@ namespace triqs_cthyb {
     std::vector<std::function<double(double)>> dyn_interactions;
 
     K_n = build_K_n(classified_dyn_vertices.lang_firsov, beta, linindex, fops, params.dyn_n_l);
+    if (use_total_density_decomposition) apply_total_density_kernel(total_density_decomposition, K_n, linindex, beta, params.dyn_n_l);
     fold_into_stochastic_catalog(classified_dyn_vertices.stochastic, fops, linindex, dyn_op_list, dyn_interactions);
 
     if (params.verbosity >= 2) std::cout << "Total number of dynamical interaction terms: " << dyn_op_list.size() << std::endl;

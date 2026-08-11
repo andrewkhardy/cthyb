@@ -65,7 +65,6 @@ S.Delta_tau << Fourier(Delta)
 # Spin-spin interaction (D0(tau) and Jperp(tau))
 # Sz*Sz decomposition: J*Sz_a*Sz_b*Q(tau) = (J/4)*Q(tau)*[n_up_a n_up_b - n_up_a n_down_b
 # - n_down_a n_up_b + n_down_a n_down_b], so same-spin gets +J/4*Q and opposite-spin -J/4*Q.
-# ctseg's Jperp_tau is a plain scalar Gf (unlike cthyb's, which is block-indexed).
 S.Jperp_tau << -(J) * Q_tau * i_1
 S.D0_tau["up", "up"]     << 0.25*J*Q_tau *i_2
 S.D0_tau["down", "down"] << 0.25*J*Q_tau *i_3

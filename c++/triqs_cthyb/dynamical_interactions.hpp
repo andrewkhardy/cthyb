@@ -103,4 +103,60 @@ namespace triqs_cthyb {
                                     std::map<std::pair<int, int>, int> const &linindex, std::vector<bosonic_op_pair_t> &dyn_op_list,
                                     std::vector<std::function<double(double)>> &dyn_interactions);
 
+  // ---------------------------------------------------------------------------------
+  // Total-density decomposition: classify_dyn_vertices above only ever accepts a
+  // density vertex n_a-n_b for Lang-Firsov if n_a and n_b *individually* commute with
+  // h_loc -- exactly what compute_lang_firsov_ratio's per-operator phase dressing
+  // needs (see qmc_data.hpp). That's overly conservative for a genuine Hubbard-Kanamori
+  // h_loc: spin-flip or pair-hopping terms break each n_a individually, even though the
+  // *total* density N_total = sum_a n_a is still conserved (both terms move particles
+  // between orbitals without changing the total count). When a group of vertices
+  // couples uniformly and completely to every off-diagonal pair among a set of
+  // orbitals, that whole group is exactly equivalent to a single coupling to
+  // N_total^2, and can be resummed by Lang-Firsov even when the individual vertices
+  // could not be -- see find_total_density_decomposition below for the precise
+  // condition and apply_total_density_shift/apply_total_density_kernel for how it's
+  // applied.
+  // ---------------------------------------------------------------------------------
+
+  struct total_density_decomposition_t {
+    bool found = false;
+    many_body_op_t total_density_op;           // N_total = sum of n_a over the orbitals in the group
+    std::vector<int> orbital_linear_indices;   // the orbitals a that make up the group
+    gf<imtime, scalar_valued> shared_coupling; // the single coupling D(tau) common to every off-diagonal pair
+    std::vector<dyn_vertex_t> remaining_vertices; // every input vertex not absorbed into the group
+  };
+
+  /// Look for a "sufficiently symmetric" subset of `vertices`: two or more
+  /// density-density vertices that (a) all share the exact same coupling D(tau), and
+  /// (b) together cover *every* off-diagonal (a,b) pair among the orbitals they touch
+  /// -- i.e. sum_{a != b in the group} D(tau) n_a(tau) n_b(0), complete and uniform.
+  /// Under those two conditions this sum is exactly D(tau) * (N_total^2 - N_total)
+  /// with N_total = sum_a n_a, regardless of whether the individual n_a commute with
+  /// h_loc. Does not check commutation with h_loc itself (the caller does that, once,
+  /// against total_density_op) -- this function is pure pattern-matching on the vertex
+  /// list. If no such group exists, `found` is false and `remaining_vertices` is just
+  /// `vertices` unchanged.
+  total_density_decomposition_t find_total_density_decomposition(std::vector<dyn_vertex_t> const &vertices,
+                                                                  fundamental_operator_set const &fops,
+                                                                  std::map<std::pair<int, int>, int> const &linindex);
+
+  /// Shift h_loc to account for the diagonal n_a^2 = n_a terms implicitly included when
+  /// apply_total_density_kernel below couples every (a,b) pair uniformly (including
+  /// a==b): without this correction the resummed interaction would be D(tau)*N_total^2
+  /// instead of the intended D(tau)*sum_{a!=b} n_a n_b = D(tau)*(N_total^2 - N_total).
+  /// Must run before h_diag is built from h_loc, alongside apply_lang_firsov_shift.
+  void apply_total_density_shift(many_body_op_t &h_loc, total_density_decomposition_t const &decomposition, double beta, int N_leg,
+                                 int verbosity);
+
+  /// Populate K_n[a][b] with `decomposition.shared_coupling`'s Legendre coefficients for
+  /// every pair (a,b) of orbitals in the group, including a==b -- qmc_data.hpp's
+  /// compute_lang_firsov_ratio dresses every individual operator insertion at orbital a
+  /// with a phase tied to K_n[a][b] against every other insertion at orbital b, so a
+  /// uniform grid here reproduces a single coupling to N_total exactly (see the module
+  /// notes above). Resizes K_n if it isn't large enough yet, so this can run whether or
+  /// not build_K_n has already populated other orbitals' entries.
+  void apply_total_density_kernel(total_density_decomposition_t const &decomposition, std::vector<std::vector<std::vector<double>>> &K_n,
+                                  std::map<std::pair<int, int>, int> const &linindex, double beta, int N_leg);
+
 } // namespace triqs_cthyb

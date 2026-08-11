@@ -15,22 +15,14 @@ MODULES="devenv9/clang-py3-mkl llvm/20"
 module purge
 module use /mnt/home/wentzell/opt/modules
 module load ${MODULES}
-<<<<<<< HEAD
 module load triqs/unstable
 ##################### run your code here #####################
 #../CTHYB/benchmark/
-#mpirun -n 120 python spin_spin_modified.py --J -1.0 --U 4.0 --i1 0.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0 --n_cycles 1000000 --measure_O_tau 5 --dyn_n_l 10
-mpirun -n 120 python spin_spin.py --J --1.0 --U 4.0 --i1 0.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0 --n_cycles 1000000 --measure_O_tau 15 --dyn_n_l 10
-#mpirun -n 120 python ctseg_spin_spin.py --J 1.0 --U 4.0  --i1 0.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0
-=======
-#source /mnt/home/ahardy/ccq-software-build/triqs/3_unst_nix2.3_llvm/installation/share/triqs/triqsvars.sh
-source /mnt/home/ahardy/ccq-software-build/triqs/.triqs_dev/bin/activate
-source /mnt/home/ahardy/ccq-software-build/triqs/3_development/installation/share/triqs/triqsvars.sh
-#source /mnt/home/ahardy/ccq-software-build/triqs/3_nu_nu/installation/share/triqs/triqsvars.sh
+# Alternate environment activation, if triqs/unstable module isn't what's wanted:
+#source /mnt/home/ahardy/ccq-software-build/triqs/.triqs_dev/bin/activate
+#source /mnt/home/ahardy/ccq-software-build/triqs/3_development/installation/share/triqs/triqsvars.sh
 
-##################### run your code here #####################
-#../CTHYB/benchmark/
-#mpirun python spin_spin.py --J 1.0 --U 4.0 --i1 0.0 --i2 0.0 --i3 0.0 --i4 0.0  --i5 0.0 --beta 10.0
-#mpirun python spin_spin.py --J 1.0 --U 4.0 --i1 0.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0
+#mpirun -n 120 python spin_spin_modified.py --J -1.0 --U 4.0 --i1 0.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0 --n_cycles 1000000 --measure_O_tau 5 --dyn_n_l 10
+#mpirun -n 120 python spin_spin.py --J --1.0 --U 4.0 --i1 0.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0 --n_cycles 1000000 --measure_O_tau 15 --dyn_n_l 10
+#mpirun -n 120 python ctseg_spin_spin.py --J 1.0 --U 4.0  --i1 0.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0
 mpirun python multiorb_spin_spin.py --J 1.0 --U 4.0 --i1 1.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0 --n_cycles 10000000 --measure_O_tau 10
->>>>>>> multiorbital
