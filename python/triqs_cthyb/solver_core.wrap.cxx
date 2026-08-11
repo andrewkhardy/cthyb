@@ -243,7 +243,7 @@ move_double : {par_13}, default=true
 
 use_trace_estimator : {par_14}, default=false
 
-lang_firsov : {par_15}, default=false
+lang_firsov : {par_15}, default=true
 
 dyn_n_l : {par_16}, default=50
 
@@ -403,7 +403,14 @@ constexpr auto _c2py_doc_member_18 = R"DOC(Verbosity level.)DOC";
 constexpr auto _c2py_doc_member_19 = R"DOC(Add shifting an operator as a move?)DOC";
 constexpr auto _c2py_doc_member_20 = R"DOC(Add double insertions as a move?)DOC";
 constexpr auto _c2py_doc_member_21 = R"DOC(Calculate the full trace or use an estimate?)DOC";
-constexpr auto _c2py_doc_member_22 = R"DOC(Analytically integrate out the bosonic density-density bath)DOC";
+constexpr auto _c2py_doc_member_22 = R"DOC(Use the analytic Lang-Firsov resummation for density-density dynamical-interaction
+vertices wherever it's valid (each vertex is checked individually against h_loc;
+anything ineligible -- off-diagonal vertices like Jperp, or density vertices that
+don't commute with h_loc -- automatically falls back to the stochastic double
+expansion in the same solve). Defaults to true since this is strictly safe: unlike
+the stochastic-only path, it never introduces a sign problem for the vertices it
+does handle. Set to false to force everything through the stochastic path instead
+(e.g. for debugging, or comparing the two methods against each other).)DOC";
 constexpr auto _c2py_doc_member_23 = R"DOC(Number of Legendre coefficients for Lang-Firsov trace and static shift)DOC";
 constexpr auto _c2py_doc_member_24 = R"DOC(Measure :math:`G(\tau)`? Hermiticity :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` is enforced.)DOC";
 constexpr auto _c2py_doc_member_25 = R"DOC(Measure :math:`G_l` (Legendre)? No hermiticity is enforced.)DOC";
@@ -653,7 +660,8 @@ static constexpr auto prop_doc_0   = R"DOC(Dynamical density-density interaction
 static constexpr auto prop_doc_1   = R"DOC(:math:`G_0^{-1}(i\omega_n = \infty)` in Matsubara frequencies.)DOC";
 static constexpr auto prop_doc_2   = R"DOC(Hybridization function :math:`\Delta(\tau)` in imaginary time.)DOC";
 static constexpr auto prop_doc_3   = R"DOC(Non-interacting Green's function :math:`G_0(i\omega)` in Matsubara frequencies.)DOC";
-static constexpr auto prop_doc_4   = R"DOC(Dynamical spin-flip interaction :math:`{J}_()` indexed by block pairs)DOC";
+static constexpr auto prop_doc_4   = R"DOC(Dynamical spin-flip interaction :math:`{J}_()`, a single global up/down
+coupling (matches ctseg). For per-orbital-pair or inter-orbital spin-flip, use add_dyn_vertex.)DOC";
 static constexpr auto prop_doc_5   = R"DOC(Auto-correlation time in units of MC cycles.)DOC";
 static constexpr auto prop_doc_6 = R"DOC(Whether the auto-correlation time estimate has saturated (false: it is only a lower bound, run longer).)DOC";
 static constexpr auto prop_doc_7 = R"DOC(Average perturbation order.)DOC";

@@ -7,12 +7,7 @@
 # Uses a simple analytical bath: Delta(iw) = 1/(iw - eps) + 1/(iw + eps)
 # and a bosonic propagator: J(iw) = 4*l^2*w0/(iw^2 - w0^2)
 #
-<<<<<<< HEAD
 # This mirrors the C++ spin_spin test but exercises the Python interface.
-=======
-# This mirrors the C++ spin_spin test but exercises the Python interface,
-# especially the block2_gf Jperp_tau and D0_tau assignment.
->>>>>>> multiorbital
 #
 # To regenerate spin_spin.ref.h5:
 #   1. Run this script once (produces spin_spin.out.h5)
@@ -24,7 +19,6 @@ from triqs.gf import *
 from triqs.operators import n
 from h5 import HDFArchive
 from triqs.utility.comparison_tests import *
-<<<<<<< HEAD
 from triqs_cthyb import Solver
 
 # Physical parameters (same as C++ test)
@@ -33,16 +27,6 @@ U       = 2.0
 mu      = U / 2.0   # half-filling
 epsilon = 0.3        # bath level
 l       = 0.5        # electron-boson coupling (weak enough for reasonable sign)
-=======
-from triqs_cthyb import SolverCore as Solver
-
-# Physical parameters (same as C++ test)
-beta    = 10.0
-U       = 4.0
-mu      = U / 2.0   # half-filling
-epsilon = 0.3        # bath level
-l       = 1.0        # electron-boson coupling
->>>>>>> multiorbital
 w0      = 1.0        # screening frequency
 
 # Discretization
@@ -50,7 +34,6 @@ n_iw          = 1025
 n_tau         = 10001
 n_tau_bosonic = 10001
 
-<<<<<<< HEAD
 # gf_struct — note 'down' before 'up' to test block ordering independence
 gf_struct = [('down', 1), ('up', 1)]
 
@@ -75,32 +58,11 @@ for iw in J0_iw.mesh:
     w = complex(iw)
     J0_iw[iw] = 4 * l**2 * w0 / (w**2 - w0**2)
     D0_iw[iw] = l**2 * w0 / (w**2 - w0**2)
-=======
-# gf_struct — note 'down' before 'up' (tests that Jperp finds the
-# non-zero diagonal block regardless of block ordering)
-gf_struct = [('down', 1), ('up', 1)]
-
-# Construct solver
-S = Solver(beta=beta, gf_struct=gf_struct, n_iw=n_iw, n_tau=n_tau,
-           n_tau_bosonic=n_tau_bosonic, delta_interface=True)
-
-# Hybridization: symmetric two-pole bath
-Delta_iw = GfImFreq(indices=[0], beta=beta, n_points=n_iw)
-Delta_iw << 1.0 / (iOmega_n - epsilon) + 1.0 / (iOmega_n + epsilon)
-S.Delta_tau << Fourier(Delta_iw)
-
-# Bosonic propagators
-J0_iw = GfImFreq(indices=[0], beta=beta, n_points=n_iw, statistic='Boson')
-D0_iw = GfImFreq(indices=[0], beta=beta, n_points=n_iw, statistic='Boson')
-J0_iw << 4 * l**2 * w0 / (iOmega_n**2 - w0**2)
-D0_iw << l**2 * w0 / (iOmega_n**2 - w0**2)
->>>>>>> multiorbital
 J0_tau = GfImTime(indices=[0], beta=beta, n_points=n_tau_bosonic, statistic='Boson')
 D0_tau = GfImTime(indices=[0], beta=beta, n_points=n_tau_bosonic, statistic='Boson')
 J0_tau << Fourier(J0_iw)
 D0_tau << Fourier(D0_iw)
 
-<<<<<<< HEAD
 # Jperp: spin-flip interaction (scalar gf at this interface)
 S.Jperp_tau << U/4* J0_tau
 
@@ -110,23 +72,11 @@ S.D0_tau["up", "up"]     << U/4* D0_tau
 S.D0_tau["down", "down"] << U/4* D0_tau
 S.D0_tau["up", "down"]   << -1.0 * U/4* D0_tau
 S.D0_tau["down", "up"]   << -1.0 * U/4*  D0_tau
-=======
-# Jperp: spin-flip interaction (stored in the "up"-"up" diagonal block pair)
-S.Jperp_tau["up", "up"] << J0_tau
-
-# D0: density-density retarded interaction
-# Sz*Sz decomposition: same-spin = +D0, opposite-spin = -D0
-S.D0_tau["up", "up"]     << D0_tau
-S.D0_tau["down", "down"] << D0_tau
-S.D0_tau["up", "down"]   << -1.0 * D0_tau
-S.D0_tau["down", "up"]   << -1.0 * D0_tau
->>>>>>> multiorbital
 
 # Solve parameters — fixed seed for reproducibility
 solve_params = {
     "h_int":             U * n("up", 0) * n("down", 0),
     "h_loc0":            -mu * (n("up", 0) + n("down", 0)),
-<<<<<<< HEAD
     "n_cycles":          200000,
     "n_warmup_cycles":   20000,
     "length_cycle":      75,
@@ -137,14 +87,6 @@ solve_params = {
     "fit_max_moment": 3,
     "fit_min_w": 1.2,
     "fit_max_w": 3.0
-=======
-    "n_cycles":          10000,
-    "n_warmup_cycles":   1000,
-    "length_cycle":      50,
-    "random_seed":       123 * mpi.rank + 567,
-    "random_name":       "",
-    "measure_pert_order": True,
->>>>>>> multiorbital
 }
 
 S.solve(**solve_params)
@@ -154,20 +96,13 @@ if mpi.is_master_node():
     with HDFArchive("spin_spin.out.h5", 'w') as A:
         A["G_tau"] = S.G_tau
         A["perturbation_order"] = S.perturbation_order
-<<<<<<< HEAD
         A["Delta_tau"] = S.Delta_tau
         A["G_iw"] = S.G_iw
         A["G_iw_raw"] = S.G_iw_raw
         A["Sigma_iw"] = S.Sigma_iw
         A["Sigma_iw_raw"] = S.Sigma_iw_raw
-=======
-
->>>>>>> multiorbital
 # Compare against reference
 if mpi.is_master_node():
     with HDFArchive("spin_spin.ref.h5", 'r') as A:
         assert_block_gfs_are_close(A["G_tau"], S.G_tau)
-<<<<<<< HEAD
         print("G_tau matches reference")
-=======
->>>>>>> multiorbital

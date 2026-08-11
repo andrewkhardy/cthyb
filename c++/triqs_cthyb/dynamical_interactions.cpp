@@ -21,6 +21,7 @@
 #include "./dynamical_interactions.hpp"
 #include "./math_utils.hpp"
 #include <triqs/utility/exceptions.hpp>
+#include <set>
 
 namespace triqs_cthyb {
 
@@ -50,6 +51,16 @@ namespace triqs_cthyb {
     }
 
     double eval_scalar_gf(gf<imtime, scalar_valued> const &g, double tau) { return real(g[closest_mesh_pt(tau)]); }
+
+    // Are two couplings numerically the same curve? Used to detect a "sufficiently
+    // symmetric" set of vertices that all share one physical coupling (see
+    // find_total_density_decomposition).
+    bool gf_close(gf<imtime, scalar_valued> const &g1, gf<imtime, scalar_valued> const &g2, double threshold = 1.e-10) {
+      if (g1.mesh().size() != g2.mesh().size()) return false;
+      for (auto const &tau_pt : g1.mesh())
+        if (std::abs(g1[tau_pt] - g2[tau_pt]) > threshold) return false;
+      return true;
+    }
 
     int count_orbitals(std::map<std::pair<int, int>, int> const &linindex) {
       int n = 0;
@@ -321,6 +332,111 @@ namespace triqs_cthyb {
       dyn_interactions.emplace_back([coupling_copy](double tau) -> double { return eval_scalar_gf(coupling_copy, tau); });
       dyn_op_list.push_back({bp1, bp2, f_index});
     }
+  }
+
+  // -----------------------------------------------------------------------------------
+
+  total_density_decomposition_t find_total_density_decomposition(std::vector<dyn_vertex_t> const &vertices,
+                                                                  fundamental_operator_set const &fops,
+                                                                  std::map<std::pair<int, int>, int> const &linindex) {
+    total_density_decomposition_t result;
+    result.remaining_vertices = vertices;
+
+    // Only genuine density-density vertices n_a-n_b (a != b) can be part of a
+    // total-density group; a==b would be a diagonal self-term, not an off-diagonal pair.
+    std::vector<size_t> candidate_indices;
+    for (size_t i = 0; i < vertices.size(); ++i) {
+      auto bp1 = extract_bilinear(vertices[i].op1, fops, linindex, "op1");
+      auto bp2 = extract_bilinear(vertices[i].op2, fops, linindex, "op2");
+      if (is_density_bilinear(bp1) && is_density_bilinear(bp2) && bp1.opL.linear_index != bp2.opL.linear_index) candidate_indices.push_back(i);
+    }
+    if (candidate_indices.size() < 2) return result; // need a genuine group, not a single pair
+
+    // "Sufficiently symmetric" means every candidate shares the exact same coupling --
+    // one boson coupled uniformly to every orbital's density, not a mix (e.g. Kanamori's
+    // U and U' being different values would fail this, and correctly falls back to the
+    // per-vertex path in classify_dyn_vertices instead).
+    gf<imtime, scalar_valued> const &shared_coupling = vertices[candidate_indices.front()].coupling;
+    for (auto i : candidate_indices)
+      if (!gf_close(vertices[i].coupling, shared_coupling)) return result;
+
+    // The orbitals touched, and the complete set of off-diagonal pairs among them --
+    // if any pair (a,b) with a,b both in the group is missing, the group isn't complete
+    // and substituting N_total^2 would add coupling for a pair the user never asked for.
+    std::set<int> orbitals;
+    std::set<std::pair<int, int>> pairs_present;
+    for (auto i : candidate_indices) {
+      auto bp1 = extract_bilinear(vertices[i].op1, fops, linindex, "op1");
+      auto bp2 = extract_bilinear(vertices[i].op2, fops, linindex, "op2");
+      orbitals.insert(bp1.opL.linear_index);
+      orbitals.insert(bp2.opL.linear_index);
+      pairs_present.insert({bp1.opL.linear_index, bp2.opL.linear_index});
+    }
+    size_t expected_pair_count = orbitals.size() * (orbitals.size() - 1);
+    if (pairs_present.size() != expected_pair_count) return result;
+
+    // Build N_total = sum of n_a over the group (reusing each vertex's own op1, one
+    // representative per orbital, rather than reconstructing c_dag/c from indices), and
+    // remove the absorbed vertices from the residual list.
+    many_body_op_t total_density_op;
+    std::set<int> seen_orbitals;
+    for (auto i : candidate_indices) {
+      auto bp1 = extract_bilinear(vertices[i].op1, fops, linindex, "op1");
+      if (seen_orbitals.insert(bp1.opL.linear_index).second) total_density_op = total_density_op + vertices[i].op1;
+    }
+
+    result.found                  = true;
+    result.total_density_op       = total_density_op;
+    result.orbital_linear_indices = std::vector<int>(orbitals.begin(), orbitals.end());
+    result.shared_coupling        = shared_coupling;
+    result.remaining_vertices.clear();
+    std::set<size_t> candidate_set(candidate_indices.begin(), candidate_indices.end());
+    for (size_t i = 0; i < vertices.size(); ++i)
+      if (!candidate_set.count(i)) result.remaining_vertices.push_back(vertices[i]);
+    return result;
+  }
+
+  // -----------------------------------------------------------------------------------
+
+  void apply_total_density_shift(many_body_op_t &h_loc, total_density_decomposition_t const &decomposition, double beta, int N_leg,
+                                 int verbosity) {
+    int n_pt_tau = decomposition.shared_coupling.mesh().size();
+    auto d_n =
+       fit_legendre_coeffs(n_pt_tau, beta, [&decomposition](double tau) { return eval_scalar_gf(decomposition.shared_coupling, tau); }, N_leg);
+    double d0       = d_n(0);
+    double d1       = (N_leg > 1) ? d_n(1) : 0.0;
+    double Kprime_0 = -1.0 * beta * (d0 - d1 / 3.0);
+
+    // apply_total_density_kernel below couples every (a,b) pair uniformly, including
+    // a==b, which resums to D(tau)*N_total^2 = D(tau)*(N_total + sum_{a!=b} n_a n_b)
+    // (using n_a^2 = n_a). Only the sum_{a!=b} part is wanted, so shift h_loc by +K'(0)
+    // (opposite sign from apply_lang_firsov_shift's usual -0.5*K'(0)) to cancel the
+    // extra D(tau)*N_total term.
+    h_loc = h_loc + 0.5 * Kprime_0 * decomposition.total_density_op;
+
+    if (verbosity >= 2)
+      std::cout << "Lang-Firsov total-density decomposition: K'(0)=" << Kprime_0 << " diagonal correction for N_total = "
+                << decomposition.total_density_op << std::endl;
+  }
+
+  // -----------------------------------------------------------------------------------
+
+  void apply_total_density_kernel(total_density_decomposition_t const &decomposition, std::vector<std::vector<std::vector<double>>> &K_n,
+                                  std::map<std::pair<int, int>, int> const &linindex, double beta, int N_leg) {
+    auto M_matrix = build_M_matrix(N_leg, beta);
+    int n_pt_tau  = decomposition.shared_coupling.mesh().size();
+    auto d_n =
+       fit_legendre_coeffs(n_pt_tau, beta, [&decomposition](double tau) { return eval_scalar_gf(decomposition.shared_coupling, tau); }, N_leg);
+    nda::vector<double> k_n_vec = M_matrix * d_n;
+
+    int max_linindex = 0;
+    for (auto const &pair : linindex) max_linindex = std::max(max_linindex, pair.second);
+    if (static_cast<int>(K_n.size()) < max_linindex + 1)
+      K_n.resize(max_linindex + 1, std::vector<std::vector<double>>(max_linindex + 1, std::vector<double>(N_leg, 0.0)));
+
+    for (int a : decomposition.orbital_linear_indices)
+      for (int b : decomposition.orbital_linear_indices)
+        for (int n = 0; n < N_leg; ++n) K_n[a][b][n] = k_n_vec(n);
   }
 
 } // namespace triqs_cthyb

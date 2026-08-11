@@ -113,8 +113,15 @@ namespace triqs_cthyb {
     /// Calculate the full trace or use an estimate?
     bool use_trace_estimator = false;
 
-    /// Analytically integrate out the bosonic density-density bath
-    bool lang_firsov = false;
+    /// Use the analytic Lang-Firsov resummation for density-density dynamical-interaction
+    /// vertices wherever it's valid (each vertex is checked individually against h_loc;
+    /// anything ineligible -- off-diagonal vertices like Jperp, or density vertices that
+    /// don't commute with h_loc -- automatically falls back to the stochastic double
+    /// expansion in the same solve). Defaults to true since this is strictly safe: unlike
+    /// the stochastic-only path, it never introduces a sign problem for the vertices it
+    /// does handle. Set to false to force everything through the stochastic path instead
+    /// (e.g. for debugging, or comparing the two methods against each other).
+    bool lang_firsov = true;
 
     /// Number of Legendre coefficients for Lang-Firsov trace and static shift
     int dyn_n_l = 50;

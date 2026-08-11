@@ -78,7 +78,7 @@ S.Delta_tau << Fourier(Delta)
 # plt.figure()
 # oplot(Q_tau)
 # plt.show()
-S.Jperp_tau["up", "up"] << -(J) * Q_tau * i_1
+S.Jperp_tau << -(J) * Q_tau * i_1
 S.D0_tau["up", "up"] << 0.25*J*Q_tau *i_2
 S.D0_tau["down", "down"] << 0.25*J*Q_tau *i_3
 S.D0_tau["up", "down"] << -0.25*J*Q_tau * i_4

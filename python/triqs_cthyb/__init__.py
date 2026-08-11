@@ -30,7 +30,9 @@ from .solver_core import SolverCore, ConstrParametersT, SolveParametersT
 from .configuration import Configuration, OpDesc
 from .util import estimate_nfft_buf_size
 from .solve_generic import solve_generic, TailFitParams, LegendreParams, CRMParams
+from .dynamical_interactions import kanamori_dynamical_vertices
 
 __all__ = ['Solver', 'SolverCore', 'ConstrParametersT', 'SolveParametersT', 'Configuration', "OpDesc",
            'estimate_nfft_buf_size',
-           'solve_generic', 'TailFitParams', 'LegendreParams', 'CRMParams']
+           'solve_generic', 'TailFitParams', 'LegendreParams', 'CRMParams',
+           'kanamori_dynamical_vertices']
