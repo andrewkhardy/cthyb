@@ -18,7 +18,7 @@ from triqs.operators import n
 import h5
 from triqs.utility.h5diff import h5diff
 from triqs_cthyb import Solver
-# Parse command line arguments
+# Parse command line arguments (falls back to defaults in interactive window)
 parser = argparse.ArgumentParser(description='Run spin-spin benchmarking.')
 parser.add_argument('--U', type=float, default=4.0, help='U parameter')
 parser.add_argument('--J', type=float, default=1.0, help='J parameter')
@@ -78,9 +78,8 @@ S.Delta_tau << Fourier(Delta)
 # plt.figure()
 # oplot(Q_tau)
 # plt.show()
-S.Jperp_tau << -(J) * Q_tau * i_1 
-# flipped sign here now... 
-S.D0_tau["up", "up"] << 0.25*J*Q_tau *i_2 
+S.Jperp_tau["up", "up"] << -(J) * Q_tau * i_1
+S.D0_tau["up", "up"] << 0.25*J*Q_tau *i_2
 S.D0_tau["down", "down"] << 0.25*J*Q_tau *i_3
 S.D0_tau["up", "down"] << -0.25*J*Q_tau * i_4
 S.D0_tau["down", "up"] << -0.25*J*Q_tau * i_5
@@ -113,6 +112,7 @@ if mpi.is_master_node():
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         A["perturbation_order"] = S.perturbation_order
+        A["perturbation_order_dynamical"] = S.perturbation_order_dyn
         A["average_sign"] = S.average_sign
         A["O_tau"] = S.O_tau#[(Sz, Sz)], hopefully allows many measurements eventually? # why use this over G2 blocks? 
         A["Sigma_iw"] = S.Sigma_iw

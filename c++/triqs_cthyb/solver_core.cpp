@@ -23,6 +23,7 @@
 #include "./solver_core.hpp"
 #include "./qmc_data.hpp"
 #include "./math_utils.hpp"
+#include "./dynamical_interactions.hpp"
 
 #include <triqs/utility/callbacks.hpp>
 #include <triqs/utility/exceptions.hpp>
@@ -209,161 +210,23 @@ namespace triqs_cthyb {
     _h_loc  = params.h_int + _h_loc0;
 
     // ------------------------------------------------------------------
-    // Lang-Firsov: shift _h_loc by K'(0) BEFORE h_diag is constructed.
+    // Dynamical interactions: build the unified vertex list (the user's explicit
+    // add_dyn_vertex(...) calls, plus D0_tau/Jperp_tau expanded into the same
+    // representation), and classify each vertex as Lang-Firsov-eligible or
+    // stochastic-only purely by operator algebra against h_loc -- nothing here
+    // guesses a block layout, see dynamical_interactions.hpp for the full picture.
+    // When params.lang_firsov is false, every vertex is routed to the stochastic
+    // list unconditionally (classify_dyn_vertices never evaluates eligibility), so
+    // this flag remains the master on/off switch it always was.
     //
-    // In the Lang-Firsov polaron transform the effective local Hamiltonian
-    // acquires a frequency-independent self-energy contribution from the
-    // retarded interaction D0(tau).  The zero-frequency piece K'(0) must
-    // be subtracted from _h_loc so that the Green's function is correct:
-    //
-    //   Diagonal (bl1==bl2, i1==i2):  H -> H - K'(0) * n
-    //   Off-diagonal:                 H -> H - K'(0) * n_1 * n_2
-    //     (the loop visits both (a,b) and (b,a), so the factor of 2 is implicit)
-    //
-    // K'(0) = -beta/2 * (d0 - d1/3)  where d0,d1 are the first two
-    // Legendre coefficients of D0(tau) (bosonic normalisation).
+    // Lang-Firsov's K'(0) static shift must be applied here, before h_diag is built
+    // below; the K_n kernel and the stochastic dyn_op_list/dyn_interactions catalog
+    // for the remaining vertices are built later, once n_inner/histo_map etc. are
+    // finalized.
     // ------------------------------------------------------------------
-    if (params.lang_firsov) {
-      // We need the D0 data; check it quickly before allocating anything.
-      bool _has_D0_early = false;
-      for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1)
-        for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2)
-          if (max_element(nda::abs(inputs.D0t(bl1, bl2).data())) > 1.e-13) { _has_D0_early = true; break; }
-
-      if (_has_D0_early) {
-        int    N_leg_early = params.dyn_n_l;
-        double beta_early  = beta;
-
-        int n_orbitals = 0;
-        for (auto const &pair : linindex) n_orbitals = std::max(n_orbitals, pair.second + 1);
-        nda::matrix<double> U_matrix(n_orbitals, n_orbitals);
-        nda::vector<double> mu_vec(n_orbitals);
-        U_matrix = 0.0;
-        mu_vec   = 0.0;
-
-        for (auto const &[term, coeff] : _h_loc) {
-          if (term.size() == 2) {
-            if (term[0].dagger && !term[1].dagger && term[0].indices == term[1].indices) {
-              int idx = fops[term[0].indices];
-              mu_vec(idx) -= real(coeff);
-            }
-          } else if (term.size() == 4) {
-            if (term[0].dagger && term[1].dagger && !term[2].dagger && !term[3].dagger &&
-                term[0].indices == term[3].indices && term[1].indices == term[2].indices) {
-              int i = fops[term[0].indices];
-              int j = fops[term[1].indices];
-              if (i != j) {
-                U_matrix(i, j) += real(coeff);
-                U_matrix(j, i) += real(coeff);
-              }
-            }
-          }
-        }
-
-        if (params.verbosity >= 2) {
-          std::cout << "\n Interaction matrix: U =" << std::endl << U_matrix << std::endl;
-          std::cout << "\nOrbital energies: mu - eps = " << mu_vec << std::endl;
-        }
-
-        nda::matrix<double> U_renorm  = U_matrix;
-        nda::vector<double> mu_renorm = mu_vec;
-
-        // Lang-Firsov eligibility check.
-        //
-        // The polaron transform is only exact if the density operator n_a it
-        // displaces the boson by is individually conserved, [h_loc, n_a] = 0
-        // -- see the Double Expansion notes. This is a *symbolic* operator-algebra
-        // check on the local Hamiltonian itself, evaluated once against the
-        // Hamiltonian as it stood before any Lang-Firsov shift was applied (the
-        // shift terms are themselves built from density operators, which never
-        // change whether some other n_a commutes with h_loc, but checking against
-        // a fixed snapshot avoids any doubt about ordering).
-        //
-        // Deliberately NOT implemented via atom_diag::quantum_number_eigenvalues[_checked]:
-        // that route requires diagonalizing h_loc first and checking diagonality of
-        // the operator's matrix in whatever eigenbasis autopartition happens to
-        // choose, which gives false negatives for legitimately-commuting operators
-        // whenever h_loc has a degenerate eigenspace not resolved along n_a's own
-        // eigenvalues -- and, if fed a *non*-commuting operator as a qn_vector hint
-        // (exactly the case we need to detect and reject here), can corrupt memory
-        // during atom_diag construction. See minimal_repro_atom_diag_segfault.py.
-        many_body_op_t const h_loc_pre_shift = _h_loc;
-        auto commutes_with_hloc = [&](many_body_op_t const &op) { return (op * h_loc_pre_shift - h_loc_pre_shift * op).is_almost_zero(); };
-
-        for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
-          for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
-            auto D0_bl = inputs.D0t(bl1, bl2);
-            if (max_element(nda::abs(D0_bl.data())) < 1.e-13) continue;
-
-            int n_pt_tau_early = D0_bl.mesh().size();
-            int bl1_size = gf_struct[bl1].second;
-            int bl2_size = gf_struct[bl2].second;
-
-            for (int i1 = 0; i1 < bl1_size; ++i1) {
-              for (int i2 = 0; i2 < bl2_size; ++i2) {
-                // Skip zero matrix elements
-                bool elem_nonzero = false;
-                for (auto const &tau_pt : D0_bl.mesh())
-                  if (std::abs(D0_bl[tau_pt](i1, i2)) > 1.e-13) { elem_nonzero = true; break; }
-                if (!elem_nonzero) continue;
-
-                auto D0_eval_early = [D0_bl, i1, i2](double tau) -> double {
-                  return real(D0_bl[closest_mesh_pt(tau)](i1, i2)) ;/// 2.0;
-                };
-
-                // Compute Legendre coefficients for D0(tau)
-                auto d_n = fit_legendre_coeffs(n_pt_tau_early, beta_early, D0_eval_early, N_leg_early);
-                // K'(0) from lowest Legendre coefficients
-                double d0       = d_n(0);
-                double d1       = (N_leg_early > 1) ? d_n(1) : 0.0;
-                double Kprime_0 = -1.0 * beta_early * (d0 - d1 / 3.0);
-
-                if (std::abs(Kprime_0) < 1.e-13) continue;
-
-                if (params.verbosity >= 2)
-                  std::cout << "Lang-Firsov K'(0) shift: K'(0)=" << Kprime_0
-                            << " for blocks (" << bl1 << "," << bl2
-                            << ") indices (" << i1 << "," << i2 << ")" << std::endl;
-
-                auto bl1_name = gf_struct[bl1].first;
-                auto bl2_name = gf_struct[bl2].first;
-
-                auto n_1 = c_dag<h_scalar_t>(bl1_name, i1) * c<h_scalar_t>(bl1_name, i1);
-                auto n_2 = c_dag<h_scalar_t>(bl2_name, i2) * c<h_scalar_t>(bl2_name, i2);
-
-                if (!commutes_with_hloc(n_1) || !commutes_with_hloc(n_2))
-                  TRIQS_RUNTIME_ERROR << "lang_firsov=true was requested, but the D0 channel coupling blocks (" << bl1_name << "," << i1 << ") and ("
-                                      << bl2_name << "," << i2
-                                      << ") is not Lang-Firsov eligible: the corresponding density operator does not commute with h_loc "
-                                         "(h_loc mixes this orbital with another, e.g. via an off-diagonal / hopping / crystal-field term). "
-                                         "The analytic Lang-Firsov resummation is only exact for density channels that are individually "
-                                         "conserved quantities of h_loc; use the stochastic double expansion (lang_firsov=false) for this "
-                                         "dynamical interaction instead.";
-
-                int lin1 = linindex.at({static_cast<int>(bl1), i1});
-                int lin2 = linindex.at({static_cast<int>(bl2), i2});
-
-                if (bl1 == bl2 && i1 == i2) {
-                  // Diagonal: chemical-potential shift H -> H - 0.5 * K'(0) * n
-                  _h_loc = _h_loc - 0.5 * Kprime_0 * n_1;
-                  mu_renorm(lin1) += 0.5 * Kprime_0;
-                } else {
-                  // Off-diagonal: H -> H - 0.5 * K'(0) * n_1 * n_2
-                  // (both (a,b) and (b,a) are visited, giving the total 1.0*K'(0) factor)
-                  _h_loc = _h_loc - 0.5 * Kprime_0 * n_1 * n_2;
-                  U_renorm(lin1, lin2) -= 0.5 * Kprime_0;
-                  U_renorm(lin2, lin1) -= 0.5 * Kprime_0;
-                }
-              }
-            }
-          }
-        }
-        if (params.verbosity >= 2) {
-          std::cout << "\n Renormalized interaction matrix: U =" << std::endl << U_renorm << std::endl;
-          std::cout << "\nRenormalized orbital energies: mu - eps = " << mu_renorm << std::endl;
-        }
-      }
-    }
+    auto dyn_vertices            = collect_dyn_vertices(inputs.dyn_vertices, inputs.D0t, inputs.Jperpt, gf_struct);
+    auto classified_dyn_vertices = classify_dyn_vertices(dyn_vertices, _h_loc, fops, linindex, params.lang_firsov);
+    apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
     // ------------------------------------------------------------------
 
 
@@ -438,162 +301,14 @@ namespace triqs_cthyb {
     
     std::vector<bosonic_op_pair_t> dyn_op_list;
     std::vector<std::function<double(double)>> dyn_interactions;
-    
-    // Check if we have non-zero Jperp (spin-spin interaction)
-    bool has_Jperp = max_element(nda::abs(inputs.Jperpt.data())) > 1.e-13;
-    
-    // Check if we have non-zero D0 (density-density interaction)
-    bool has_D0 = false;
-    for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
-      for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
-        if (max_element(nda::abs(inputs.D0t(bl1, bl2).data())) > 1.e-13) {
-          has_D0 = true;
-          break;
-        }
-      }
-      if (has_D0) break;
-    }
 
-    if (has_Jperp) {
-      // For Jperp, we need to check that we have exactly 2 blocks (spin up and down)
-      if (gf_struct.size() != 2) {
-        TRIQS_RUNTIME_ERROR << "Jperp (spin-spin) interactions are only implemented for 2 blocks (spin up/down), but gf_struct has "
-                            << gf_struct.size() << " blocks.";
-      }
+    K_n = build_K_n(classified_dyn_vertices.lang_firsov, beta, linindex, fops, params.dyn_n_l);
+    fold_into_stochastic_catalog(classified_dyn_vertices.stochastic, fops, linindex, dyn_op_list, dyn_interactions);
 
-      // Create bosonic operator pairs for S_perp = S_+ * S_-
-      // S_+ = c_dag_up * c_down
-      // S_- = c_dag_down * c_up
-      // ONLY VALID if block == spin
-      //FIXME COMPUTE Linear_index automatically
-      for (auto s : {0, 1}) {
-        bosonic_op_pair_t Jperp_pair = {
-           .op1     = {.opL = {.block_index = s, .inner_index = 0, .dagger = true, .linear_index = linindex.at({s, 0})},
-                       .opR = {.block_index = 1 - s, .inner_index = 0, .dagger = false, .linear_index = linindex.at({1 - s, 0})}},
-           .op2     = {.opL = {.block_index = 1 - s, .inner_index = 0, .dagger = true, .linear_index = linindex.at({1 - s, 0})},
-                       .opR = {.block_index = s, .inner_index = 0, .dagger = false, .linear_index = linindex.at({s, 0})}},
-           .f_index = 0};
+    if (params.verbosity >= 2) std::cout << "Total number of dynamical interaction terms: " << dyn_op_list.size() << std::endl;
 
-        dyn_op_list.push_back(Jperp_pair);
-      }
-
-      // Create lambda function to evaluate Jperp(tau)
-      // Capture inputs by reference to avoid copying the large Green's function
-      auto Jperp_gf       = inputs.Jperpt; // Make a copy for the lambda
-      auto Jperp_function = [Jperp_gf](double tau) -> double {
-        // Use the [] operator which internally calls closest_mesh_pt
-        return real(Jperp_gf[closest_mesh_pt(tau)](0, 0) / 2.0);
-      };
-      dyn_interactions.push_back(Jperp_function);
-
-      if (params.verbosity >= 2) { std::cout << "Added Jperp (spin-spin) dynamical interaction." << std::endl; }
-    }
-
-    K_n = {};
-
-    if (has_D0) {
-      if (params.lang_firsov) {
-          int N_leg = params.dyn_n_l; 
-        auto M_matrix = build_M_matrix(N_leg, beta);
-
-        // find total number of linear indices
-        int max_linindex = 0;
-        for (auto const& pair : linindex) max_linindex = std::max(max_linindex, pair.second);
-        K_n.resize(max_linindex + 1, std::vector<std::vector<double>>(max_linindex + 1, std::vector<double>(N_leg, 0.0)));
-
-        for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
-          for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
-            auto D0_bl = inputs.D0t(bl1, bl2);
-            if (max_element(nda::abs(D0_bl.data())) < 1.e-13) continue;
-
-            int bl1_size = gf_struct[bl1].second;
-            int bl2_size = gf_struct[bl2].second;
-            int n_pt_tau = D0_bl.mesh().size();
-
-            for (int i1 = 0; i1 < bl1_size; ++i1) {
-              for (int i2 = 0; i2 < bl2_size; ++i2) {
-                bool is_nonzero = false;
-                for (auto const &tau_pt : D0_bl.mesh()) {
-                  if (std::abs(D0_bl[tau_pt](i1, i2)) > 1.e-13) { is_nonzero = true; break; }
-                }
-                if (!is_nonzero) continue;
-
-                auto D0_eval = [D0_bl, i1, i2](double tau) -> double { return real(D0_bl[closest_mesh_pt(tau)](i1, i2)); };
-                
-                auto d_n = fit_legendre_coeffs(n_pt_tau, beta, D0_eval, N_leg);
-                  // double d0 = d_n(0);
-                  // d_n(0) = 0.0; // Subtract constant part which is already included in the Lang-Firsov shift
-                  nda::vector<double> k_n_vec = M_matrix * d_n;
-
-                int lin1 = linindex.at({bl1, i1});
-                int lin2 = linindex.at({bl2, i2});
-                for (int n = 0; n < N_leg; ++n) {
-                    K_n[lin1][lin2][n] = k_n_vec(n); // M * d_n yields vector
-                }
-              }
-            }
-          }
-        }
-      } else {
-        // For D0, we create operator pairs for each non-zero block pair
-        // D0(tau) n_a(tau) n_b(0) where n_a = c_dag_a * c_a
-
-        for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
-          for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
-            // Check if this block pair has non-zero interaction
-            auto D0_bl = inputs.D0t(bl1, bl2);
-            if (max_element(nda::abs(D0_bl.data())) < 1.e-13) continue;
-
-            int bl1_size = gf_struct[bl1].second;
-            int bl2_size = gf_struct[bl2].second;
-
-            for (int i1 = 0; i1 < bl1_size; ++i1) {
-              for (int i2 = 0; i2 < bl2_size; ++i2) {
-                // Check if this specific matrix element is non-zero
-                bool is_nonzero = false;
-                for (auto const &tau_pt : D0_bl.mesh()) {
-                  if (std::abs(D0_bl[tau_pt](i1, i2)) > 1.e-13) {
-                    is_nonzero = true;
-                    break;
-                  }
-                }
-                if (!is_nonzero) continue;
-
-                // Create operator pair for n_a(tau) * n_b(tau')
-                // n_a = c_dag(bl1,i1) * c(bl1,i1)
-                // n_b = c_dag(bl2,i2) * c(bl2,i2)
-                bosonic_op_pair_t D0_pair = {
-                   .op1     = {.opL = {.block_index = static_cast<int>(bl1), .inner_index = i1, .dagger = true, .linear_index = linindex.at({bl1, i1})},
-                               .opR = {.block_index = static_cast<int>(bl1), .inner_index = i1, .dagger = false, .linear_index = linindex.at({bl1, i1})}},
-                   .op2     = {.opL = {.block_index = static_cast<int>(bl2), .inner_index = i2, .dagger = true, .linear_index = linindex.at({bl2, i2})},
-                               .opR = {.block_index = static_cast<int>(bl2), .inner_index = i2, .dagger = false, .linear_index = linindex.at({bl2, i2})}},
-                   .f_index = static_cast<int>(dyn_interactions.size())};
-
-                dyn_op_list.push_back(D0_pair);
-
-                // Create lambda function to evaluate D0(tau) for this block pair
-                // Make a copy of the specific block for the lambda
-                auto D0_block    = inputs.D0t(bl1, bl2);
-                auto D0_function = [D0_block, i1, i2](double tau) -> double { return real(D0_block[closest_mesh_pt(tau)](i1, i2)) ; };
-                dyn_interactions.emplace_back(D0_function);
-
-                if (params.verbosity >= 2) {
-                  std::cout << "Added D0 density-density interaction for blocks (" << bl1 << "," << bl2 << ") indices (" << i1 << "," << i2 << ")"
-                            << std::endl;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (params.verbosity >= 2 && (has_Jperp || has_D0)) {
-      std::cout << "Total number of dynamical interaction terms: " << dyn_op_list.size() << std::endl;
-    }
-
-    // Automatically enable dynamical moves if we have dynamical interactions
-    bool has_dyn_interactions = has_Jperp || (has_D0 && !params.lang_firsov);
+    // Automatically enable dynamical moves if any vertex was routed to the stochastic path.
+    bool has_dyn_interactions = !dyn_op_list.empty();
 
     // Initialise Monte Carlo quantities
     qmc_data data(beta, params, h_diag, linindex, _Delta_tau, n_inner, histo_map, dyn_op_list, dyn_interactions, K_n);

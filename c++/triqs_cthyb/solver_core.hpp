@@ -65,8 +65,9 @@ namespace triqs_cthyb {
 
     // Dynamical interaction input containers
     struct {
-      gf<imtime> Jperpt;        // Dynamical spin-spin interaction J_perp(tau)
-      block2_gf<imtime> D0t;    // Dynamical density-density interaction D0(tau)
+      gf<imtime> Jperpt;                      // Dynamical spin-flip interaction J_perp(tau); single global up/down coupling, as in ctseg
+      block2_gf<imtime> D0t;                  // Dynamical density-density interaction D0(tau)
+      std::vector<dyn_vertex_t> dyn_vertices; // Explicitly user-specified dynamical vertices (general 4-index terms, multi-orbital spin-flip)
     } inputs;
 
     // Return reference to container_set
@@ -125,11 +126,22 @@ namespace triqs_cthyb {
     /// Hybridization function \f$ \Delta(\tau) \f$ in imaginary time.
     block_gf_view<imtime> Delta_tau() { return _Delta_tau; }
 
-    /// Dynamical spin-spin interaction :math:`\mathcal{J}_\perp(\tau)`
+    /// Dynamical spin-flip interaction :math:`\mathcal{J}_\perp(\tau)`, a single global up/down
+    /// coupling (matches ctseg). For per-orbital-pair or inter-orbital spin-flip, use add_dyn_vertex.
     gf_view<imtime> Jperp_tau() { return inputs.Jperpt; }
 
     /// Dynamical density-density interaction :math:`D_0(\tau)`
     block2_gf_view<imtime> D0_tau() { return inputs.D0t; }
+
+    /// Register an explicit dynamical-interaction vertex: a retarded coupling
+    /// D(tau) * op1(tau) * op2(0) between two fermion bilinears op1, op2 (e.g.
+    /// c_dag('up',0)*c('down',0)). Each must reduce to exactly one fermion
+    /// bilinear; this is checked when the solver is run, not here. Can be called
+    /// any number of times before solve(); combines with (does not replace)
+    /// any D0_tau()/Jperp_tau() interactions also set on this solver.
+    void add_dyn_vertex(many_body_op_t const &op1, many_body_op_t const &op2, gf_const_view<imtime, scalar_valued> coupling) {
+      inputs.dyn_vertices.push_back({op1, op2, gf<imtime, scalar_valued>(coupling)});
+    }
 
     /// Non-interacting Green's function \f$ G_0(i\omega) \f$ in Matsubara frequencies.
     block_gf_view<imfreq> G0_iw() {
@@ -200,6 +212,7 @@ namespace triqs_cthyb {
       h5_write(grp, "Delta_tau", s._Delta_tau);
       h5_write(grp, "Jperp_tau", s.inputs.Jperpt);
       h5_write(grp, "D0_tau", s.inputs.D0t);
+      h5_write(grp, "dyn_vertices", s.inputs.dyn_vertices);
 
       h5_write(grp, "h_diag", s.h_diag);
       h5_write(grp, "h_loc", s._h_loc);
@@ -224,6 +237,7 @@ namespace triqs_cthyb {
       h5_read(grp, "Delta_tau", s._Delta_tau);
       h5::try_read(grp, "Jperp_tau", s.inputs.Jperpt);
       h5::try_read(grp, "D0_tau", s.inputs.D0t);
+      h5::try_read(grp, "dyn_vertices", s.inputs.dyn_vertices);
 
       h5::try_read(grp, "h_diag", s.h_diag);
       h5::try_read(grp, "h_loc", s._h_loc);
