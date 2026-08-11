@@ -9,6 +9,8 @@
 -- [1;32mClass: [0mtriqs_cthyb::solver_core [Python: SolverCore]
 -- [1;32m  Method: [0m__init__
 -- [1;32m        . [0mtriqs_cthyb::solver_core(const triqs_cthyb::constr_parameters_t& p)
+-- [1;32m  Method: [0madd_dyn_vertex
+-- [1;32m        . [0mtriqs_cthyb::solver_core::add_dyn_vertex(const triqs_cthyb::many_body_op_t& op1,const triqs_cthyb::many_body_op_t& op2,triqs::gfs::gf_const_view<triqs::mesh::imtime,triqs::gfs::scalar_valued> coupling)
 -- [1;32m  Method: [0msolve
 -- [1;32m        . [0mtriqs_cthyb::solver_core::solve(const triqs_cthyb::solve_parameters_t& p)
 -- [1;32m  Property: [0mD0_tau

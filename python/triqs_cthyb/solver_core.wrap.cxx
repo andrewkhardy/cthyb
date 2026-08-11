@@ -586,11 +586,27 @@ p : {par_0}
    Parameters used for constructing the solver.
 )DOC",
                                                                     {{c2py::python_typename<const triqs_cthyb::constr_parameters_t &>()}});
+// add_dyn_vertex
+static auto const _c2py_fun_0 = c2py::dispatcher_f_kw_t{c2py::cmethod(
+   [](_c2py_cls_2 &self, const triqs_cthyb::many_body_op_t &op1, const triqs_cthyb::many_body_op_t &op2,
+      triqs::gfs::gf_const_view<triqs::mesh::imtime, triqs::gfs::scalar_valued> coupling) -> decltype(auto) {
+     return self.add_dyn_vertex(op1, op2, coupling);
+   },
+   "self", "op1", "op2", "coupling")};
+
 // solve
-static auto const _c2py_fun_0 = c2py::dispatcher_f_kw_t{
+static auto const _c2py_fun_1 = c2py::dispatcher_f_kw_t{
    c2py::cmethod([](_c2py_cls_2 &self, const triqs_cthyb::solve_parameters_t &p) -> decltype(auto) { return self.solve(p); }, "self", "p")};
 
 static const auto _c2py_doc_0 = _c2py_fun_0.doc(R"DOC(
+Register an explicit dynamical-interaction vertex: a retarded coupling
+D(tau) * op1(tau) * op2(0) between two fermion bilinears op1, op2 (e.g.
+c_dag('up',0)*c('down',0)). Each must reduce to exactly one fermion
+bilinear; this is checked when the solver is run, not here. Can be called
+any number of times before solve(); combines with (does not replace)
+any D0_tau()/Jperp_tau() interactions also set on this solver.
+)DOC");
+static const auto _c2py_doc_1 = _c2py_fun_1.doc(R"DOC(
 Solve the impurity problem.
 
 Parameters
@@ -603,7 +619,8 @@ p : {par_0}
 // ----- Method table ----
 template <>
 PyMethodDef c2py::tp_methods<_c2py_cls_2>[] = {
-   {"solve", (PyCFunction)c2py::pyfkw<_c2py_fun_0>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_0.c_str()},
+   {"add_dyn_vertex", (PyCFunction)c2py::pyfkw<_c2py_fun_0>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_0.c_str()},
+   {"solve", (PyCFunction)c2py::pyfkw<_c2py_fun_1>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_1.c_str()},
    {"__write_hdf5__", c2py::tpxx_write_h5<_c2py_cls_2>, METH_VARARGS, "  "},
    {"__getstate__", c2py::getstate_h5<_c2py_cls_2>, METH_NOARGS, ""},
    {"__setstate__", c2py::setstate_h5<_c2py_cls_2>, METH_O, ""},
@@ -636,7 +653,7 @@ static constexpr auto prop_doc_0   = R"DOC(Dynamical density-density interaction
 static constexpr auto prop_doc_1   = R"DOC(:math:`G_0^{-1}(i\omega_n = \infty)` in Matsubara frequencies.)DOC";
 static constexpr auto prop_doc_2   = R"DOC(Hybridization function :math:`\Delta(\tau)` in imaginary time.)DOC";
 static constexpr auto prop_doc_3   = R"DOC(Non-interacting Green's function :math:`G_0(i\omega)` in Matsubara frequencies.)DOC";
-static constexpr auto prop_doc_4   = R"DOC(Dynamical spin-spin interaction :math:`{J}_()`)DOC";
+static constexpr auto prop_doc_4   = R"DOC(Dynamical spin-flip interaction :math:`{J}_()` indexed by block pairs)DOC";
 static constexpr auto prop_doc_5   = R"DOC(Auto-correlation time in units of MC cycles.)DOC";
 static constexpr auto prop_doc_6 = R"DOC(Whether the auto-correlation time estimate has saturated (false: it is only a lower bound, run longer).)DOC";
 static constexpr auto prop_doc_7 = R"DOC(Average perturbation order.)DOC";

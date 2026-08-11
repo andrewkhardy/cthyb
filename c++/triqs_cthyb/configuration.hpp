@@ -20,6 +20,7 @@
  ******************************************************************************/
 #pragma once
 #include "./util.hpp"
+#include "./config.hpp" // many_body_op_t
 #include <triqs/hilbert_space/hilbert_space.hpp>
 #include <triqs/utility/time_pt.hpp>
 #include <triqs/atom_diag/atom_diag.hpp>
@@ -117,9 +118,37 @@ namespace triqs_cthyb {
       h5::read(g, "f_index", op.f_index);
     }
   };
-  // FIXME : a list of this from user input
-  // user intput : this list + the functions f ! stored in qmc_data
-  // make the f_index from input data.
+
+  /// A single dynamical-interaction vertex, as specified by a user: a retarded coupling
+  /// between two fermion bilinears, D(tau) * op1(tau) * op2(0).
+  ///
+  /// op1 and op2 are ordinary many-body operators (e.g. \c c_dag('up',0)*c('down',0)),
+  /// exactly the same way \c h_int is specified -- NOT the low-level \c bosonic_op_pair_t
+  /// above. Each is required to reduce to exactly one fermion bilinear c^dagger_a c_b; this
+  /// is validated (via \c extract_bilinear, see dynamical_interactions.hpp) when the vertex
+  /// is registered with the solver, not assumed. \c bosonic_op_pair_t is the internal
+  /// representation the stochastic double expansion actually samples; a \c dyn_vertex_t is
+  /// converted to it after the bilinear check.
+  struct dyn_vertex_t { // NOLINT
+    many_body_op_t op1, op2;
+    gf<imtime, scalar_valued> coupling; // the retarded propagator D(tau) for this vertex
+
+    static std::string hdf5_format() { return "dyn_vertex_t"; }
+    friend void h5_write(h5::group g, std::string const &name, dyn_vertex_t const &v) {
+      auto gr = g.create_group(name);
+      h5::write_hdf5_format(gr, v);
+      h5::write(gr, "op1", v.op1);
+      h5::write(gr, "op2", v.op2);
+      h5::write(gr, "coupling", v.coupling);
+    }
+    friend void h5_read(h5::group g, std::string const &name, dyn_vertex_t &v) {
+      h5::group gr = g.open_group(name);
+      h5::assert_hdf5_format(gr, v);
+      h5::read(gr, "op1", v.op1);
+      h5::read(gr, "op2", v.op2);
+      h5::read(gr, "coupling", v.coupling);
+    }
+  };
 
   /// Configuration of the Monte Carlo simulation (operators on the imaginary-time line).
   struct configuration {

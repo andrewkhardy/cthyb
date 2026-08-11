@@ -22,6 +22,17 @@
 using triqs::operators::n;
 using namespace triqs_cthyb;
 
+// Single-orbital test with dynamical spin-spin interactions (D0_tau + Jperp_tau).
+// Uses a simple analytical bath: Delta(iw) = 1/(iw - eps) + 1/(iw + eps)
+// and a bosonic propagator: J(iw) = 4*l^2*w0/(iw^2 - w0^2)
+// This tests that the dynamical interaction machinery (Jperp spin-flip +
+// D0 density-density retarded interactions) produces correct results.
+//
+// To regenerate the reference file spin_spin.ref.h5:
+//   1. Build and run this test once (produces spin_spin.out.h5)
+//   2. Verify the results are physically reasonable
+//   3. Copy spin_spin.out.h5 -> spin_spin.ref.h5
+
 TEST(CTHYB, Spin_Spin) {
 
   mpi::communicator c;
@@ -29,10 +40,10 @@ TEST(CTHYB, Spin_Spin) {
 
   // Physical parameters
   double beta    = 10.0;
-  double U       = 2.0;
+  double U       = 4.0;
   double mu      = U / 2.0; // half-filling
   double epsilon = 0.3;     // bath level
-  double l       = 0.5;     // electron-boson coupling (weak enough for reasonable sign)
+  double l       = 1.0;     // electron-boson coupling
   double w0      = 1.0;     // screening frequency
 
   // Solver parameters — fixed seed for reproducibility
@@ -76,7 +87,8 @@ TEST(CTHYB, Spin_Spin) {
   J0t() = fourier(J0w);
   D0t() = fourier(D0w);
 
-  // Jperp: spin-flip interaction (scalar gf at this interface level)
+  // Jperp: spin-flip interaction. A single global up/down coupling (matches ctseg);
+  // gf_struct = {up, down}, so block 0 = "up" and block 1 = "down" are the pair.
   solver.Jperp_tau() = J0t;
 
   // D0: density-density retarded interaction
