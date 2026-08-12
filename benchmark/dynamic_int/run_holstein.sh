@@ -18,7 +18,9 @@ MODULES="devenv9/clang-py3-mkl llvm/20"
 module purge
 module use /mnt/home/wentzell/opt/modules
 module load ${MODULES}
-module load triqs/unstable
+# module load triqs/unstable
+module load triqs/multiorbital.
+
 ##################### run your code here #####################
 #../CTHYB/benchmark/
 mpirun -n 120 python holstein.py --L 0.2 --U 4.0  --beta 20.0 --n_cycles 100000 --measure_O_tau 25 --dyn_n_l 50 --lang_firsov True
