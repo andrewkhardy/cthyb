@@ -66,10 +66,10 @@ S.Delta_tau << Fourier(Delta)
 # Sz*Sz decomposition: J*Sz_a*Sz_b*Q(tau) = (J/4)*Q(tau)*[n_up_a n_up_b - n_up_a n_down_b
 # - n_down_a n_up_b + n_down_a n_down_b], so same-spin gets +J/4*Q and opposite-spin -J/4*Q.
 S.Jperp_tau << -(J) * Q_tau * i_1
-S.D0_tau["up", "up"]     << 0.25*J*Q_tau *i_2
-S.D0_tau["down", "down"] << 0.25*J*Q_tau *i_3
-S.D0_tau["up", "down"]   << -0.25*J*Q_tau * i_4
-S.D0_tau["down", "up"]   << -0.25*J*Q_tau * i_5
+S.D0_tau["up", "up"]     << -0.25*J*Q_tau *i_2
+S.D0_tau["down", "down"] << -0.25*J*Q_tau *i_3
+S.D0_tau["up", "down"]   << 0.25*J*Q_tau * i_4
+S.D0_tau["down", "up"]   << 0.25*J*Q_tau * i_5
 
 
 # Solve parameters
