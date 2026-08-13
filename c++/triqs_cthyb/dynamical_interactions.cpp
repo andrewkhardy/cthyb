@@ -389,54 +389,12 @@ namespace triqs_cthyb {
     result.total_density_op       = total_density_op;
     result.orbital_linear_indices = std::vector<int>(orbitals.begin(), orbitals.end());
     result.shared_coupling        = shared_coupling;
-    result.remaining_vertices.clear();
     std::set<size_t> candidate_set(candidate_indices.begin(), candidate_indices.end());
+    result.group_vertices.clear();
+    result.remaining_vertices.clear();
     for (size_t i = 0; i < vertices.size(); ++i)
-      if (!candidate_set.count(i)) result.remaining_vertices.push_back(vertices[i]);
+      (candidate_set.count(i) ? result.group_vertices : result.remaining_vertices).push_back(vertices[i]);
     return result;
-  }
-
-  // -----------------------------------------------------------------------------------
-
-  void apply_total_density_shift(many_body_op_t &h_loc, total_density_decomposition_t const &decomposition, double beta, int N_leg,
-                                 int verbosity) {
-    int n_pt_tau = decomposition.shared_coupling.mesh().size();
-    auto d_n =
-       fit_legendre_coeffs(n_pt_tau, beta, [&decomposition](double tau) { return eval_scalar_gf(decomposition.shared_coupling, tau); }, N_leg);
-    double d0       = d_n(0);
-    double d1       = (N_leg > 1) ? d_n(1) : 0.0;
-    double Kprime_0 = -1.0 * beta * (d0 - d1 / 3.0);
-
-    // apply_total_density_kernel below couples every (a,b) pair uniformly, including
-    // a==b, which resums to D(tau)*N_total^2 = D(tau)*(N_total + sum_{a!=b} n_a n_b)
-    // (using n_a^2 = n_a). Only the sum_{a!=b} part is wanted, so shift h_loc by +K'(0)
-    // (opposite sign from apply_lang_firsov_shift's usual -0.5*K'(0)) to cancel the
-    // extra D(tau)*N_total term.
-    h_loc = h_loc + 0.5 * Kprime_0 * decomposition.total_density_op;
-
-    if (verbosity >= 2)
-      std::cout << "Lang-Firsov total-density decomposition: K'(0)=" << Kprime_0 << " diagonal correction for N_total = "
-                << decomposition.total_density_op << std::endl;
-  }
-
-  // -----------------------------------------------------------------------------------
-
-  void apply_total_density_kernel(total_density_decomposition_t const &decomposition, std::vector<std::vector<std::vector<double>>> &K_n,
-                                  std::map<std::pair<int, int>, int> const &linindex, double beta, int N_leg) {
-    auto M_matrix = build_M_matrix(N_leg, beta);
-    int n_pt_tau  = decomposition.shared_coupling.mesh().size();
-    auto d_n =
-       fit_legendre_coeffs(n_pt_tau, beta, [&decomposition](double tau) { return eval_scalar_gf(decomposition.shared_coupling, tau); }, N_leg);
-    nda::vector<double> k_n_vec = M_matrix * d_n;
-
-    int max_linindex = 0;
-    for (auto const &pair : linindex) max_linindex = std::max(max_linindex, pair.second);
-    if (static_cast<int>(K_n.size()) < max_linindex + 1)
-      K_n.resize(max_linindex + 1, std::vector<std::vector<double>>(max_linindex + 1, std::vector<double>(N_leg, 0.0)));
-
-    for (int a : decomposition.orbital_linear_indices)
-      for (int b : decomposition.orbital_linear_indices)
-        for (int n = 0; n < N_leg; ++n) K_n[a][b][n] = k_n_vec(n);
   }
 
 } // namespace triqs_cthyb
