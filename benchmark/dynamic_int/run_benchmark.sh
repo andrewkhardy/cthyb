@@ -24,5 +24,5 @@ module load triqs/unstable
 
 #mpirun -n 120 python spin_spin_modified.py --J -1.0 --U 4.0 --i1 0.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0 --n_cycles 1000000 --measure_O_tau 5 --dyn_n_l 10
 mpirun -n 96 python spin_spin.py --J 0.5 --U 4.0 --i1 1.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0 --n_cycles 1000000 --measure_O_tau 22 --dyn_n_l 22
-#mpirun -n 96 python ctseg_spin_spin.py --J 1.0 --U 4.0  --i1 0.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0
+#mpirun -n 96 python ctseg_spin_spin.py --J 0.5 --U 4.0  --i1 0.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0
 #mpirun python multiorb_spin_spin.py --J 1.0 --U 4.0 --i1 1.0 --i2 1.0 --i3 1.0 --i4 1.0  --i5 1.0 --beta 10.0 --n_cycles 10000000 --measure_O_tau 10
