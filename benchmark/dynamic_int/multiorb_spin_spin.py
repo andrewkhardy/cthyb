@@ -138,24 +138,24 @@ for a in range(n_orb):
 # D0_tau: density-density dynamical interaction
 # D0_tau is a Block2Gf indexed by (block_name_1, block_name_2)
 # Following the spin_spin.py convention for the Sz*Sz decomposition:
-#   D0["up_a", "up_b"]   << -0.25 * J * Q_tau   (same spin: -1/4)
-#   D0["down_a", "down_b"] << -0.25 * J * Q_tau (same spin: -1/4)
-#   D0["up_a", "down_b"] << +0.25 * J * Q_tau   (opposite spin: +1/4)
-#   D0["down_a", "up_b"] << +0.25 * J * Q_tau   (opposite spin: +1/4)
+#   D0["up_a", "up_b"]   << +0.25 * J * Q_tau   (same spin: +1/4)
+#   D0["down_a", "down_b"] << +0.25 * J * Q_tau (same spin: +1/4)
+#   D0["up_a", "down_b"] << -0.25 * J * Q_tau   (opposite spin: -1/4)
+#   D0["down_a", "up_b"] << -0.25 * J * Q_tau   (opposite spin: -1/4)
 #
 # This corresponds to the Sz*Sz part of the spin-spin interaction:
 #   J * Sz_a * Sz_b * Q(tau) = J * (1/4)(n_up_a - n_down_a)(n_up_b - n_down_b) * Q(tau)
 # expanded:  (1/4)[n_up_a*n_up_b - n_up_a*n_down_b - n_down_a*n_up_b + n_down_a*n_down_b]
-# so same-spin gets -J/4*Q and opposite-spin gets +J/4*Q
+# so same-spin gets +J/4*Q and opposite-spin gets -J/4*Q
 #
 # We apply this for all orbital pairs (including intra-orbital).
 for a in range(n_orb):
-    # Same spin: -0.25 * J
-    S.D0_tau["up_%i" % a, "up_%i" % a] << -0.25 * J_dyn * Q_tau
-    S.D0_tau["down_%i" % a, "down_%i" % a] << -0.25 * J_dyn * Q_tau
-    # Opposite spin: +0.25 * J
-    S.D0_tau["up_%i" % a, "down_%i" % a] << 0.25 * J_dyn * Q_tau
-    S.D0_tau["down_%i" % a, "up_%i" % a] << 0.25 * J_dyn * Q_tau
+    # Same spin: +0.25 * J
+    S.D0_tau["up_%i" % a, "up_%i" % a] << 0.25 * J_dyn * Q_tau
+    S.D0_tau["down_%i" % a, "down_%i" % a] << 0.25 * J_dyn * Q_tau
+    # Opposite spin: -0.25 * J
+    S.D0_tau["up_%i" % a, "down_%i" % a] << -0.25 * J_dyn * Q_tau
+    S.D0_tau["down_%i" % a, "up_%i" % a] << -0.25 * J_dyn * Q_tau
 
 # ======================== Static Hamiltonian ========================
 # h_int: interacting part (quartic terms)

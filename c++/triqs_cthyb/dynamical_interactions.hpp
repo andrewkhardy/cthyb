@@ -104,54 +104,55 @@ namespace triqs_cthyb {
                                     std::vector<std::function<double(double)>> &dyn_interactions);
 
   // ---------------------------------------------------------------------------------
-  // Total-density decomposition: classify_dyn_vertices above only ever accepts a
-  // density vertex n_a-n_b for Lang-Firsov if n_a and n_b *individually* commute with
+  // Recovering vertices classify_dyn_vertices had to reject: a density vertex n_a-n_b
+  // is only Lang-Firsov-eligible there if n_a AND n_b *individually* commute with
   // h_loc -- exactly what compute_lang_firsov_ratio's per-operator phase dressing
-  // needs (see qmc_data.hpp). That's overly conservative for a genuine Hubbard-Kanamori
-  // h_loc: spin-flip or pair-hopping terms break each n_a individually, even though the
-  // *total* density N_total = sum_a n_a is still conserved (both terms move particles
-  // between orbitals without changing the total count). When a group of vertices
-  // couples uniformly and completely to every off-diagonal pair among a set of
-  // orbitals, N_total commuting with h_loc is sufficient to justify Lang-Firsov for
-  // every vertex in that group, even though none would pass the per-vertex check
-  // individually -- see find_total_density_decomposition below for the precise
-  // condition. The group's vertices (group_vertices) are otherwise ordinary
-  // off-diagonal density vertices: the caller merges them straight into the normal
-  // Lang-Firsov vertex list and runs them through the unmodified
-  // apply_lang_firsov_shift/build_K_n, exactly as if classify_dyn_vertices had
-  // accepted them. There is deliberately no separate "uniform grid over the whole
-  // group including a==b" treatment here: that formulation is only valid if the
-  // group's diagonal (a==b) coupling equals the off-diagonal one, which classify never
-  // checks and which is false for e.g. a genuine J*Sz*Sz interaction (same-spin and
-  // opposite-spin couplings have opposite sign) -- and even where it happens to be
-  // true, only its zero-frequency part could be corrected via a static h_loc shift,
-  // leaving the dynamic (n>=1 Legendre) part of the spurious diagonal contribution
-  // uncancelled. Restricting to a==b vertices' own per-pair math sidesteps both
-  // problems entirely.
+  // needs. That's correct but conservative: under a genuine Hubbard-Kanamori h_loc with
+  // spin-flip/pair-hopping, no individual n_a commutes, even though *some combination*
+  // of densities usually still does -- e.g. total charge N_total = sum_a n_a always
+  // (spin-flip/pair-hopping only move particles between orbitals), and total S_z =
+  // sum_a +-0.5 n_a whenever the Hamiltonian doesn't break spin-rotation symmetry.
+  // find_conserved_density_combinations finds every such combination directly from
+  // h_loc (not by guessing N_total specifically), and recover_conserved_density_groups
+  // uses them to rescue whatever vertices classify_dyn_vertices correctly rejected but
+  // that are, together, exactly equivalent to a coupling to one or more of those
+  // combinations. See the .cpp for the operator-algebra argument for why this only
+  // works when the group is *completely* user-specified (diagonal a==b self-terms
+  // included, not silently inferred) -- a previous version of this mechanism only
+  // required completeness among the off-diagonal pairs and inferred the rest, which was
+  // an unsound approximation, not an exact resummation (it broke a genuine J*Sz*Sz
+  // interaction, where the off-diagonal and diagonal couplings genuinely differ).
   // ---------------------------------------------------------------------------------
 
-  struct total_density_decomposition_t {
-    bool found = false;
-    many_body_op_t total_density_op;           // N_total = sum of n_a over the orbitals in the group
-    std::vector<int> orbital_linear_indices;   // the orbitals a that make up the group
-    gf<imtime, scalar_valued> shared_coupling; // the single coupling D(tau) common to every off-diagonal pair
-    std::vector<dyn_vertex_t> group_vertices;     // the off-diagonal vertices absorbed into the group
-    std::vector<dyn_vertex_t> remaining_vertices; // every input vertex not absorbed into the group
-  };
+  /// Find a basis for the space of density-operator linear combinations that commute
+  /// with h_loc: { c in R^M : [sum_a c_a n_a, h_loc] = 0 }, where a ranges over every
+  /// orbital in linindex (M = total count). This is a genuine linear-algebra problem,
+  /// not a pattern-match: the commutator is linear in c, so the solution set is exactly
+  /// the nullspace of the linear map c -> sum_a c_a [n_a, h_loc]. Computed by expanding
+  /// each [n_a, h_loc] via ordinary symbolic operator algebra (same primitive
+  /// classify_dyn_vertices already uses), collecting every distinct monomial that
+  /// appears across all M commutators as a basis for a real coefficient matrix (real
+  /// and imaginary parts of each coefficient kept as separate rows, so this is correct
+  /// whether h_scalar_t is real or complex), and taking that matrix's nullspace via
+  /// SVD. Returns each basis vector as an nda::vector<double> of length M, indexed by
+  /// linear index. Empty if no such combination exists (or if every n_a individually
+  /// commutes already, a degenerate case classify_dyn_vertices already handles alone).
+  std::vector<nda::vector<double>> find_conserved_density_combinations(many_body_op_t const &h_loc, fundamental_operator_set const &fops,
+                                                                        std::map<std::pair<int, int>, int> const &linindex);
 
-  /// Look for a "sufficiently symmetric" subset of `vertices`: two or more
-  /// density-density vertices that (a) all share the exact same coupling D(tau), and
-  /// (b) together cover *every* off-diagonal (a,b) pair among the orbitals they touch
-  /// -- i.e. sum_{a != b in the group} D(tau) n_a(tau) n_b(0), complete and uniform.
-  /// Under those two conditions N_total = sum_a n_a (summed only over the orbitals
-  /// touched by the group) commuting with h_loc is sufficient to justify Lang-Firsov
-  /// for every vertex in the group, regardless of whether the individual n_a commute
-  /// with h_loc. Does not check commutation with h_loc itself (the caller does that,
-  /// once, against total_density_op) -- this function is pure pattern-matching on the
-  /// vertex list. If no such group exists, `found` is false, `group_vertices` is empty,
-  /// and `remaining_vertices` is just `vertices` unchanged.
-  total_density_decomposition_t find_total_density_decomposition(std::vector<dyn_vertex_t> const &vertices,
-                                                                  fundamental_operator_set const &fops,
-                                                                  std::map<std::pair<int, int>, int> const &linindex);
+  /// Attempt to recover Lang-Firsov eligibility for vertices in `classified.stochastic`
+  /// by checking whether a complete set of them exactly reconstructs a combination of
+  /// `conserved_combinations`. Only ever recovers a group that is *completely*,
+  /// explicitly specified: every ordered pair (a,b) among the touched orbitals,
+  /// including the diagonal a==b self-terms, must already exist as its own vertex
+  /// sharing one coupling curve -- nothing is inferred or filled in (a missing diagonal
+  /// self-term is never silently added). If the fit against the conserved combinations
+  /// is exact, the group's vertices (already fully specified, so nothing needs
+  /// reconstructing) are moved from `classified.stochastic` to `classified.lang_firsov`
+  /// in place; otherwise `classified` is left untouched for that group. The ordinary,
+  /// unmodified apply_lang_firsov_shift/build_K_n handle everything recovered this way,
+  /// exactly as if classify_dyn_vertices had accepted it directly.
+  void recover_conserved_density_groups(classified_dyn_vertices_t &classified, std::vector<nda::vector<double>> const &conserved_combinations,
+                                        fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex);
 
 } // namespace triqs_cthyb
