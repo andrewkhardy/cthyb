@@ -111,7 +111,12 @@ if mpi.is_master_node():
     with h5.HDFArchive(filename, "w") as A:
         A['G_tau'] = S.G_tau
         A['perturbation_order'] = S.perturbation_order
-        A['perturbation_order_dynamical'] = S.perturbation_order_dyn
+        # perturbation_order_dyn is only measured (non-None) if at least one vertex was
+        # routed to the stochastic path -- with the diagonal terms above, everything is
+        # expected to recover to the analytic path instead (0 stochastic), so this is
+        # routinely None here; a bare None can't be written to HDF5.
+        if S.perturbation_order_dyn is not None:
+            A['perturbation_order_dynamical'] = S.perturbation_order_dyn
         A['average_sign'] = S.average_sign
         A['K_n'] = S.K_n
         A['n_orb'] = n_orb
