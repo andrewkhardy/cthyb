@@ -243,7 +243,7 @@ namespace triqs_cthyb {
     if (params.lang_firsov) {
       auto conserved_density_combinations = find_conserved_density_combinations(_h_loc, fops, linindex);
       size_t stochastic_before = classified_dyn_vertices.stochastic.size();
-      recover_conserved_density_groups(classified_dyn_vertices, conserved_density_combinations, fops, linindex);
+      recover_conserved_density_groups(classified_dyn_vertices, conserved_density_combinations, fops, linindex, beta, params.dyn_n_l);
       if (params.verbosity >= 2 && !conserved_density_combinations.empty())
         std::cout << "Found " << conserved_density_combinations.size() << " conserved density combination(s); recovered "
                   << (stochastic_before - classified_dyn_vertices.stochastic.size())
