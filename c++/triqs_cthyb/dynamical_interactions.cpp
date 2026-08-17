@@ -336,65 +336,215 @@ namespace triqs_cthyb {
 
   // -----------------------------------------------------------------------------------
 
-  total_density_decomposition_t find_total_density_decomposition(std::vector<dyn_vertex_t> const &vertices,
-                                                                  fundamental_operator_set const &fops,
-                                                                  std::map<std::pair<int, int>, int> const &linindex) {
-    total_density_decomposition_t result;
-    result.remaining_vertices = vertices;
+  std::vector<nda::vector<double>> find_conserved_density_combinations(many_body_op_t const &h_loc, fundamental_operator_set const &fops,
+                                                                        std::map<std::pair<int, int>, int> const &linindex) {
+    int M = count_orbitals(linindex);
+    if (M == 0) return {};
 
-    // Only genuine density-density vertices n_a-n_b (a != b) can be part of a
-    // total-density group; a==b would be a diagonal self-term, not an off-diagonal pair.
+    // [n_a, h_loc] for every orbital a, indexed by linear index. n_a must be built from
+    // fops's own indices_t for that linear position (via the data_t conversion) -- NOT
+    // from linindex's (block_index, inner_index) key directly, which uses gf_struct's
+    // block *position*, not its name, and would silently build an operator on a
+    // fundamental mode unrelated to h_loc's actual operator algebra (making every
+    // commutator trivially, and wrongly, zero).
+    auto fops_indices = fundamental_operator_set::data_t(fops);
+    std::vector<many_body_op_t> commutators(M);
+    for (auto const &[block_inner, a] : linindex) {
+      auto const &indices_a = fops_indices[a];
+      auto c_dag_a           = many_body_op_t::make_canonical(true, indices_a);
+      auto c_a               = many_body_op_t::make_canonical(false, indices_a);
+      auto n_a               = c_dag_a * c_a;
+      commutators[a]         = n_a * h_loc - h_loc * n_a;
+    }
+
+    // Collect every distinct monomial appearing in any commutator, as rows of a real
+    // matrix -- real and imaginary parts of each coefficient kept as separate rows, so
+    // this is correct whether h_scalar_t is real or complex.
+    std::map<monomial_t, nda::vector<double>> real_rows, imag_rows;
+    auto accumulate = [&](std::map<monomial_t, nda::vector<double>> &rows, monomial_t const &monomial, int a, double value) {
+      if (std::abs(value) < 1.e-13) return;
+      auto it = rows.find(monomial);
+      if (it == rows.end()) {
+        nda::vector<double> v(M);
+        v  = 0.0;
+        it = rows.emplace(monomial, v).first;
+      }
+      it->second(a) += value;
+    };
+    for (int a = 0; a < M; ++a)
+      for (auto const &[monomial, coeff] : commutators[a]) {
+        accumulate(real_rows, monomial, a, real(coeff));
+        accumulate(imag_rows, monomial, a, imag(coeff));
+      }
+
+    int P = static_cast<int>(real_rows.size() + imag_rows.size());
+    if (P == 0) return {}; // every n_a already commutes with h_loc individually -- classify_dyn_vertices handles this alone.
+
+    nda::matrix<double> mat(P, M);
+    mat     = 0.0;
+    int row = 0;
+    for (auto const &[monomial, vec] : real_rows) { mat(row, nda::range::all) = vec; ++row; }
+    for (auto const &[monomial, vec] : imag_rows) { mat(row, nda::range::all) = vec; ++row; }
+
+    auto [U, s, Vt]  = nda::linalg::svd(mat);
+    double s_max     = (s.size() > 0) ? s(0) : 0.0;
+    double threshold = 1.e-9 * std::max(s_max, 1.0);
+
+    std::vector<nda::vector<double>> conserved;
+    for (int i = 0; i < M; ++i) {
+      bool is_null = (i >= s.size()) || (s(i) < threshold);
+      if (!is_null) continue;
+      nda::vector<double> v(M);
+      for (int k = 0; k < M; ++k) v(k) = Vt(i, k);
+      conserved.push_back(v);
+    }
+    return conserved;
+  }
+
+  // -----------------------------------------------------------------------------------
+
+  namespace {
+
+    // Least-squares fit of target (n x n) as sum_k gamma_k * design[k], returning the
+    // achieved max-abs residual. SVD-based (pseudo-inverse), robust to a rank-deficient
+    // design -- the design matrices (outer products of conserved combinations) need not
+    // be linearly independent even when the combinations themselves are.
+    double fit_and_residual(std::vector<nda::matrix<double>> const &design, nda::matrix<double> const &target, int n,
+                            nda::vector<double> &gamma) {
+      int K = static_cast<int>(design.size());
+      gamma.resize(K);
+      gamma = 0.0;
+      if (K == 0) return max_element(nda::abs(target));
+
+      nda::matrix<double> D(n * n, K);
+      nda::vector<double> y(n * n);
+      for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j) {
+          y(i * n + j) = target(i, j);
+          for (int k = 0; k < K; ++k) D(i * n + j, k) = design[k](i, j);
+        }
+
+      auto [U, s, Vt]  = nda::linalg::svd(D);
+      double s_max     = (s.size() > 0) ? s(0) : 0.0;
+      double threshold = 1.e-9 * std::max(s_max, 1.0);
+
+      for (int k = 0; k < s.size(); ++k) {
+        if (s(k) < threshold) continue;
+        double Uty = 0.0;
+        for (int r = 0; r < n * n; ++r) Uty += U(r, k) * y(r);
+        double c = Uty / s(k);
+        for (int col = 0; col < K; ++col) gamma(col) += Vt(k, col) * c;
+      }
+
+      double max_residual = 0.0;
+      for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j) {
+          double fit = 0.0;
+          for (int k = 0; k < K; ++k) fit += gamma(k) * design[k](i, j);
+          max_residual = std::max(max_residual, std::abs(target(i, j) - fit));
+        }
+      return max_residual;
+    }
+
+  } // namespace
+
+  void recover_conserved_density_groups(classified_dyn_vertices_t &classified, std::vector<nda::vector<double>> const &conserved_combinations,
+                                        fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex) {
+    if (conserved_combinations.empty() || classified.stochastic.empty()) return;
+
+    // Density-bilinear candidates among the rejected (stochastic) vertices -- both
+    // off-diagonal (a!=b) and diagonal (a==b) self-terms are eligible to participate.
     std::vector<size_t> candidate_indices;
-    for (size_t i = 0; i < vertices.size(); ++i) {
-      auto bp1 = extract_bilinear(vertices[i].op1, fops, linindex, "op1");
-      auto bp2 = extract_bilinear(vertices[i].op2, fops, linindex, "op2");
-      if (is_density_bilinear(bp1) && is_density_bilinear(bp2) && bp1.opL.linear_index != bp2.opL.linear_index) candidate_indices.push_back(i);
+    for (size_t i = 0; i < classified.stochastic.size(); ++i) {
+      auto bp1 = extract_bilinear(classified.stochastic[i].op1, fops, linindex, "op1");
+      auto bp2 = extract_bilinear(classified.stochastic[i].op2, fops, linindex, "op2");
+      if (is_density_bilinear(bp1) && is_density_bilinear(bp2)) candidate_indices.push_back(i);
     }
-    if (candidate_indices.size() < 2) return result; // need a genuine group, not a single pair
+    if (candidate_indices.empty()) return;
 
-    // "Sufficiently symmetric" means every candidate shares the exact same coupling --
-    // one boson coupled uniformly to every orbital's density, not a mix (e.g. Kanamori's
-    // U and U' being different values would fail this, and correctly falls back to the
-    // per-vertex path in classify_dyn_vertices instead).
-    gf<imtime, scalar_valued> const &shared_coupling = vertices[candidate_indices.front()].coupling;
-    for (auto i : candidate_indices)
-      if (!gf_close(vertices[i].coupling, shared_coupling)) return result;
-
-    // The orbitals touched, and the complete set of off-diagonal pairs among them --
-    // if any pair (a,b) with a,b both in the group is missing, the group isn't complete
-    // and substituting N_total^2 would add coupling for a pair the user never asked for.
-    std::set<int> orbitals;
-    std::set<std::pair<int, int>> pairs_present;
+    // Group by shared coupling curve.
+    std::vector<std::vector<size_t>> groups;
     for (auto i : candidate_indices) {
-      auto bp1 = extract_bilinear(vertices[i].op1, fops, linindex, "op1");
-      auto bp2 = extract_bilinear(vertices[i].op2, fops, linindex, "op2");
-      orbitals.insert(bp1.opL.linear_index);
-      orbitals.insert(bp2.opL.linear_index);
-      pairs_present.insert({bp1.opL.linear_index, bp2.opL.linear_index});
-    }
-    size_t expected_pair_count = orbitals.size() * (orbitals.size() - 1);
-    if (pairs_present.size() != expected_pair_count) return result;
-
-    // Build N_total = sum of n_a over the group (reusing each vertex's own op1, one
-    // representative per orbital, rather than reconstructing c_dag/c from indices), and
-    // remove the absorbed vertices from the residual list.
-    many_body_op_t total_density_op;
-    std::set<int> seen_orbitals;
-    for (auto i : candidate_indices) {
-      auto bp1 = extract_bilinear(vertices[i].op1, fops, linindex, "op1");
-      if (seen_orbitals.insert(bp1.opL.linear_index).second) total_density_op = total_density_op + vertices[i].op1;
+      bool placed = false;
+      for (auto &g : groups)
+        if (gf_close(classified.stochastic[i].coupling, classified.stochastic[g.front()].coupling)) {
+          g.push_back(i);
+          placed = true;
+          break;
+        }
+      if (!placed) groups.push_back({i});
     }
 
-    result.found                  = true;
-    result.total_density_op       = total_density_op;
-    result.orbital_linear_indices = std::vector<int>(orbitals.begin(), orbitals.end());
-    result.shared_coupling        = shared_coupling;
-    std::set<size_t> candidate_set(candidate_indices.begin(), candidate_indices.end());
-    result.group_vertices.clear();
-    result.remaining_vertices.clear();
-    for (size_t i = 0; i < vertices.size(); ++i)
-      (candidate_set.count(i) ? result.group_vertices : result.remaining_vertices).push_back(vertices[i]);
-    return result;
+    std::set<size_t> to_recover;
+    for (auto const &g : groups) {
+      std::map<std::pair<int, int>, size_t> pair_to_vertex;
+      std::set<int> orbitals;
+      for (auto i : g) {
+        auto bp1 = extract_bilinear(classified.stochastic[i].op1, fops, linindex, "op1");
+        auto bp2 = extract_bilinear(classified.stochastic[i].op2, fops, linindex, "op2");
+        pair_to_vertex[{bp1.opL.linear_index, bp2.opL.linear_index}] = i;
+        orbitals.insert(bp1.opL.linear_index);
+        orbitals.insert(bp2.opL.linear_index);
+      }
+      if (orbitals.size() < 2) continue;
+
+      // Require EVERY (a,b) pair among the touched orbitals, INCLUDING a==b, to be
+      // present as its own vertex -- nothing inferred, see the module notes above.
+      std::vector<int> S(orbitals.begin(), orbitals.end());
+      bool complete = true;
+      for (int a : S) {
+        for (int b : S)
+          if (!pair_to_vertex.count({a, b})) { complete = false; }
+        if (!complete) break;
+      }
+      if (!complete) continue;
+
+      int n = static_cast<int>(S.size());
+      nda::matrix<double> target(n, n);
+      // Uniform, in units of the group's shared coupling curve. NOTE: nda::matrix's
+      // scalar assignment means "scalar * identity", not element-wise fill -- an
+      // explicit loop is required for a genuinely all-ones matrix.
+      for (int p = 0; p < n; ++p)
+        for (int q = 0; q < n; ++q) target(p, q) = 1.0;
+
+      std::vector<nda::matrix<double>> design;
+      auto restrict_to_S = [&](nda::vector<double> const &O) {
+        nda::vector<double> O_S(n);
+        for (int k = 0; k < n; ++k) O_S(k) = O(S[k]);
+        return O_S;
+      };
+      std::vector<nda::vector<double>> O_S_list;
+      for (auto const &O : conserved_combinations) O_S_list.push_back(restrict_to_S(O));
+      for (size_t bi = 0; bi < O_S_list.size(); ++bi) {
+        nda::matrix<double> outer_ii(n, n);
+        for (int p = 0; p < n; ++p)
+          for (int q = 0; q < n; ++q) outer_ii(p, q) = O_S_list[bi](p) * O_S_list[bi](q);
+        design.push_back(outer_ii);
+        for (size_t bj = bi + 1; bj < O_S_list.size(); ++bj) {
+          nda::matrix<double> outer_ij(n, n);
+          for (int p = 0; p < n; ++p)
+            for (int q = 0; q < n; ++q) outer_ij(p, q) = O_S_list[bi](p) * O_S_list[bj](q) + O_S_list[bj](p) * O_S_list[bi](q);
+          design.push_back(outer_ij);
+        }
+      }
+
+      nda::vector<double> gamma;
+      double residual = fit_and_residual(design, target, n, gamma);
+      if (residual > 1.e-8) continue; // not exactly representable -- leave as stochastic
+
+      for (int a : S)
+        for (int b : S) to_recover.insert(pair_to_vertex.at({a, b}));
+    }
+
+    if (to_recover.empty()) return;
+    std::vector<dyn_vertex_t> remaining_stochastic;
+    for (size_t i = 0; i < classified.stochastic.size(); ++i) {
+      if (to_recover.count(i))
+        classified.lang_firsov.push_back(classified.stochastic[i]);
+      else
+        remaining_stochastic.push_back(classified.stochastic[i]);
+    }
+    classified.stochastic = std::move(remaining_stochastic);
   }
 
 } // namespace triqs_cthyb

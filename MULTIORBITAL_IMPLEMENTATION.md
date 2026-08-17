@@ -69,10 +69,12 @@ This is where essentially all the new logic lives. Pipeline, in order (see
      `add_dyn_vertex` for anything more general. No more guessing a "two-block vs
      interleaved" layout (that was the old `multiorbital` design, removed).
 
-2. **`find_total_density_decomposition`** (new, see "Total-density decomposition"
-   below): looks for a "sufficiently symmetric" subgroup of density vertices — all
-   sharing the exact same coupling `D(tau)`, covering every off-diagonal orbital pair
-   completely — and pulls it out for special handling as a single `N_total` coupling.
+2. **`find_conserved_density_combinations` + `recover_conserved_density_groups`** (see
+   "Conserved-density-combination recovery" below): finds every linear combination of
+   orbital densities that commutes with `h_loc` (not just `N_total` — e.g. total
+   spin-up density and total spin-down density separately, for a standard Kanamori
+   `h_loc`), then rescues any *completely* user-specified group of vertices (diagonal
+   self-terms included) that exactly reconstructs a coupling to one of them.
 
 3. **`classify_dyn_vertices`**: splits whatever's left into `.lang_firsov` and
    `.stochastic`. A vertex is Lang-Firsov-eligible only if both op1 and op2 are number
@@ -88,13 +90,15 @@ This is where essentially all the new logic lives. Pipeline, in order (see
      goes stochastic. This is still the master on/off switch, used for debugging /
      forcing a stochastic-only comparison run.
 
-4. **`apply_lang_firsov_shift`** + **`apply_total_density_shift`**: subtract the K'(0)
-   static part of each analytic vertex's coupling from `h_loc`, before `h_diag` is
-   built. At `verbosity>=2`, also prints the aggregate before/after density-density
-   interaction matrix (as in CTSEG) — this was explicitly requested to be kept.
+4. **`apply_lang_firsov_shift`**: subtract the K'(0) static part of each analytic
+   vertex's coupling from `h_loc` (including any vertices recovered by
+   `recover_conserved_density_groups`, moved in before this runs — see
+   "Conserved-density-combination recovery" below), before `h_diag` is built. At
+   `verbosity>=2`, also prints the aggregate before/after density-density interaction
+   matrix (as in CTSEG) — this was explicitly requested to be kept.
 
-5. **`build_K_n`** + **`apply_total_density_kernel`**: build the `K_n[a][b][:]`
-   Legendre-coefficient kernel consumed by `qmc_data::compute_lang_firsov_ratio`.
+5. **`build_K_n`**: build the `K_n[a][b][:]` Legendre-coefficient kernel consumed by
+   `qmc_data::compute_lang_firsov_ratio`, from the same merged vertex list.
 
 6. **`fold_into_stochastic_catalog`**: convert whatever's left in `.stochastic` into
    `bosonic_op_pair_t`/`dyn_op_list`/`dyn_interactions`, consumed by
@@ -103,64 +107,115 @@ This is where essentially all the new logic lives. Pipeline, in order (see
 `has_dyn_interactions` (gates whether the stochastic moves/measure get registered at
 all) is now simply `!dyn_op_list.empty()`.
 
-### 4. Total-density decomposition (new, most recent work)
+### 4. Conserved-density-combination recovery (rewritten 2026-08-14)
+
+The original "total-density decomposition" design was mathematically unsound; see the
+2026-08-14 dated entry below for the full correction and why.
 
 **Motivation**: the per-vertex check in `classify_dyn_vertices` requires each
 individual `n_a` to commute with `h_loc`. That's correct but conservative: a real
 Hubbard-Kanamori `h_loc` with spin-flip and/or pair-hopping does *not* conserve
-individual orbital densities, even though it always conserves the *total* density
-`N_total = sum_a n_a` (both spin-flip and pair-hopping just move particles between
-orbitals). So a dynamical density-density interaction that couples uniformly to every
-orbital is, physically, coupling to `N_total`, and should be Lang-Firsov-eligible even
-when `classify_dyn_vertices`'s per-vertex check would reject every individual piece.
+individual orbital densities. What it *does* conserve is certain **linear combinations**
+of them — total charge `N_total = sum_a n_a` always, and for a standard Kanamori
+`h_loc` (2-orbital case checked directly), total spin-up density `N_up = sum_a n_{a,up}`
+and total spin-down density `N_down = sum_a n_{a,down}` *individually* (equivalently,
+`N_total` and total `S_z` — the spin-flip and pair-hopping terms, correctly read as
+4-operator processes, always move a particle *within* a fixed spin channel or move an
+up+down pair together, never converting spin, so each spin channel's total count is
+separately conserved). A dynamical vertex set that, together, amounts to a coupling to
+one of these conserved combinations should be Lang-Firsov-eligible even though every
+individual vertex fails the per-vertex check.
 
-**Mechanism** (verified against the actual trace code, `compute_lang_firsov_ratio` in
-`qmc_data.hpp`, not just asserted): `K_n[a][b]` is a fully general matrix over
-individual linear orbital indices — the trace evaluator dresses *every* individual
-fermion-operator insertion with a phase from `K_n` against every other insertion, with
-no assumption that `K_n` is diagonal or factorizes. If `K_n[a][b]` is set to the same
-kernel for every pair `(a,b)` in some set `S` (including `a==b`), the trace math
-collapses to exactly a single coupling to `N_S = sum_{a in S} n_a`. This is exact
-whenever `N_S` commutes with `h_loc`, independent of whether the individual `n_a` do.
+**The right general criterion, and why "does a summed operator commute" alone is not
+enough**: `K_n[a][b]` is indexed per *individual* orbital, and `compute_lang_firsov_ratio`
+dresses every pair of fermion-operator insertions (at orbitals `a` and `b`) with a
+phase from `K_n[a][b]` — there is no assumption that `K_n` is diagonal, but each
+individual density `n_a` used this way needs to be a piecewise-constant, deterministic
+function of insertion history between hybridization events for the phase formula to be
+exact. That's exactly what "`n_a` commutes with `h_loc`" means operationally.
+Substituting a *different*, weaker check — does the naive sum of the vertices' own
+orbitals commute — was the original design's mistake (see the dated entry): it doesn't
+verify that the specific combination the K_n matrix would end up representing is
+actually one that's conserved, only that some unrelated aggregate is. The fix is to
+find the *actual* conserved subspace directly and require an *exact* match against it.
 
-**Algorithm** (`find_total_density_decomposition` in `dynamical_interactions.cpp`):
-1. Among the density-bilinear vertices, find candidates: `n_a`-`n_b` pairs (`a != b`).
-2. Require *all* candidates share the exact same coupling curve (`gf_close`, numerical
-   equality check) — this is what "sufficiently symmetric Hamiltonian" means in code:
-   a single boson coupled uniformly to every orbital, e.g. `U(tau) == Uprime(tau)`.
-3. Require completeness: every off-diagonal pair `(a,b)`, `a != b`, among the touched
-   orbitals must be present (`orbitals.size() * (orbitals.size()-1)` pairs expected) —
-   otherwise substituting `N_total^2` would silently add coupling for a pair the user
-   never specified.
-4. If both hold, build `N_total` (reusing the vertices' own operators, deduplicated by
-   orbital) and remove the absorbed vertices from what `classify_dyn_vertices` sees.
-5. The caller (`solver_core.cpp`) then does ONE more check before actually using this:
-   does `N_total` commute with `h_loc`? (`use_total_density_decomposition` in
-   `solve()`.) If not, or if the group wasn't found/complete/uniform, nothing changes
-   from the existing per-vertex path — this is purely additive, never a regression.
+**`find_conserved_density_combinations`** (`dynamical_interactions.cpp`): computes the
+space `{ c in R^M : [sum_a c_a n_a, h_loc] = 0 }` (`M` = total orbital count) as a
+genuine linear-algebra problem, not a guess. The commutator is linear in `c`, so this
+is exactly the nullspace of the linear map `c -> sum_a c_a [n_a, h_loc]`. Computed by:
+expanding each `[n_a, h_loc]` via ordinary symbolic operator algebra (same primitive
+`classify_dyn_vertices` already uses), collecting every distinct monomial appearing
+across all `M` commutators as rows of a real coefficient matrix (real and imaginary
+parts of each coefficient as separate rows, so this is correct whether `h_scalar_t` is
+real or complex), and taking that matrix's nullspace via SVD (`nda::linalg::svd`).
+`n_a` itself must be built from `fundamental_operator_set`'s own `indices_t` for that
+linear position (`fundamental_operator_set::data_t(fops)[a]` + `many_body_op_t::make_canonical`)
+— **not** from `linindex`'s `(block_index, inner_index)` key directly, which uses
+`gf_struct`'s block *position*, not its name; building `c_dag<h_scalar_t>(block_index,
+inner_index)` from those raw ints silently constructs an operator on a fundamental mode
+unrelated to `h_loc`'s actual algebra, making every commutator trivially (and wrongly)
+zero — a real bug hit and fixed while implementing this.
 
-**Diagonal correction**: populating `K_n[a][b]` uniformly over the whole group
-including `a==b` reproduces `D(tau)*N_total^2`, but the *intended* physics is only
-`D(tau)*sum_{a!=b} n_a n_b = D(tau)*(N_total^2 - N_total)` (using `n_a^2 = n_a`).
-`apply_total_density_shift` cancels the extra `D(tau)*N_total` piece with an explicit
-`+0.5*K'(0)*N_total` shift on `h_loc` (opposite sign from the usual per-orbital
-`-0.5*K'(0)*n_a` shift, for exactly this reason — see the comment in the function).
+**`recover_conserved_density_groups`** (`dynamical_interactions.cpp`): runs *after*
+`classify_dyn_vertices`, only on what it rejected (`classified.stochastic`) — this
+matters, see below. Groups density-bilinear rejected vertices by shared coupling curve
+(`gf_close`), then for each group:
+1. Requires **every** ordered pair `(a,b)` among the touched orbitals — **including the
+   diagonal `a==b` self-terms** — to already exist as its own vertex sharing that
+   coupling. Nothing is inferred or filled in: a missing diagonal self-term is never
+   silently added, even when the off-diagonal part alone would numerically suggest one.
+   This is the point the original design got wrong (see dated entry) — the reason it
+   matters isn't just bookkeeping: for a purely off-diagonal specification (no diagonal
+   given at all), the interaction is genuinely `sum_{a!=b} D(tau) n_a(tau) n_b(0)`, a
+   *different* physical object than `D(tau) N_total(tau) N_total(0)` (which also
+   includes the `n_a(tau)n_a(0)` self-correlator terms) — silently adding the missing
+   diagonal changes the physics being asked for, however numerically tempting.
+2. Builds the group's target coupling matrix (all touched-pair entries, `1` in units of
+   the shared coupling curve) and fits it as `sum_ij Gamma_ij * O_i(a) * O_j(b)` over
+   the conserved combinations `O_i` found above (`Gamma` symmetric, so both "coupled to
+   a single combination" and "coupled to a linear combination of several" are covered;
+   cross terms are valid too, not just each `O_i` alone — any two conserved density
+   combinations automatically commute with each other, since number operators for
+   different modes always do, regardless of `h_loc`). SVD-based least-squares
+   (pseudo-inverse), robust to a rank-deficient design.
+3. Only if the fit is *exact* (residual ~0, not merely small) does the group move from
+   `classified.stochastic` to `classified.lang_firsov` — as-is, no reconstruction
+   needed, since every vertex was already fully user-specified. The ordinary,
+   unmodified `apply_lang_firsov_shift`/`build_K_n` handle the rest, exactly as if
+   `classify_dyn_vertices` had accepted it directly.
 
-**Current scope / explicit limitation**: only handles the *fully uniform* case (every
-relevant pair shares the exact same coupling). Does **not** attempt a partial
-decomposition when couplings differ but share a common part (e.g. Kanamori's `U` and
-`U'` being different but comparable) — that's the next planned step, see below.
+Running recovery only on `classify_dyn_vertices`'s leftovers (not on the full vertex
+list, as the original design did) also fixes a second, independent problem the
+diagonal-overwrite bug exposed: a vertex set that `classify_dyn_vertices` *already*
+handles correctly on its own (e.g. `spin_spin.cpp`'s D0 terms — `h_loc` there is pure
+density-density, so every individual `n_a` already commutes) never reaches the recovery
+step at all now, so it can't be second-guessed or reinterpreted by it.
 
-**Validation performed** (no exact cross-check available yet — ctseg can't do
-multi-orbital, CTINT isn't set up, see below): compared `lang_firsov=True` (total-density
-decomposition active, all vertices analytic) against `lang_firsov=False` (forced, same
-vertices, all stochastic) on a 2-orbital full-Kanamori `h_loc` (U=3, U'=1.5, J=0.3,
-spin-flip *and* pair-hopping both included) with a uniform dynamical D0 coupling. Both
-give average sign exactly 1.0; `max|G_analytic - G_stochastic|` shrinks monotonically
-as statistics increase (0.80/0.85 at ~20-30k measures -> 0.14/0.12 at ~150k-1.5M
-measures) — consistent with converging to the same physical answer, not a systematic
-bug. Validation script: `/tmp/.../scratchpad/total_density_validation.py` (in the
-session scratchpad, not the repo — should be turned into a real test, see below).
+**Validated**: `test/python/kanamori_dyn.py` — a full static Kanamori `h_loc`
+(spin-flip *and* pair-hopping) with a phonon coupled to total density, specified
+*completely* (every off-diagonal pair via `kanamori_dynamical_vertices`, every diagonal
+self-term explicitly via `add_dyn_vertex`, all sharing one coupling curve) — is
+correctly recovered: `find_conserved_density_combinations` finds 2 combinations
+(`N_up`, `N_down`), the fit against the 16-entry (4 orbitals x 4 orbitals) target
+matrix succeeds with `gamma=[2,2,2]` and residual `~1e-16`, and all 16 vertices move to
+the analytic path. Dropping the diagonal terms (the original, incomplete
+specification) correctly falls back to fully stochastic instead — verified both
+directions. `test/python/kanamori_dyn_selfconsistency.py` cross-checks the analytic
+result against forced-`lang_firsov=False` (fully stochastic) on the identical,
+completely-specified setup: `G_l` agrees within tolerance (`~0.02` at 200k/300k
+cycles), average sign stays near 1.0 in both. See the dated entry for the second real
+bug found while getting this working (`nda::matrix` scalar assignment).
+
+**Current scope / explicit limitation**: still requires an *exact* fit — no partial
+decomposition when a group's couplings only share a *common part* (e.g. Kanamori's `U`
+and `U'` being different but comparable, or a diagonal specified with a *different*
+coupling than the off-diagonal). This is the confirmed necessary next generalization,
+not just a nice-to-have: the eventual target is a full dynamical interaction built from
+ab-initio GW data, where the total-density channel is expected to *dominate* the
+retarded coupling, with non-uniform corrections handled stochastically on top — this
+session's validated example is the *fully representable* limit of that picture; the
+partial/residual generalization is what's needed for the realistic (non-uniform)
+case. See "What's left" item 3.
 
 ### 5. Python convenience layer
 
@@ -202,9 +257,9 @@ and cross-checked against `test/c++/spin_spin.cpp` and `test/python/spin_spin.py
 (both sides of *that* file's own conflict agree with the same convention) that HEAD's
 convention is correct; resolved `ctseg_spin_spin.py` and `benchmark/dynamic_int/spin_spin.py`
 using it. `benchmark/dynamic_int/multiorb_spin_spin.py` (a benchmark script, not
-resolved from a conflict, apparently written earlier this session) has the *wrong*
-(flipped) convention and its own inline comment contradicts its own code — **not yet
-fixed, listed below.**
+resolved from a conflict, apparently written earlier this session) had the *wrong*
+(flipped) convention and its own inline comment contradicted its own code — **fixed
+this session** (see the dated entry below).
 
 ### 8. Validated end-to-end against ctseg (real solver cross-check)
 
@@ -215,7 +270,141 @@ cycles) — same convergence signature as the total-density validation above. Th
 confirms the D0 sign convention, the Lang-Firsov pipeline, and the scalar Jperp_tau
 reversion are all correct for the case ctseg can actually check (single orbital only —
 ctseg cannot do multi-orbital, hence the total-density decomposition above couldn't be
-cross-checked the same way).
+cross-checked the same way). Being single-orbital, this also never exercises
+`recover_conserved_density_groups` at all (there is no off-diagonal pair to form a
+group from) — see the `kanamori_dyn`/`kanamori_dyn_selfconsistency` tests (see
+"Conserved-density-combination recovery" above) for the first real exercise of the
+multi-orbital conserved-combination path.
+
+## Session update (2026-08-13)
+
+**Superseded 2026-08-14** — the "total-density decomposition" mechanism this entry
+describes fixing was itself found to be unsound the next day and replaced entirely
+(see the 2026-08-14 entry below and "Conserved-density-combination recovery" above).
+Left as-is for the historical record of what the diagonal-overwrite bug actually was
+and how it was first (incompletely) addressed.
+
+- **Diagonal-overwrite bug found and fixed** in the total-density decomposition (see
+  the revised "Diagonal correction" subsection above for the mechanism and why the old
+  approach was wrong). `apply_total_density_shift`/`apply_total_density_kernel` deleted;
+  `find_total_density_decomposition`'s absorbed group vertices now flow through the
+  ordinary `apply_lang_firsov_shift`/`build_K_n` instead.
+- **`test/c++/spin_spin.ref.h5` and `test/python/spin_spin.ref.h5` regenerated** against
+  the fixed code. Both `spin_spin` and `Py_spin_spin` ctests pass again, deterministically
+  (both already had fixed seeds — `23488` in the C++ test, `123*rank+567` in the Python
+  one — no seed changes were needed).
+- **`benchmark/dynamic_int/multiorb_spin_spin.py`'s D0 sign bug fixed** (see item 7
+  above) — same-spin/opposite-spin signs now match the verified-correct convention.
+- **New Hubbard-Kanamori dynamical-interaction example, landed as two real tests**
+  (see "What's left" item 5): static `h_int` carries the full Kanamori structure (`U`,
+  `U'=U-2J`, `J_hund`, spin-flip *and* pair-hopping); the dynamical part is a single
+  boson coupled uniformly to total density across every spin-orbital, via
+  `kanamori_dynamical_vertices(solver, spin_names, orb_names, U=Q_tau, Uprime=Q_tau,
+  spin_flip=False)` (passing the same `Q_tau` for both slots is what makes
+  `find_total_density_decomposition` accept the group). This is the *first* real
+  exercise of `kanamori_dynamical_vertices` anywhere in the repo, and the first case
+  where individual orbital densities are confirmed *not* to commute with `h_loc` (real
+  spin-flip + pair-hopping) while `N_total` does — exactly the scenario the
+  total-density decomposition exists for.
+  - `test/python/kanamori_dyn.py` (`Py_kanamori_dyn`): deterministic, `n_cycles=5000`,
+    checked in against `kanamori_dyn.ref.h5`. Confirmed via a `verbosity=3` diagnostic
+    run: `Total number of dynamical interaction terms: 0` and 12 Lang-Firsov K'(0)
+    shifts printed (all ordered pairs among the 4 spin-orbitals) — the decomposition is
+    genuinely firing, nothing silently fell back to per-vertex or stochastic handling.
+  - `test/python/kanamori_dyn_selfconsistency.py` (`Py_kanamori_dyn_selfconsistency`):
+    `lang_firsov=True` (200k cycles) vs. forced `lang_firsov=False` (300k cycles) on the
+    identical setup, compared via `G_l` (Legendre — raw `G_tau` has large single-bin
+    binning noise at this vertex count/statistics that has nothing to do with physics,
+    confirmed by hand: it shrinks in lockstep with the `G_l` comparison as statistics
+    increase). Average sign stayed close to `1.0` in *both* runs (`0.9999`/`0.9998`) —
+    the severe pure-stochastic sign problem documented in item 4 below did **not**
+    reproduce for this multi-orbital setup. `max|G_l_lf - G_l_stoch|` shrank from
+    ~0.1-0.2 at 20k/20k cycles to ~0.015-0.03 at 200k/300k cycles — clean convergence,
+    ~2 minutes total wall-clock, well within CI-reasonable time, so this was promoted to
+    a registered, CI-gating test rather than kept as a standalone script.
+  - Neither test would have caught the diagonal-overwrite bug above: the coupling here
+    is uniform with no independently-specified diagonal vertex to conflict with, so
+    `apply_total_density_kernel`'s old overwrite would have been a no-op in this
+    specific case.
+
+## Session update (2026-08-14): the total-density decomposition was unsound, replaced
+
+**What went wrong, precisely**: yesterday's fix (previous entry) addressed the
+diagonal-overwrite symptom, but the underlying eligibility criterion was still wrong.
+`find_total_density_decomposition` licensed a group of vertices for Lang-Firsov by
+checking whether `N_total` (the sum of exactly the orbitals the group's own vertices
+happened to touch) commutes with `h_loc` — but the vertices, once merged into the
+ordinary per-vertex `lang_firsov` list, get processed *individually*, each contributing
+its own `(a,b)` entry to `K_n`. That's an "orbital-resolved" treatment, and for it to
+be exact, each individual `n_a`, `n_b` needs to itself be a piecewise-constant function
+of insertion history between hybridization events — i.e. needs to individually commute
+with `h_loc`. Checking that a summed/aggregate operator commutes instead doesn't verify
+that; it was a plausible-looking but unsound substitute.
+
+This was caught by the user, who pushed back after seeing the log line "0 analytic, 12
+stochastic" turn into "12 analytic, 0 stochastic" for `kanamori_dyn.py`'s off-diagonal-
+only Kanamori coupling: *"I'm confused how a spin-flip term or specific density term
+commutes in Kanamori Hamiltonian? that seems wrong."* They were right — no individual
+density term commutes there; the group mechanism was exploiting the aggregate `N_total`
+commuting as a loophole around checking the operators it actually dresses individually,
+and that loophole isn't valid. Correct references on the actual condition (Lang-Firsov
+requires the *specific coupled operator* to commute with `h_loc`, not merely *some*
+operator): I. G. Lang & Yu. A. Firsov, *Zh. Eksp. Teor. Fiz.* **43**, 1843 (1962); P.
+Werner & A. J. Millis, *PRL* **99**, 146404 (2007) and *PRL* **104**, 146401 (2010); E.
+Gull et al., *Rev. Mod. Phys.* **83**, 349 (2011); Y. Nomura, S. Sakai, M. Capone, R.
+Arita, *Sci. Adv.* **1**, e1500568 (2015), Supp. §D (non-density-type couplings fall
+outside Lang-Firsov); K. Steiner, Y. Nomura, P. Werner, *PRB* **92**, 115123 (2015)
+(the hybridization + weak-coupling-in-J workaround this limitation motivated).
+
+**The corrected mechanism**: see "Conserved-density-combination recovery" above (full
+rewrite of section 4) — `find_conserved_density_combinations` finds the *actual*
+conserved subspace of density combinations via linear algebra (nullspace of
+`[sum_a c_a n_a, h_loc]`, not a guessed `N_total`), and `recover_conserved_density_groups`
+only promotes a group when it is *exactly* representable in that subspace *and*
+completely, explicitly specified by the user (diagonal self-terms included — no
+silent inference of a missing Holstein term). This is a strictly stronger, sound
+generalization: it also naturally finds combinations beyond `N_total` (e.g. `N_up`/
+`N_down` separately, for a standard 2-orbital Kanamori `h_loc` — equivalent to `N_total`
+and total `S_z`), which the old design would never have looked for.
+
+**Two real implementation bugs found and fixed while getting the new mechanism working**
+(both via direct debugging against `kanamori_dyn.py`'s setup, not just derivation):
+1. `find_conserved_density_combinations` initially built `n_a` from `linindex`'s
+   `(block_index, inner_index)` key directly (`c_dag<h_scalar_t>(block_index,
+   inner_index)`) — but `block_index` there is `gf_struct`'s block *position* (an int),
+   not its name, so this silently constructed an operator on a fundamental mode
+   unrelated to `h_loc`'s actual algebra. Every commutator came out trivially zero (0
+   conserved combinations found for a Kanamori `h_loc` that obviously has some).
+   Fixed: build `n_a` from `fundamental_operator_set`'s own `indices_t` for that linear
+   position instead (`fundamental_operator_set::data_t(fops)[a]` +
+   `many_body_op_t::make_canonical(dagger, indices)`).
+2. The least-squares fit (`recover_conserved_density_groups`'s `fit_and_residual`)
+   initialized its target matrix via `nda::matrix<double> target(n,n); target = 1.0;`,
+   intending an all-ones matrix. `nda::matrix`'s scalar assignment means "scalar times
+   the identity matrix", not element-wise fill (confirmed by printing the flattened
+   target and seeing the identity pattern) — a real, non-obvious library-semantics trap
+   distinguishing `nda::matrix` from a plain array type. Fixed with an explicit
+   double loop. (Note for future code in this file: any other `nda::matrix = <nonzero
+   scalar>` should be treated with suspicion; `= 0.0` is safe since both readings agree
+   there, which is presumably why this didn't surface earlier in `bare_density_matrix`'s
+   `U_matrix = 0.0`/`mu_vec = 0.0`.)
+
+Both bugs were caught by hand-deriving the expected result (`gamma=[2,2,2]` for the
+`kanamori_dyn.py` setup, worked out on paper from the `N_up`/`N_down` basis) and adding
+temporary `std::cerr` tracing to compare against actual runtime values — the mismatch
+(`gamma=[1,~0,1]`, wrong) pointed straight at the target-matrix bug once the conserved
+combinations themselves were confirmed correct. Temporary tracing was removed before
+landing; `solver_core.cpp` keeps one `verbosity>=2` production line reporting how many
+conserved combinations were found and how many vertices were recovered by them.
+
+**Test changes**: `test/python/kanamori_dyn.py` now explicitly registers the 4 diagonal
+self-terms (`add_dyn_vertex(n(s,a), n(s,a), coupling)` for every spin-orbital) alongside
+the off-diagonal `kanamori_dynamical_vertices(...)` call — required for the group to be
+*completely* specified under the corrected (stricter, sound) criterion; without them it
+now correctly falls back to fully stochastic (verified both ways). `kanamori_dyn.ref.h5`
+regenerated accordingly (`16 analytic, 0 stochastic`, average sign `0.9996`).
+`test/python/kanamori_dyn_selfconsistency.py` updated the same way; still passes
+(`G_l` agreement `~0.02` at 200k/300k cycles, both average signs `~0.9998-0.9999`).
 
 ## Key files touched this session (uncommitted, on top of `48cb130`)
 
@@ -282,6 +471,14 @@ Python/shell/JSON) in the repo as pushed to `origin/multiorbital-v2`:
   this defaulted to multiorbital's side by "more complete" reasoning and was
   explicitly corrected).
 
+**Status update (this session, 2026-08-13)**: the notebook is currently valid JSON
+with no literal conflict markers present — so the state described above (broken/invalid
+JSON) is no longer accurate. However, its *content* was never manually reviewed this
+session (an automatic checkpoint commit bundled in a notebook change that predated this
+session's own work, from an unknown prior edit), so which side (or what merge) actually
+ended up in the file is unverified — needs a real content review against the policy
+below, not assumed correctly resolved just because it parses.
+
 **New conflict-resolution policy established this session** (saved to memory,
 `feedback_merge_conflict_policy.md`): default to **unstable's side** for
 multiorbital/unstable conflicts, unless there's a specific, verified reason to prefer
@@ -291,28 +488,38 @@ branch history, checked via `git log --oneline <branch> -- <file>` — this is w
 this policy was stated). If in doubt whether an already-resolved file should be
 redone under this policy, ask rather than silently redo it.
 
-Still open: whether `benchmark/dynamic_int/multiorb_spin_spin.py`'s wrong D0 sign
-convention (see point 7 above) should be fixed — not a merge conflict (this file isn't
-in either branch's history, appears to have been written fresh during an earlier part
-of this session), just carries the same bug independently.
+`benchmark/dynamic_int/multiorb_spin_spin.py`'s wrong D0 sign convention (see point 7
+above) was not a merge conflict (this file isn't in either branch's history, appears to
+have been written fresh during an earlier part of this session), just carried the same
+bug independently — **fixed this session** (see the dated entry below).
 
-### 3. Partial/non-uniform total-density decomposition (next after that, most important per user)
+### 3. Partial/residual conserved-combination decomposition (confirmed necessary next step, not merely next-in-queue)
 
-Generalize `find_total_density_decomposition` beyond the fully-uniform case: given a
-group of density vertices whose couplings are *not* all identical (e.g. Kanamori's `U`
-vs `U'`), extract whatever common part they share (the user's own framing: "there
-should be a way to decompose into TOTAL density and then a small residual leftover
-part"), handle the common part via `N_total` (as now), and feed only the *residual*
-per-pair coupling (`D_ab(tau) - D_common(tau)`) to the stochastic path — instead of
-either the whole `D_ab` (current per-vertex fallback) or nothing.
+Generalize `recover_conserved_density_groups` beyond the exact-fit-only case: given a
+group of density vertices whose coupling matrix (in the conserved-combination basis
+`{O_i}` from `find_conserved_density_combinations`) does *not* fit exactly (e.g.
+Kanamori's `U` and `U'` being different but comparable, so a coupling to `N_total`
+alone gets close but not exact), project onto the nearest representable point in
+`span{O_i(a)O_j(b)+O_j(a)O_i(b)}` anyway, apply *that* analytically, and feed only the
+*residual* (`target - fit`, as an actual per-pair coupling) to the stochastic path —
+instead of either the whole thing (current all-or-nothing fallback) or nothing.
+Confirmed by the user as necessary, not optional: the eventual target is a full
+dynamical interaction built from ab-initio GW data, where the total-density channel is
+expected to dominate, with non-uniform corrections handled stochastically on top —
+exactly this mechanism, generalized. The exact-fit machinery landed 2026-08-14 (see
+"Conserved-density-combination recovery" above) is most of the way there already: the
+projection/least-squares fit (`fit_and_residual`) already computes the residual, it's
+just discarded (group rejected) instead of being fed onward when nonzero.
 
-Open design question, not yet resolved: how to choose `D_common(tau)` when couplings
-differ in both magnitude *and* sign across pairs (e.g. Sz*Sz-type same-spin=+/opposite-spin=-
-couplings, where no single common part helps and the decomposition should
-correctly detect that and back off to zero decomposition). A naive pointwise-minimum
-approach breaks down when signs differ; needs a well-defined, provably-correct
-criterion, not a heuristic — see the earlier discussion in this session for the
-mathematical reasoning about why correctness here matters more than efficiency.
+Open design question, not yet resolved: for the *diagonal* entries specifically, when
+no self-term was given at all (the common case — see `kanamori_dyn.py`), is "residual
+= 0 at that position" (leave the diagonal alone, add nothing) or "residual = fit's
+implied value" (silently add a Holstein-like self-term) the right default? The
+"infer less" principle argues for the former (never invent terms the user didn't
+specify) — but that means the diagonal is asymmetric relative to the (fitted, then
+subtracted) off-diagonal residual, which needs to be handled correctly in the
+stochastic-catalog construction, not just noted. Needs a well-defined, provably-correct
+treatment, not a heuristic.
 
 **Naming reminder** (explicit user requirement): no unicode/math symbols anywhere in
 code — plain descriptive English identifiers only (`total_density_coupling`,
@@ -336,14 +543,34 @@ terrible" — so some sign problem is expected and fine, but the current magnitu
 (effectively zero, noise-dominated) seems too severe to just be intrinsic difficulty.
 Deprioritized relative to the Lang-Firsov-path work above, revisit later.
 
-### 5. Validation / test suite (not started)
+Cross-reference: the `kanamori_dyn_selfconsistency` test (dated entry below) exercises
+the *other* direction of this same code (`insert_dyn`/`remove_dyn` forced on for a
+multi-orbital dynamical interaction) and empirically did **not** reproduce a severe
+sign problem there (average sign stayed close to 1.0 at 300k cycles) — worth keeping in
+mind as a data point when this item is revisited, though the two setups differ enough
+(single- vs. multi-orbital, different coupling shape) that it doesn't resolve the
+single-orbital case's root cause.
 
-- Turn `/tmp/.../scratchpad/total_density_validation.py` and
-  `/tmp/.../scratchpad/kanamori_dyn_smoke.py`/`kanamori_full_static_test.py` into real
-  tests under `test/c++` or `test/python` (currently only exist as scratchpad scripts
-  from this session, will be lost otherwise).
-- Regenerate `spin_spin.ref.h5` once the pure-stochastic sign problem (point 4) is
-  understood — don't just regenerate blindly, since that could paper over a real bug.
+### 5. Validation / test suite
+
+- **Done**: `test/python/kanamori_dyn.py` (deterministic, `lang_firsov=True` only,
+  `n_cycles=5000`, checked in against `kanamori_dyn.ref.h5`, registered as
+  `Py_kanamori_dyn` — full Kanamori `h_loc` plus a *completely* specified coupling to
+  total density, off-diagonal vertices from `kanamori_dynamical_vertices` and explicit
+  diagonal self-terms via `add_dyn_vertex`) and `test/python/kanamori_dyn_selfconsistency.py`
+  (physics validation — `lang_firsov=True` vs. forced `lang_firsov=False` on the
+  identical setup, compared via `G_l`, registered as `Py_kanamori_dyn_selfconsistency`,
+  ~2 minutes) — both are real, CI-gating tests exercising the multi-orbital
+  conserved-density-combination recovery (see "Conserved-density-combination recovery"
+  above for what they do and don't cover). The earlier scratchpad scripts this bullet
+  used to point to (`total_density_validation.py`, `kanamori_dyn_smoke.py`,
+  `kanamori_full_static_test.py`) are superseded by these.
+- `spin_spin.ref.h5` (both `test/c++/` and `test/python/`) regenerated against the
+  fixed dynamical-interaction code — **unrelated** to the
+  pure-stochastic sign problem in item 4 above (that's about explicitly forcing
+  `lang_firsov=False`, which neither `spin_spin.cpp` nor `spin_spin.py` do by default;
+  this regeneration is the ordinary, default `lang_firsov=True` path). Item 4's own
+  regeneration is still pending its own investigation — don't conflate the two.
 - Eventually: the rotated-basis (bonding/antibonding) two-site dimer DCA test from the
   original plan (goal 4 at the top) — not started, lowest priority, exploratory.
 - Eventually: compare against CTINT for the multi-orbital total-density case, once

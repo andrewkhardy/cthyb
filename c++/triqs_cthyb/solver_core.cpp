@@ -219,22 +219,19 @@ namespace triqs_cthyb {
     // list unconditionally (classify_dyn_vertices never evaluates eligibility), so
     // this flag remains the master on/off switch it always was.
     //
-    // Before the per-vertex classification, look for a total-density decomposition:
-    // a group of density vertices that couples uniformly and completely to every
-    // off-diagonal orbital pair among them is exactly a coupling to N_total = sum_a
-    // n_a, which is Lang-Firsov-eligible whenever N_total commutes with h_loc -- even
-    // for a full Hubbard-Kanamori h_loc, where spin-flip/pair-hopping break each n_a
-    // individually. If found and eligible, that group's vertices are pulled out of the
-    // per-vertex classification below (which would reject them individually -- each n_a
-    // alone doesn't commute with h_loc) and merged straight into the Lang-Firsov list.
-    // apply_lang_firsov_shift/build_K_n need no special-casing for them: each is still
-    // an ordinary off-diagonal density vertex with its own coupling, and the
-    // group-level N_total commutation check just proves the (weaker, sufficient)
-    // condition their normal per-pair math actually relies on -- see
-    // find_total_density_decomposition in dynamical_interactions.hpp for why treating
-    // them as a uniform grid over the whole group, including diagonal (a==b) entries,
-    // is wrong instead (it silently overwrites/duplicates any diagonal vertex given its
-    // own, different coupling, e.g. a genuine J*Sz*Sz interaction).
+    // After the per-vertex classification, attempt to recover vertices that failed it:
+    // classify_dyn_vertices requires each vertex's own n_a and n_b to *individually*
+    // commute with h_loc, which correctly rejects everything under a genuine
+    // Hubbard-Kanamori h_loc with spin-flip/pair-hopping (no individual orbital density
+    // is conserved there). But a *combination* of densities is usually still conserved
+    // (total charge N_total = sum_a n_a always; total S_z whenever spin-rotation
+    // symmetry isn't broken) -- find_conserved_density_combinations finds every such
+    // combination directly from h_loc via linear algebra (not by guessing N_total
+    // specifically), and recover_conserved_density_groups rescues any *completely*
+    // user-specified set of rejected vertices (diagonal a==b self-terms included, not
+    // inferred) that exactly reconstructs a coupling to one of them. See
+    // dynamical_interactions.hpp/.cpp for the operator-algebra argument for why
+    // completeness (including the diagonal) is required, not just a convenience.
     //
     // Lang-Firsov's K'(0) static shift must be applied here, before h_diag is built
     // below; the K_n kernel and the stochastic dyn_op_list/dyn_interactions catalog
@@ -242,18 +239,16 @@ namespace triqs_cthyb {
     // finalized.
     // ------------------------------------------------------------------
     auto dyn_vertices = collect_dyn_vertices(inputs.dyn_vertices, inputs.D0t, inputs.Jperpt, gf_struct);
-
-    auto total_density_decomposition = find_total_density_decomposition(dyn_vertices, fops, linindex);
-    bool use_total_density_decomposition =
-       params.lang_firsov && total_density_decomposition.found
-       && (total_density_decomposition.total_density_op * _h_loc - _h_loc * total_density_decomposition.total_density_op).is_almost_zero();
-
-    auto const &vertices_for_classification = use_total_density_decomposition ? total_density_decomposition.remaining_vertices : dyn_vertices;
-    auto classified_dyn_vertices = classify_dyn_vertices(vertices_for_classification, _h_loc, fops, linindex, params.lang_firsov);
-    if (use_total_density_decomposition)
-      classified_dyn_vertices.lang_firsov.insert(classified_dyn_vertices.lang_firsov.end(),
-                                                  total_density_decomposition.group_vertices.begin(),
-                                                  total_density_decomposition.group_vertices.end());
+    auto classified_dyn_vertices = classify_dyn_vertices(dyn_vertices, _h_loc, fops, linindex, params.lang_firsov);
+    if (params.lang_firsov) {
+      auto conserved_density_combinations = find_conserved_density_combinations(_h_loc, fops, linindex);
+      size_t stochastic_before = classified_dyn_vertices.stochastic.size();
+      recover_conserved_density_groups(classified_dyn_vertices, conserved_density_combinations, fops, linindex);
+      if (params.verbosity >= 2 && !conserved_density_combinations.empty())
+        std::cout << "Found " << conserved_density_combinations.size() << " conserved density combination(s); recovered "
+                  << (stochastic_before - classified_dyn_vertices.stochastic.size())
+                  << " vertex(es) from the stochastic path to Lang-Firsov." << std::endl;
+    }
     apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
     // ------------------------------------------------------------------
 
@@ -333,7 +328,9 @@ namespace triqs_cthyb {
     K_n = build_K_n(classified_dyn_vertices.lang_firsov, beta, linindex, fops, params.dyn_n_l);
     fold_into_stochastic_catalog(classified_dyn_vertices.stochastic, fops, linindex, dyn_op_list, dyn_interactions);
 
-    if (params.verbosity >= 2) std::cout << "Total number of dynamical interaction terms: " << dyn_op_list.size() << std::endl;
+    if (params.verbosity >= 2)
+      std::cout << "Dynamical interaction vertices: " << classified_dyn_vertices.lang_firsov.size() << " analytic (Lang-Firsov), "
+                << dyn_op_list.size() << " stochastic (sampled by insert_dyn/remove_dyn)" << std::endl;
 
     // Automatically enable dynamical moves if any vertex was routed to the stochastic path.
     bool has_dyn_interactions = !dyn_op_list.empty();
