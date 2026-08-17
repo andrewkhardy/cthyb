@@ -156,33 +156,36 @@ inner_index)` from those raw ints silently constructs an operator on a fundament
 unrelated to `h_loc`'s actual algebra, making every commutator trivially (and wrongly)
 zero — a real bug hit and fixed while implementing this.
 
-**`recover_conserved_density_groups`** (`dynamical_interactions.cpp`): runs *after*
-`classify_dyn_vertices`, only on what it rejected (`classified.stochastic`) — this
-matters, see below. Groups density-bilinear rejected vertices by shared coupling curve
-(`gf_close`), then for each group:
+**`recover_conserved_density_groups`** (`dynamical_interactions.cpp`, generalized
+2026-08-17 — see the dated entry below): runs *after* `classify_dyn_vertices`, only on
+what it rejected (`classified.stochastic`) — this matters, see below. Groups
+density-bilinear rejected vertices into connected components by shared orbitals (*not*
+by matching coupling curve — different `(a,b)` pairs are explicitly allowed independent
+coupling curves; see the dated entry for why requiring a shared curve was itself an
+unnecessary over-restriction), then for each component:
 1. Requires **every** ordered pair `(a,b)` among the touched orbitals — **including the
-   diagonal `a==b` self-terms** — to already exist as its own vertex sharing that
-   coupling. Nothing is inferred or filled in: a missing diagonal self-term is never
-   silently added, even when the off-diagonal part alone would numerically suggest one.
-   This is the point the original design got wrong (see dated entry) — the reason it
+   diagonal `a==b` self-terms** — to already exist as its own vertex. Nothing is
+   inferred or filled in: a missing diagonal self-term is never silently added, even
+   when the off-diagonal part alone would numerically suggest one. This is the point
+   the original design got wrong (see the 2026-08-14 dated entry) — the reason it
    matters isn't just bookkeeping: for a purely off-diagonal specification (no diagonal
    given at all), the interaction is genuinely `sum_{a!=b} D(tau) n_a(tau) n_b(0)`, a
    *different* physical object than `D(tau) N_total(tau) N_total(0)` (which also
    includes the `n_a(tau)n_a(0)` self-correlator terms) — silently adding the missing
    diagonal changes the physics being asked for, however numerically tempting.
-2. Builds the group's target coupling matrix (all touched-pair entries, `1` in units of
-   the shared coupling curve) and fits it as `sum_ij Gamma_ij * O_i(a) * O_j(b)` over
-   the conserved combinations `O_i` found above (`Gamma` symmetric, so both "coupled to
-   a single combination" and "coupled to a linear combination of several" are covered;
-   cross terms are valid too, not just each `O_i` alone — any two conserved density
-   combinations automatically commute with each other, since number operators for
-   different modes always do, regardless of `h_loc`). SVD-based least-squares
-   (pseudo-inverse), robust to a rank-deficient design.
-3. Only if the fit is *exact* (residual ~0, not merely small) does the group move from
-   `classified.stochastic` to `classified.lang_firsov` — as-is, no reconstruction
-   needed, since every vertex was already fully user-specified. The ordinary,
-   unmodified `apply_lang_firsov_shift`/`build_K_n` handle the rest, exactly as if
-   `classify_dyn_vertices` had accepted it directly.
+2. Builds the design matrices `O_i(a)O_j(b) [+ O_j(a)O_i(b)]` once (purely structural,
+   from the conserved combinations `O_i` restricted to the touched orbitals — `Gamma`
+   symmetric, so both "coupled to a single combination" and "coupled to a linear
+   combination of several" are covered), then fits **per Legendre order**: each pair
+   `(a,b)`'s own Legendre coefficients (via `fit_legendre_coeffs`, exactly what
+   `build_K_n` would compute for it individually) become the fit target at that order,
+   solved by the same SVD-based least-squares (pseudo-inverse, robust to a
+   rank-deficient design) independently for every order `0..N_leg-1`.
+3. Only if *every* order's fit is exact (residual ~0, not merely small) does the
+   component move from `classified.stochastic` to `classified.lang_firsov` — as-is, no
+   reconstruction needed, since every vertex was already fully user-specified. The
+   ordinary, unmodified `apply_lang_firsov_shift`/`build_K_n` handle the rest, exactly
+   as if `classify_dyn_vertices` had accepted it directly.
 
 Running recovery only on `classify_dyn_vertices`'s leftovers (not on the full vertex
 list, as the original design did) also fixes a second, independent problem the
@@ -203,19 +206,29 @@ specification) correctly falls back to fully stochastic instead — verified bot
 directions. `test/python/kanamori_dyn_selfconsistency.py` cross-checks the analytic
 result against forced-`lang_firsov=False` (fully stochastic) on the identical,
 completely-specified setup: `G_l` agrees within tolerance (`~0.02` at 200k/300k
-cycles), average sign stays near 1.0 in both. See the dated entry for the second real
-bug found while getting this working (`nda::matrix` scalar assignment).
+cycles), average sign stays near 1.0 in both. See the 2026-08-14 dated entry for the
+second real bug found while getting this working (`nda::matrix` scalar assignment).
+`test/python/kanamori_dyn_nonuniform.py` (added 2026-08-17) is the same setup with
+`U(tau) != U'(tau)` (same-spin vs. opposite-spin pairs on independent curves) —
+also fully recovered (`16 analytic, 0 stochastic`), and a hand-constructed case that
+breaks uniformity *within* a single conserved-combination slot (one same-spin pair's
+diagonal given a different curve than the other) correctly stays fully stochastic
+(`0 analytic, 16 stochastic`) — verified as a one-off check, not (yet) a committed test.
+See the 2026-08-17 dated entry for why `U != U'` is recoverable at all.
 
-**Current scope / explicit limitation**: still requires an *exact* fit — no partial
-decomposition when a group's couplings only share a *common part* (e.g. Kanamori's `U`
-and `U'` being different but comparable, or a diagonal specified with a *different*
-coupling than the off-diagonal). This is the confirmed necessary next generalization,
-not just a nice-to-have: the eventual target is a full dynamical interaction built from
-ab-initio GW data, where the total-density channel is expected to *dominate* the
-retarded coupling, with non-uniform corrections handled stochastically on top — this
-session's validated example is the *fully representable* limit of that picture; the
-partial/residual generalization is what's needed for the realistic (non-uniform)
-case. See "What's left" item 3.
+**Current scope / explicit limitation**: still requires an *exact* fit at every
+Legendre order — no partial decomposition when a group's couplings don't fit *any*
+consistent assignment of the conserved combinations (e.g. breaking uniformity within a
+single `Gamma_ij` slot, as in the hand-constructed check above), not even approximately
+well. This remains the confirmed necessary next generalization for the genuinely
+irreducible case, not just a nice-to-have: the eventual target is a full dynamical
+interaction built from ab-initio GW data, where the total-density channel is expected
+to *dominate* the retarded coupling, with non-uniform corrections handled
+stochastically on top. Note this is narrower than it was framed before 2026-08-17: a
+same-spin-vs-opposite-spin split (`U(tau) != U'(tau)`, the standard Kanamori shape) is
+now *fully* representable, not just approximately — see the dated entry. What's left
+is the case where the conserved subspace's structure genuinely doesn't have an
+independent "slot" for every distinct value present. See "What's left" item 3.
 
 ### 5. Python convenience layer
 
@@ -406,6 +419,61 @@ regenerated accordingly (`16 analytic, 0 stochastic`, average sign `0.9996`).
 `test/python/kanamori_dyn_selfconsistency.py` updated the same way; still passes
 (`G_l` agreement `~0.02` at 200k/300k cycles, both average signs `~0.9998-0.9999`).
 
+## Session update (2026-08-17): U(tau) != U'(tau) is fully recoverable too, not just approximately
+
+Following up on the 2026-08-14 fix, the user asked, correctly, why `kanamori_dyn.py`'s
+uniform-coupling example should get "16 analytic, 0 stochastic" at all for a Kanamori
+model — pointing back at the Georges/de'Medici/Mravlje `N`/`S`/`L` decomposition and
+asking whether this was only true for the "fully symmetric" special case. Two distinct
+points came out of that exchange, both worth recording precisely:
+
+**1. The Kanamori spin-flip term does not change `N_up`/`N_down` — verified by direct
+commutator, and reconciled with the "one electron flips spin" intuition.** The user's
+first framing ("if I have one electron in two spins, it could change from up to down")
+describes a genuine single-particle spin flip, `c†_{a↑}c_{a↓}` — but that operator isn't
+in the Kanamori Hamiltonian. The actual term, `-J_X Σ_{m≠m'} d†_{m↑}d_{m↓}d†_{m'↓}d_{m'↑}`,
+requires *two* different orbitals and, worked through directly
+(`[N_up, d†_{m↑} B d_{m'↑}] = [N_up,d†_{m↑}]Bd_{m'↑} + d†_{m↑}B[N_up,d_{m'↑}] =
+(+d†_{m↑})Bd_{m'↑} + d†_{m↑}B(-d_{m'↑}) = 0`, using that `B=d_{m↓}d†_{m'↓}` commutes
+with `N_up`), commutes with `N_up` (and by the same argument `N_down`) exactly,
+regardless of `J_X`. Physically: an up-electron hops `m'→m` while a down-electron hops
+`m→m'`, simultaneously — no single electron ever converts species. The user's follow-up
+clarification ("*one electron in two orbitals*") sharpens this further: the term needs
+`m'↑` *and* `m↓` both already occupied just to have a nonzero matrix element, so it
+cannot act on a single electron at all — with only one electron present, it annihilates
+the state to zero.
+
+**2. `U(tau) != U'(tau)` (the realistic Kanamori shape) is fully, not just partially,
+recoverable — because `find_conserved_density_combinations`'s design matrices have
+disjoint support.** `N_up` and `N_down` don't overlap on any orbital, so
+`outer(N_up,N_up)`, `outer(N_down,N_down)`, and `cross(N_up,N_down)` land on completely
+non-overlapping matrix entries: same-spin pairs only ever excite the first two,
+opposite-spin pairs only the third. There is no interference, so same-spin and
+opposite-spin couplings can be *independent functions of tau* and the fit is still
+exact — this was a genuine gap in the 2026-08-14 version, not a documented limitation:
+`recover_conserved_density_groups` pre-grouped candidate vertices by *matching coupling
+curve* (`gf_close`) before ever attempting a fit, which threw away exactly this case.
+
+**Fix**: `recover_conserved_density_groups` no longer pre-groups by coupling curve.
+Instead it groups candidates into connected components by shared orbitals, and for each
+complete component, fits **per Legendre order** — each `(a,b)` pair contributes its own
+Legendre coefficients (via `fit_legendre_coeffs`, exactly what `build_K_n` would compute
+for it individually) as the target at that order, solved against the same (tau-independent,
+purely structural) design matrices, independently for every order. Only if *every* order
+fits exactly does the component get promoted. `gf_close` itself is now dead code (removed).
+
+**Verified, not just derived**: `kanamori_dyn.py`'s setup with `U=Q_tau, Uprime=0.5*Q_tau`
+(genuinely different curves) plus the full diagonal now gives `16 analytic, 0 stochastic`
+(previously `0 analytic, 12 stochastic` once the diagonal was included the old way — see
+`test/python/kanamori_dyn_nonuniform.py`, new, registered as `Py_kanamori_dyn_nonuniform`).
+To confirm this isn't just permissive over-fitting: a hand-constructed case that breaks
+uniformity *within* a single conserved-combination slot (one same-spin self-term given a
+different curve than the other, so `Gamma_00` would need two different values
+simultaneously) correctly stays fully stochastic (`0 analytic, 16 stochastic`) — checked
+as a one-off, not committed as a test. Full regression sweep (`spin_spin`, `kanamori`,
+`kanamori_offdiag`, `Py_spin_spin`, `Py_kanamori_py`, `Py_kanamori_dyn`,
+`Py_kanamori_dyn_nonuniform`, `Py_kanamori_dyn_selfconsistency` — 8 tests) still passes.
+
 ## Key files touched this session (uncommitted, on top of `48cb130`)
 
 - `c++/triqs_cthyb/dynamical_interactions.hpp` (162 lines) / `.cpp` (442 lines) — most
@@ -493,33 +561,38 @@ above) was not a merge conflict (this file isn't in either branch's history, app
 have been written fresh during an earlier part of this session), just carried the same
 bug independently — **fixed this session** (see the dated entry below).
 
-### 3. Partial/residual conserved-combination decomposition (confirmed necessary next step, not merely next-in-queue)
+### 3. Partial/residual conserved-combination decomposition (narrower than previously framed — see 2026-08-17)
 
-Generalize `recover_conserved_density_groups` beyond the exact-fit-only case: given a
-group of density vertices whose coupling matrix (in the conserved-combination basis
-`{O_i}` from `find_conserved_density_combinations`) does *not* fit exactly (e.g.
-Kanamori's `U` and `U'` being different but comparable, so a coupling to `N_total`
-alone gets close but not exact), project onto the nearest representable point in
-`span{O_i(a)O_j(b)+O_j(a)O_i(b)}` anyway, apply *that* analytically, and feed only the
-*residual* (`target - fit`, as an actual per-pair coupling) to the stochastic path —
-instead of either the whole thing (current all-or-nothing fallback) or nothing.
-Confirmed by the user as necessary, not optional: the eventual target is a full
-dynamical interaction built from ab-initio GW data, where the total-density channel is
-expected to dominate, with non-uniform corrections handled stochastically on top —
-exactly this mechanism, generalized. The exact-fit machinery landed 2026-08-14 (see
-"Conserved-density-combination recovery" above) is most of the way there already: the
-projection/least-squares fit (`fit_and_residual`) already computes the residual, it's
-just discarded (group rejected) instead of being fed onward when nonzero.
+**Update 2026-08-17**: the leading example originally motivating this item — Kanamori's
+`U` and `U'` being different — is **no longer an open gap**; `recover_conserved_density_groups`
+now fits per Legendre order with independent coupling curves per pair, and `{N_up,N_down}`'s
+disjoint support means `U(tau) != U'(tau)` is fully, exactly recoverable (see the
+2026-08-17 dated entry and `test/python/kanamori_dyn_nonuniform.py`). What's left is
+narrower: the case where the conserved subspace genuinely doesn't have an independent
+"slot" for every distinct coupling value present — e.g. breaking uniformity *within* a
+single `Gamma_ij` slot (two same-spin pairs given different curves, tested by hand,
+correctly falls back to fully stochastic today), or any case needing more conserved
+combinations than `find_conserved_density_combinations` finds for a given `h_loc`.
 
-Open design question, not yet resolved: for the *diagonal* entries specifically, when
-no self-term was given at all (the common case — see `kanamori_dyn.py`), is "residual
-= 0 at that position" (leave the diagonal alone, add nothing) or "residual = fit's
-implied value" (silently add a Holstein-like self-term) the right default? The
-"infer less" principle argues for the former (never invent terms the user didn't
-specify) — but that means the diagonal is asymmetric relative to the (fitted, then
-subtracted) off-diagonal residual, which needs to be handled correctly in the
-stochastic-catalog construction, not just noted. Needs a well-defined, provably-correct
-treatment, not a heuristic.
+Generalize `recover_conserved_density_groups` beyond the exact-fit-only case for
+*that* narrower situation: when the per-Legendre-order fit doesn't vanish, project onto
+the nearest representable point in `span{O_i(a)O_j(b)+O_j(a)O_i(b)}` anyway (per order),
+apply *that* analytically, and feed only the *residual* (`target - fit`, as an actual
+per-pair coupling, reconstructed order-by-order back into a real `gf<imtime>`) to the
+stochastic path — instead of the current all-or-nothing fallback. Confirmed by the user
+as necessary, not optional, for the eventual ab-initio GW case, where the total-density
+channel is expected to dominate but won't fit *exactly* in general. The exact-fit
+machinery already computes the per-order residual (`fit_and_residual`'s return value);
+it's currently just discarded (component rejected) instead of being fed onward.
+
+Open design question, not yet resolved: for a *diagonal* entry with no self-term given
+at all, is "residual = 0 at that position" (leave the diagonal alone, add nothing) or
+"residual = fit's implied value" (silently add a Holstein-like self-term) the right
+default when the fit is only partial? The "infer less" principle argues for the former
+— but that's an asymmetric treatment relative to a given-but-imperfectly-fit
+off-diagonal residual, which needs to be handled correctly in the stochastic-catalog
+construction, not just noted. Needs a well-defined, provably-correct treatment, not a
+heuristic.
 
 **Naming reminder** (explicit user requirement): no unicode/math symbols anywhere in
 code — plain descriptive English identifiers only (`total_density_coupling`,
@@ -555,16 +628,19 @@ single-orbital case's root cause.
 
 - **Done**: `test/python/kanamori_dyn.py` (deterministic, `lang_firsov=True` only,
   `n_cycles=5000`, checked in against `kanamori_dyn.ref.h5`, registered as
-  `Py_kanamori_dyn` — full Kanamori `h_loc` plus a *completely* specified coupling to
-  total density, off-diagonal vertices from `kanamori_dynamical_vertices` and explicit
-  diagonal self-terms via `add_dyn_vertex`) and `test/python/kanamori_dyn_selfconsistency.py`
-  (physics validation — `lang_firsov=True` vs. forced `lang_firsov=False` on the
-  identical setup, compared via `G_l`, registered as `Py_kanamori_dyn_selfconsistency`,
-  ~2 minutes) — both are real, CI-gating tests exercising the multi-orbital
-  conserved-density-combination recovery (see "Conserved-density-combination recovery"
-  above for what they do and don't cover). The earlier scratchpad scripts this bullet
-  used to point to (`total_density_validation.py`, `kanamori_dyn_smoke.py`,
-  `kanamori_full_static_test.py`) are superseded by these.
+  `Py_kanamori_dyn` — full Kanamori `h_loc` plus a *completely* specified, uniform
+  coupling to total density, off-diagonal vertices from `kanamori_dynamical_vertices`
+  and explicit diagonal self-terms via `add_dyn_vertex`); `test/python/kanamori_dyn_nonuniform.py`
+  (added 2026-08-17, same but `U(tau) != U'(tau)`, registered as `Py_kanamori_dyn_nonuniform`
+  — confirms the per-Legendre-order fit recovers this fully too, not just the uniform
+  case); and `test/python/kanamori_dyn_selfconsistency.py` (physics validation —
+  `lang_firsov=True` vs. forced `lang_firsov=False` on the identical setup, compared via
+  `G_l`, registered as `Py_kanamori_dyn_selfconsistency`, ~2 minutes) — all three are
+  real, CI-gating tests exercising the multi-orbital conserved-density-combination
+  recovery (see "Conserved-density-combination recovery" above for what they do and
+  don't cover). The earlier scratchpad scripts this bullet used to point to
+  (`total_density_validation.py`, `kanamori_dyn_smoke.py`, `kanamori_full_static_test.py`)
+  are superseded by these.
 - `spin_spin.ref.h5` (both `test/c++/` and `test/python/`) regenerated against the
   fixed dynamical-interaction code — **unrelated** to the
   pure-stochastic sign problem in item 4 above (that's about explicitly forcing

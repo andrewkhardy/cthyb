@@ -144,15 +144,23 @@ namespace triqs_cthyb {
   /// by checking whether a complete set of them exactly reconstructs a combination of
   /// `conserved_combinations`. Only ever recovers a group that is *completely*,
   /// explicitly specified: every ordered pair (a,b) among the touched orbitals,
-  /// including the diagonal a==b self-terms, must already exist as its own vertex
-  /// sharing one coupling curve -- nothing is inferred or filled in (a missing diagonal
-  /// self-term is never silently added). If the fit against the conserved combinations
-  /// is exact, the group's vertices (already fully specified, so nothing needs
-  /// reconstructing) are moved from `classified.stochastic` to `classified.lang_firsov`
-  /// in place; otherwise `classified` is left untouched for that group. The ordinary,
-  /// unmodified apply_lang_firsov_shift/build_K_n handle everything recovered this way,
-  /// exactly as if classify_dyn_vertices had accepted it directly.
+  /// including the diagonal a==b self-terms, must already exist as its own vertex --
+  /// nothing is inferred or filled in (a missing diagonal self-term is never silently
+  /// added). Different (a,b) pairs are *not* required to share one coupling curve: the
+  /// fit is done per Legendre order (each pair contributes its own coefficients, via
+  /// `fit_legendre_coeffs` at `beta`/`N_leg`, exactly as `build_K_n` would for it
+  /// individually), so e.g. a Kanamori-shaped `U(tau) != U'(tau)` (same-spin vs.
+  /// opposite-spin pairs on independent curves) is recovered in full when the
+  /// conserved-combination structure allows it (which for `{N_up, N_down}` it always
+  /// does, since they have disjoint support -- see the .cpp module notes). If every
+  /// order fits exactly, the group's vertices (already fully specified, so nothing
+  /// needs reconstructing) are moved from `classified.stochastic` to
+  /// `classified.lang_firsov` in place; otherwise `classified` is left untouched for
+  /// that group. The ordinary, unmodified `apply_lang_firsov_shift`/`build_K_n` handle
+  /// everything recovered this way, exactly as if `classify_dyn_vertices` had accepted
+  /// it directly.
   void recover_conserved_density_groups(classified_dyn_vertices_t &classified, std::vector<nda::vector<double>> const &conserved_combinations,
-                                        fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex);
+                                        fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex, double beta,
+                                        int N_leg);
 
 } // namespace triqs_cthyb

@@ -52,16 +52,6 @@ namespace triqs_cthyb {
 
     double eval_scalar_gf(gf<imtime, scalar_valued> const &g, double tau) { return real(g[closest_mesh_pt(tau)]); }
 
-    // Are two couplings numerically the same curve? Used to detect a "sufficiently
-    // symmetric" set of vertices that all share one physical coupling (see
-    // find_total_density_decomposition).
-    bool gf_close(gf<imtime, scalar_valued> const &g1, gf<imtime, scalar_valued> const &g2, double threshold = 1.e-10) {
-      if (g1.mesh().size() != g2.mesh().size()) return false;
-      for (auto const &tau_pt : g1.mesh())
-        if (std::abs(g1[tau_pt] - g2[tau_pt]) > threshold) return false;
-      return true;
-    }
-
     int count_orbitals(std::map<std::pair<int, int>, int> const &linindex) {
       int n = 0;
       for (auto const &pair : linindex) n = std::max(n, pair.second + 1);
@@ -449,48 +439,57 @@ namespace triqs_cthyb {
   } // namespace
 
   void recover_conserved_density_groups(classified_dyn_vertices_t &classified, std::vector<nda::vector<double>> const &conserved_combinations,
-                                        fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex) {
+                                        fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex, double beta,
+                                        int N_leg) {
     if (conserved_combinations.empty() || classified.stochastic.empty()) return;
 
     // Density-bilinear candidates among the rejected (stochastic) vertices -- both
     // off-diagonal (a!=b) and diagonal (a==b) self-terms are eligible to participate.
-    std::vector<size_t> candidate_indices;
+    std::map<std::pair<int, int>, size_t> pair_to_vertex;
     for (size_t i = 0; i < classified.stochastic.size(); ++i) {
       auto bp1 = extract_bilinear(classified.stochastic[i].op1, fops, linindex, "op1");
       auto bp2 = extract_bilinear(classified.stochastic[i].op2, fops, linindex, "op2");
-      if (is_density_bilinear(bp1) && is_density_bilinear(bp2)) candidate_indices.push_back(i);
+      if (is_density_bilinear(bp1) && is_density_bilinear(bp2)) pair_to_vertex[{bp1.opL.linear_index, bp2.opL.linear_index}] = i;
     }
-    if (candidate_indices.empty()) return;
+    if (pair_to_vertex.empty()) return;
 
-    // Group by shared coupling curve.
-    std::vector<std::vector<size_t>> groups;
-    for (auto i : candidate_indices) {
-      bool placed = false;
-      for (auto &g : groups)
-        if (gf_close(classified.stochastic[i].coupling, classified.stochastic[g.front()].coupling)) {
-          g.push_back(i);
-          placed = true;
-          break;
-        }
-      if (!placed) groups.push_back({i});
+    // Group candidate orbitals into connected components (two orbitals are connected if
+    // some candidate vertex touches both) -- unrelated clusters of vertices shouldn't
+    // block each other's fit, and each component is checked independently below.
+    // Deliberately NOT grouped by matching coupling curve: different (a,b) pairs are
+    // allowed entirely independent coupling curves, constrained only by whatever the
+    // conserved-combination structure actually requires (see module notes above) -- a
+    // uniform Kanamori-type U(tau) for same-spin pairs and a different U'(tau) for
+    // opposite-spin pairs is the common case this is for, not a rare exception.
+    std::map<int, std::set<int>> adjacency;
+    for (auto const &[pair, vertex_index] : pair_to_vertex) {
+      adjacency[pair.first].insert(pair.second);
+      adjacency[pair.second].insert(pair.first);
+    }
+    std::set<int> visited;
+    std::vector<std::vector<int>> components;
+    for (auto const &[orbital, neighbors] : adjacency) {
+      if (visited.count(orbital)) continue;
+      std::vector<int> component;
+      std::vector<int> stack{orbital};
+      visited.insert(orbital);
+      while (!stack.empty()) {
+        int a = stack.back();
+        stack.pop_back();
+        component.push_back(a);
+        for (int b : adjacency.at(a))
+          if (visited.insert(b).second) stack.push_back(b);
+      }
+      components.push_back(std::move(component));
     }
 
     std::set<size_t> to_recover;
-    for (auto const &g : groups) {
-      std::map<std::pair<int, int>, size_t> pair_to_vertex;
-      std::set<int> orbitals;
-      for (auto i : g) {
-        auto bp1 = extract_bilinear(classified.stochastic[i].op1, fops, linindex, "op1");
-        auto bp2 = extract_bilinear(classified.stochastic[i].op2, fops, linindex, "op2");
-        pair_to_vertex[{bp1.opL.linear_index, bp2.opL.linear_index}] = i;
-        orbitals.insert(bp1.opL.linear_index);
-        orbitals.insert(bp2.opL.linear_index);
-      }
-      if (orbitals.size() < 2) continue;
+    for (auto const &S : components) {
+      if (S.size() < 2) continue;
 
       // Require EVERY (a,b) pair among the touched orbitals, INCLUDING a==b, to be
       // present as its own vertex -- nothing inferred, see the module notes above.
-      std::vector<int> S(orbitals.begin(), orbitals.end());
+      // Curve values are irrelevant here; only presence/absence matters.
       bool complete = true;
       for (int a : S) {
         for (int b : S)
@@ -500,13 +499,10 @@ namespace triqs_cthyb {
       if (!complete) continue;
 
       int n = static_cast<int>(S.size());
-      nda::matrix<double> target(n, n);
-      // Uniform, in units of the group's shared coupling curve. NOTE: nda::matrix's
-      // scalar assignment means "scalar * identity", not element-wise fill -- an
-      // explicit loop is required for a genuinely all-ones matrix.
-      for (int p = 0; p < n; ++p)
-        for (int q = 0; q < n; ++q) target(p, q) = 1.0;
 
+      // Design matrices are purely structural (from the conserved combinations
+      // restricted to S), independent of tau -- computed once, reused for every
+      // Legendre order below.
       std::vector<nda::matrix<double>> design;
       auto restrict_to_S = [&](nda::vector<double> const &O) {
         nda::vector<double> O_S(n);
@@ -528,9 +524,28 @@ namespace triqs_cthyb {
         }
       }
 
-      nda::vector<double> gamma;
-      double residual = fit_and_residual(design, target, n, gamma);
-      if (residual > 1.e-8) continue; // not exactly representable -- leave as stochastic
+      // Each pair's own Legendre coefficients (exactly what build_K_n would compute for
+      // it individually) -- fit against the design basis order by order; the group is
+      // only recovered if every order fits exactly, i.e. every (a,b) pair's full
+      // coupling curve, not just some aggregate scale, lies in the conserved subspace.
+      std::map<std::pair<int, int>, nda::vector<double>> legendre_coeffs;
+      for (int a : S)
+        for (int b : S) {
+          auto const &coupling = classified.stochastic[pair_to_vertex.at({a, b})].coupling;
+          int n_pt_tau         = coupling.mesh().size();
+          legendre_coeffs[{a, b}] =
+             fit_legendre_coeffs(n_pt_tau, beta, [&coupling](double tau) { return eval_scalar_gf(coupling, tau); }, N_leg);
+        }
+
+      double max_residual = 0.0;
+      for (int leg = 0; leg < N_leg && max_residual <= 1.e-8; ++leg) {
+        nda::matrix<double> target(n, n);
+        for (int p = 0; p < n; ++p)
+          for (int q = 0; q < n; ++q) target(p, q) = legendre_coeffs.at({S[p], S[q]})(leg);
+        nda::vector<double> gamma;
+        max_residual = std::max(max_residual, fit_and_residual(design, target, n, gamma));
+      }
+      if (max_residual > 1.e-8) continue; // not exactly representable -- leave as stochastic
 
       for (int a : S)
         for (int b : S) to_recover.insert(pair_to_vertex.at({a, b}));
