@@ -49,7 +49,10 @@ beta = args.beta
 omega_0 = args.omega_0
 g = args.g
 epsilon = args.epsilon
-mu = 1.0
+# Half filling for h_int_kanamori's density-density matrix: each flavor couples to U
+# (same orbital, opposite spin), U-2*J (different orbital, opposite spin), and U-3*J
+# (different orbital, same spin), once each for n_orb=2; mu_half = (sum of those)/2.
+mu = 0.5 * U + (n_orb - 1) * 0.5 * (U - 2 * J) + (n_orb - 1) * 0.5 * (U - 3 * J)
 
 spin_names = ('up', 'down')
 gf_struct = set_operator_structure(spin_names, n_orb, True)
@@ -82,7 +85,7 @@ def build_and_solve(lang_firsov, n_cycles, seed_offset):
     for s in spin_names:
         for a in range(n_orb):
             S.add_dyn_vertex(n(s, a), n(s, a), _as_scalar_gf(0.5 * Q_tau))
-    S.solve(h_int=H_int, h_loc0=mu * N,
+    S.solve(h_int=H_int, h_loc0=-mu * N,
             random_seed=seed_offset + 123 * mpi.rank + 567, random_name="",
             length_cycle=args.length_cycle,
             n_warmup_cycles=max(50, int(n_cycles * args.n_warmup_frac)),

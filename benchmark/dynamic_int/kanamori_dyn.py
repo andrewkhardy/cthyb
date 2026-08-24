@@ -50,7 +50,10 @@ beta = args.beta
 omega_0 = args.omega_0
 g = args.g
 epsilon = args.epsilon
-mu = 1.0
+# Half filling for h_int_kanamori's density-density matrix: each flavor couples to U
+# (same orbital, opposite spin), U-2*J (different orbital, opposite spin), and U-3*J
+# (different orbital, same spin), once each for n_orb=2; mu_half = (sum of those)/2.
+mu = 0.5 * U + (n_orb - 1) * 0.5 * (U - 2 * J) + (n_orb - 1) * 0.5 * (U - 3 * J)
 
 spin_names = ('up', 'down')
 gf_struct = set_operator_structure(spin_names, n_orb, True)
@@ -92,7 +95,7 @@ for s in spin_names:
 
 solve_params = {
     "h_int": H_int,
-    "h_loc0": mu * N,
+    "h_loc0": -mu * N,
     "length_cycle": args.length_cycle,
     "n_warmup_cycles": args.n_warmup_cycles,
     "n_cycles": args.n_cycles,
