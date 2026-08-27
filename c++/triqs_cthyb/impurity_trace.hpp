@@ -305,7 +305,7 @@ namespace triqs_cthyb {
     // Find and mark as deleted the node with key key
     void try_delete(time_pt const &key) noexcept {
       auto x = tree.get(key);
-      EXPECTS_WITH_MESSAGE(node, "Error: trying to delete a non-existing node at key " << key);
+      EXPECTS_WITH_MESSAGE(x, "Error: trying to delete a non-existing node at key " << key);
       try_delete(x);
     }
 

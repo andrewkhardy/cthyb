@@ -50,13 +50,23 @@ def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=No
     Register the dynamical generalization of a Hubbard-Kanamori interaction on `solver`
     via repeated calls to solver.add_dyn_vertex(...):
 
-        H(tau) = (1/2) sum_{(a1,s1) != (a2,s2)} D_{a1 a2}^{s1 s2}(tau) n_{a1 s1}(tau) n_{a2 s2}(0)
+        H(tau) = sum_{(a1,s1) != (a2,s2)} D_{a1 a2}^{s1 s2}(tau) n_{a1 s1}(tau) n_{a2 s2}(0)
                - sum_{a1 != a2} D_{a1 a2}^J(tau) [c^dag_{a1,s}c_{a1,sbar}](tau) [c^dag_{a2,sbar}c_{a2,s}](0)
 
     where D^{s1 s2}_{a1 a2} = U_{a1 a2} if s1 == s2, else Uprime_{a1 a2} -- the same
     convention as h_int_kanamori -- and D^J is J_hund. This is the static Hamiltonian's
     density-density and spin-flip terms with each coupling constant promoted to a
     retarded propagator; call h_int_kanamori for the static part of h_int as usual.
+
+    Note the density-density term carries no 1/2 prefactor, unlike h_int_kanamori's
+    own H = (1/2) sum_{i!=j} U_ij n_i n_j: there, n_i(0)*n_j(0) and n_j(0)*n_i(0) are
+    the *same* instantaneous operator, so visiting each unordered pair from both
+    orderings with half weight each is just bookkeeping. Here, op1(tau)*op2(0) is a
+    retarded object -- the (a1,a2) and (a2,a1) orderings are *different* correlators,
+    not the same term counted twice -- so each ordered pair needs the coupling at full
+    weight. (The spin-flip term below is different: it matches
+    expand_Jperp_into_vertices's validated coupling/2-with-both-orderings convention,
+    so it keeps its 1/2.)
 
     Pair-hopping has no dynamical analogue here: add_dyn_vertex requires each side to
     reduce to a single fermion bilinear (one creation, one annihilation -- see
@@ -96,9 +106,10 @@ def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=No
             return table.get((a1, a2))
         return table  # single Gf, broadcast to every pair
 
-    # Density-density: same-spin uses U, opposite-spin uses Uprime. Each unordered pair
-    # (a1,s1) != (a2,s2) is visited from both orderings, giving the 0.5 factor in the
-    # formula above -- matches h_int_kanamori's 0.5 * U_val * n(s1,a1) * n(s2,a2) exactly.
+    # Density-density: same-spin uses U, opposite-spin uses Uprime. Each ordered pair
+    # (a1,s1) != (a2,s2) is its own retarded vertex and gets the coupling at full
+    # weight (see the no-1/2-prefactor note in the docstring above); both orderings of
+    # each unordered pair are registered separately, as different correlators.
     for s1, s2 in product(spin_names, spin_names):
         table = U if s1 == s2 else Uprime
         for a1, a2 in product(orb_names, orb_names):
@@ -107,7 +118,7 @@ def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=No
             coupling = coupling_for(table, a1, a2)
             if coupling is None:
                 continue
-            solver.add_dyn_vertex(n(s1, a1), n(s2, a2), _as_scalar_gf(0.5 * coupling))
+            solver.add_dyn_vertex(n(s1, a1), n(s2, a2), _as_scalar_gf(coupling))
 
     # Spin-flip: c^dag_{s1,a1} c_{s2,a1} (tau) * c^dag_{s2,a2} c_{s1,a2} (0), a1 != a2,
     # s1 != s2 -- matches h_int_kanamori's spin-flip term (same -0.5*J_hund factor).

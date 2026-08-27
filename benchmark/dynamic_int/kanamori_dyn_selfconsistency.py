@@ -84,7 +84,7 @@ def build_and_solve(lang_firsov, n_cycles, seed_offset):
     kanamori_dynamical_vertices(S, spin_names, list(range(n_orb)), U=Q_tau, Uprime=Q_tau, spin_flip=False)
     for s in spin_names:
         for a in range(n_orb):
-            S.add_dyn_vertex(n(s, a), n(s, a), _as_scalar_gf(0.5 * Q_tau))
+            S.add_dyn_vertex(n(s, a), n(s, a), _as_scalar_gf(Q_tau))
     S.solve(h_int=H_int, h_loc0=-mu * N,
             random_seed=seed_offset + 123 * mpi.rank + 567, random_name="",
             length_cycle=args.length_cycle,

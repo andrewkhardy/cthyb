@@ -637,25 +637,37 @@ PyMethodDef c2py::tp_methods<_c2py_cls_2>[] = {
 constexpr auto _c2py_doc_member_62 = R"DOC(Parameters used for constructing the solver.)DOC";
 constexpr auto _c2py_doc_member_63 = R"DOC(Parameters passed to the solve method.)DOC";
 constexpr auto _c2py_doc_member_64 = R"DOC(Analytic density-density bath coefficients K_n[a][b][n].)DOC";
-constexpr auto _c2py_doc_member_65 = R"DOC(Single-particle Green's function :math:`G(\tau)` in imaginary time.)DOC";
-constexpr auto _c2py_doc_member_66 = R"DOC(Intermediate Green's function used to accumulate :math:`G(\tau)` (real or complex).)DOC";
-constexpr auto _c2py_doc_member_67 = R"DOC(Violation of the property :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` after the measurement.)DOC";
-constexpr auto _c2py_doc_member_68 = R"DOC(Single-particle Green's function :math:`G_l` in the Legendre representation.)DOC";
-constexpr auto _c2py_doc_member_69 = R"DOC(General operator Green's function :math:`O(\tau)` in imaginary time.)DOC";
-constexpr auto _c2py_doc_member_70 = R"DOC(Density-density correlator :math:`Q() =  n() n(0) ` in imaginary time.)DOC";
-constexpr auto _c2py_doc_member_71 = R"DOC(Density-density correlator in Legendre representation.)DOC";
-constexpr auto _c2py_doc_member_72 = R"DOC(Two-particle Green's function :math:`G^{(2)}(\tau_1,\tau_2,\tau_3)` with three fermionic times.)DOC";
-constexpr auto _c2py_doc_member_73 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\nu,i\nu',i\nu'')` with three fermionic frequencies.)DOC";
-constexpr auto _c2py_doc_member_74 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\nu,i\nu',i\nu'')` with three fermionic frequencies.)DOC";
-constexpr auto _c2py_doc_member_75 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,i\nu,i\nu')` in the particle-particle channel.)DOC";
-constexpr auto _c2py_doc_member_76 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,i\nu,i\nu')` in the particle-particle channel.)DOC";
-constexpr auto _c2py_doc_member_77 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,i\nu,i\nu')` in the particle-hole channel.)DOC";
-constexpr auto _c2py_doc_member_78 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,i\nu,i\nu')` in the particle-hole channel.)DOC";
-constexpr auto _c2py_doc_member_79 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,l,l')` in the particle-particle channel.)DOC";
-constexpr auto _c2py_doc_member_80 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,l,l')` in the particle-hole channel.)DOC";
-constexpr auto _c2py_doc_member_81 = R"DOC(Histogram of the total perturbation order.)DOC";
-constexpr auto _c2py_doc_member_82 = R"DOC(Histograms of the perturbation order for each block.)DOC";
-constexpr auto _c2py_doc_member_83 = R"DOC(Histogram of the perturbation order in dynamical interactions)DOC";
+constexpr auto _c2py_doc_member_65 = R"DOC(Aggregate density-density interaction matrix implied by every Lang-Firsov
+K'(0) shift applied in the last solve, on top of h_loc's own static
+interaction: lang_firsov_U_renorm[a][b] is the *total* off-diagonal coupling
+between orbitals a and b (h_loc's own static coupling plus what the dynamical
+interaction's static part added), lang_firsov_mu_renorm[a] is the diagonal
+(chemical-potential-like) analogue. If h_loc0's mu was chosen from a static
+half-filling formula that ignores the dynamical interaction (e.g. from
+h_int_kanamori's U/J alone), it needs retuning: the correct half-filling mu for
+orbital a is 0.5 * sum_{b!=a} lang_firsov_U_renorm[a][b], to be compared
+against the *effective* mu actually used, lang_firsov_mu_renorm[a]. Both are
+empty if no vertex was routed through the Lang-Firsov path.)DOC";
+constexpr auto _c2py_doc_member_66 = R"DOC()DOC";
+constexpr auto _c2py_doc_member_67 = R"DOC(Single-particle Green's function :math:`G(\tau)` in imaginary time.)DOC";
+constexpr auto _c2py_doc_member_68 = R"DOC(Intermediate Green's function used to accumulate :math:`G(\tau)` (real or complex).)DOC";
+constexpr auto _c2py_doc_member_69 = R"DOC(Violation of the property :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` after the measurement.)DOC";
+constexpr auto _c2py_doc_member_70 = R"DOC(Single-particle Green's function :math:`G_l` in the Legendre representation.)DOC";
+constexpr auto _c2py_doc_member_71 = R"DOC(General operator Green's function :math:`O(\tau)` in imaginary time.)DOC";
+constexpr auto _c2py_doc_member_72 = R"DOC(Density-density correlator :math:`Q() =  n() n(0) ` in imaginary time.)DOC";
+constexpr auto _c2py_doc_member_73 = R"DOC(Density-density correlator in Legendre representation.)DOC";
+constexpr auto _c2py_doc_member_74 = R"DOC(Two-particle Green's function :math:`G^{(2)}(\tau_1,\tau_2,\tau_3)` with three fermionic times.)DOC";
+constexpr auto _c2py_doc_member_75 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\nu,i\nu',i\nu'')` with three fermionic frequencies.)DOC";
+constexpr auto _c2py_doc_member_76 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\nu,i\nu',i\nu'')` with three fermionic frequencies.)DOC";
+constexpr auto _c2py_doc_member_77 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,i\nu,i\nu')` in the particle-particle channel.)DOC";
+constexpr auto _c2py_doc_member_78 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,i\nu,i\nu')` in the particle-particle channel.)DOC";
+constexpr auto _c2py_doc_member_79 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,i\nu,i\nu')` in the particle-hole channel.)DOC";
+constexpr auto _c2py_doc_member_80 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,i\nu,i\nu')` in the particle-hole channel.)DOC";
+constexpr auto _c2py_doc_member_81 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,l,l')` in the particle-particle channel.)DOC";
+constexpr auto _c2py_doc_member_82 = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,l,l')` in the particle-hole channel.)DOC";
+constexpr auto _c2py_doc_member_83 = R"DOC(Histogram of the total perturbation order.)DOC";
+constexpr auto _c2py_doc_member_84 = R"DOC(Histograms of the perturbation order for each block.)DOC";
+constexpr auto _c2py_doc_member_85 = R"DOC(Histogram of the perturbation order in dynamical interactions)DOC";
 static constexpr auto prop_doc_0   = R"DOC(Dynamical density-density interaction :math:`D_0()`)DOC";
 static constexpr auto prop_doc_1   = R"DOC(:math:`G_0^{-1}(i\omega_n = \infty)` in Matsubara frequencies.)DOC";
 static constexpr auto prop_doc_2   = R"DOC(Hybridization function :math:`\Delta(\tau)` in imaginary time.)DOC";
@@ -685,25 +697,27 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_2>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_2::constr_parameters, _c2py_cls_2>("constr_parameters", _c2py_doc_member_62),
    c2py::getsetdef_from_member<&_c2py_cls_2::solve_parameters, _c2py_cls_2>("solve_parameters", _c2py_doc_member_63),
    c2py::getsetdef_from_member<&_c2py_cls_2::K_n, _c2py_cls_2>("K_n", _c2py_doc_member_64),
-   c2py::getsetdef_from_member<&_c2py_cls_2::G_tau, _c2py_cls_2>("G_tau", _c2py_doc_member_65),
-   c2py::getsetdef_from_member<&_c2py_cls_2::G_tau_accum, _c2py_cls_2>("G_tau_accum", _c2py_doc_member_66),
-   c2py::getsetdef_from_member<&_c2py_cls_2::asymmetry_G_tau, _c2py_cls_2>("asymmetry_G_tau", _c2py_doc_member_67),
-   c2py::getsetdef_from_member<&_c2py_cls_2::G_l, _c2py_cls_2>("G_l", _c2py_doc_member_68),
-   c2py::getsetdef_from_member<&_c2py_cls_2::O_tau, _c2py_cls_2>("O_tau", _c2py_doc_member_69),
-   c2py::getsetdef_from_member<&_c2py_cls_2::Q_tau, _c2py_cls_2>("Q_tau", _c2py_doc_member_70),
-   c2py::getsetdef_from_member<&_c2py_cls_2::Q_l, _c2py_cls_2>("Q_l", _c2py_doc_member_71),
-   c2py::getsetdef_from_member<&_c2py_cls_2::G2_tau, _c2py_cls_2>("G2_tau", _c2py_doc_member_72),
-   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw, _c2py_cls_2>("G2_iw", _c2py_doc_member_73),
-   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw_nfft, _c2py_cls_2>("G2_iw_nfft", _c2py_doc_member_74),
-   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw_pp, _c2py_cls_2>("G2_iw_pp", _c2py_doc_member_75),
-   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw_pp_nfft, _c2py_cls_2>("G2_iw_pp_nfft", _c2py_doc_member_76),
-   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw_ph, _c2py_cls_2>("G2_iw_ph", _c2py_doc_member_77),
-   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw_ph_nfft, _c2py_cls_2>("G2_iw_ph_nfft", _c2py_doc_member_78),
-   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iwll_pp, _c2py_cls_2>("G2_iwll_pp", _c2py_doc_member_79),
-   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iwll_ph, _c2py_cls_2>("G2_iwll_ph", _c2py_doc_member_80),
-   c2py::getsetdef_from_member<&_c2py_cls_2::perturbation_order_total, _c2py_cls_2>("perturbation_order_total", _c2py_doc_member_81),
-   c2py::getsetdef_from_member<&_c2py_cls_2::perturbation_order, _c2py_cls_2>("perturbation_order", _c2py_doc_member_82),
-   c2py::getsetdef_from_member<&_c2py_cls_2::perturbation_order_dyn, _c2py_cls_2>("perturbation_order_dyn", _c2py_doc_member_83),
+   c2py::getsetdef_from_member<&_c2py_cls_2::lang_firsov_U_renorm, _c2py_cls_2>("lang_firsov_U_renorm", _c2py_doc_member_65),
+   c2py::getsetdef_from_member<&_c2py_cls_2::lang_firsov_mu_renorm, _c2py_cls_2>("lang_firsov_mu_renorm", _c2py_doc_member_66),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G_tau, _c2py_cls_2>("G_tau", _c2py_doc_member_67),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G_tau_accum, _c2py_cls_2>("G_tau_accum", _c2py_doc_member_68),
+   c2py::getsetdef_from_member<&_c2py_cls_2::asymmetry_G_tau, _c2py_cls_2>("asymmetry_G_tau", _c2py_doc_member_69),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G_l, _c2py_cls_2>("G_l", _c2py_doc_member_70),
+   c2py::getsetdef_from_member<&_c2py_cls_2::O_tau, _c2py_cls_2>("O_tau", _c2py_doc_member_71),
+   c2py::getsetdef_from_member<&_c2py_cls_2::Q_tau, _c2py_cls_2>("Q_tau", _c2py_doc_member_72),
+   c2py::getsetdef_from_member<&_c2py_cls_2::Q_l, _c2py_cls_2>("Q_l", _c2py_doc_member_73),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G2_tau, _c2py_cls_2>("G2_tau", _c2py_doc_member_74),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw, _c2py_cls_2>("G2_iw", _c2py_doc_member_75),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw_nfft, _c2py_cls_2>("G2_iw_nfft", _c2py_doc_member_76),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw_pp, _c2py_cls_2>("G2_iw_pp", _c2py_doc_member_77),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw_pp_nfft, _c2py_cls_2>("G2_iw_pp_nfft", _c2py_doc_member_78),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw_ph, _c2py_cls_2>("G2_iw_ph", _c2py_doc_member_79),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw_ph_nfft, _c2py_cls_2>("G2_iw_ph_nfft", _c2py_doc_member_80),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iwll_pp, _c2py_cls_2>("G2_iwll_pp", _c2py_doc_member_81),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G2_iwll_ph, _c2py_cls_2>("G2_iwll_ph", _c2py_doc_member_82),
+   c2py::getsetdef_from_member<&_c2py_cls_2::perturbation_order_total, _c2py_cls_2>("perturbation_order_total", _c2py_doc_member_83),
+   c2py::getsetdef_from_member<&_c2py_cls_2::perturbation_order, _c2py_cls_2>("perturbation_order", _c2py_doc_member_84),
+   c2py::getsetdef_from_member<&_c2py_cls_2::perturbation_order_dyn, _c2py_cls_2>("perturbation_order_dyn", _c2py_doc_member_85),
    {"D0_tau", c2py::getter_from_method<c2py::castm<>(&triqs_cthyb::solver_core::D0_tau)>, nullptr, prop_doc_0, nullptr},
    {"Delta_infty", c2py::getter_from_method<c2py::castm<>(&triqs_cthyb::solver_core::Delta_infty)>, nullptr, prop_doc_1, nullptr},
    {"Delta_tau", c2py::getter_from_method<c2py::castm<>(&triqs_cthyb::solver_core::Delta_tau)>, nullptr, prop_doc_2, nullptr},

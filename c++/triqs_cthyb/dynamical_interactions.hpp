@@ -83,13 +83,34 @@ namespace triqs_cthyb {
                                                   fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex,
                                                   bool lang_firsov_requested);
 
+  /// The aggregate density-density interaction matrix / chemical-potential vector
+  /// implied by every Lang-Firsov K'(0) shift applied in one apply_lang_firsov_shift
+  /// call, sized to all orbitals in linindex (see bare_density_matrix's shape
+  /// convention in the .cpp) -- this is exactly what the interaction Hamiltonian would
+  /// need to add on top of h_loc's own static U/mu for the filling implied by h_loc
+  /// alone (e.g. h_int_kanamori's usual half-filling mu formula) to still be correct
+  /// once the dynamical interaction's static part is folded in. U_renorm(i,j) is the
+  /// *total* off-diagonal coupling added between orbitals i and j (i.e. already
+  /// includes both the (i,j) and (j,i) vertex contributions, symmetric by
+  /// construction); mu_renorm(i) is the diagonal (chemical-potential-like) shift added
+  /// for orbital i.
+  struct lang_firsov_shift_t {
+    nda::matrix<double> U_renorm;
+    nda::vector<double> mu_renorm;
+  };
+
   /// Subtract the K'(0) static (instantaneous) part of each Lang-Firsov-eligible
   /// vertex's coupling from h_loc, so it isn't double-counted once the retarded part
-  /// is resummed analytically. Must run before h_diag is built from h_loc. At
-  /// verbosity>=2, also prints the aggregate before/after density-density interaction
-  /// matrix (as in CTSEG), sized to all orbitals regardless of vertex count/source.
-  void apply_lang_firsov_shift(many_body_op_t &h_loc, std::vector<dyn_vertex_t> const &lf_vertices, fundamental_operator_set const &fops,
-                               std::map<std::pair<int, int>, int> const &linindex, double beta, int N_leg, int verbosity);
+  /// is resummed analytically. Must run before h_diag is built from h_loc. Returns the
+  /// aggregate U_renorm/mu_renorm this induced (see lang_firsov_shift_t) -- callers
+  /// that picked h_loc0's mu from a static half-filling formula (ignoring the
+  /// dynamical interaction) need this to retune it; see solver_core::lang_firsov_mu_renorm.
+  /// At verbosity>=2, also prints the aggregate before/after density-density
+  /// interaction matrix (as in CTSEG), sized to all orbitals regardless of vertex
+  /// count/source.
+  lang_firsov_shift_t apply_lang_firsov_shift(many_body_op_t &h_loc, std::vector<dyn_vertex_t> const &lf_vertices,
+                                              fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex,
+                                              double beta, int N_leg, int verbosity);
 
   /// Build the K_n[a][b][:] Legendre-coefficient kernel used by
   /// qmc_data::compute_lang_firsov_ratio, from the Lang-Firsov-eligible vertices.

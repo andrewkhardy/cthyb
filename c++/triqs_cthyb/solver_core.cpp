@@ -249,7 +249,13 @@ namespace triqs_cthyb {
                   << (stochastic_before - classified_dyn_vertices.stochastic.size())
                   << " vertex(es) from the stochastic path to Lang-Firsov." << std::endl;
     }
-    apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
+    auto lang_firsov_shift = apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
+    int lf_n_orb = lang_firsov_shift.mu_renorm.size();
+    lang_firsov_U_renorm.assign(lf_n_orb, std::vector<double>(lf_n_orb, 0.0));
+    for (int i = 0; i < lf_n_orb; ++i)
+      for (int j = 0; j < lf_n_orb; ++j) lang_firsov_U_renorm[i][j] = lang_firsov_shift.U_renorm(i, j);
+    lang_firsov_mu_renorm.assign(lf_n_orb, 0.0);
+    for (int i = 0; i < lf_n_orb; ++i) lang_firsov_mu_renorm[i] = lang_firsov_shift.mu_renorm(i);
     // ------------------------------------------------------------------
 
 

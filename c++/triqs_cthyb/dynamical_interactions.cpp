@@ -224,9 +224,10 @@ namespace triqs_cthyb {
 
   // -----------------------------------------------------------------------------------
 
-  void apply_lang_firsov_shift(many_body_op_t &h_loc, std::vector<dyn_vertex_t> const &lf_vertices, fundamental_operator_set const &fops,
-                               std::map<std::pair<int, int>, int> const &linindex, double beta, int N_leg, int verbosity) {
-    if (lf_vertices.empty()) return;
+  lang_firsov_shift_t apply_lang_firsov_shift(many_body_op_t &h_loc, std::vector<dyn_vertex_t> const &lf_vertices,
+                                              fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex,
+                                              double beta, int N_leg, int verbosity) {
+    if (lf_vertices.empty()) return {};
 
     // Aggregate before/after view of the shift, as a density-density matrix over all
     // orbitals (as in CTSEG) -- independent of how many orbitals/blocks are in play,
@@ -279,6 +280,8 @@ namespace triqs_cthyb {
       std::cout << "\n Renormalized interaction matrix: U =" << std::endl << U_renorm << std::endl;
       std::cout << "\nRenormalized orbital energies: mu - eps = " << mu_renorm << std::endl;
     }
+
+    return {U_renorm, mu_renorm};
   }
 
   // -----------------------------------------------------------------------------------
