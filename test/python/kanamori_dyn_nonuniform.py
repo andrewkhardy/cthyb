@@ -86,7 +86,7 @@ S.Delta_tau << Fourier(delta_w)
 kanamori_dynamical_vertices(S, spin_names, list(range(n_orb)), U=Q_tau, Uprime=0.5 * Q_tau, spin_flip=False)
 for s in spin_names:
     for a in range(n_orb):
-        S.add_dyn_vertex(n(s, a), n(s, a), _as_scalar_gf(0.5 * Q_tau))
+        S.add_dyn_vertex(n(s, a), n(s, a), _as_scalar_gf(Q_tau))
 
 solve_params = {
     "h_int": H_int,

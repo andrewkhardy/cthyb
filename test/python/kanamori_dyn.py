@@ -88,7 +88,7 @@ kanamori_dynamical_vertices(S, spin_names, list(range(n_orb)), U=Q_tau, Uprime=Q
 # for the group to be *completely* specified (see module docstring above).
 for s in spin_names:
     for a in range(n_orb):
-        S.add_dyn_vertex(n(s, a), n(s, a), _as_scalar_gf(0.5 * Q_tau))
+        S.add_dyn_vertex(n(s, a), n(s, a), _as_scalar_gf(Q_tau))
 
 # Solve parameters -- deterministic, small statistics (matches kanamori.cpp/kanamori_py.py).
 # lang_firsov defaults to True; this test never touches the stochastic dynamical path since

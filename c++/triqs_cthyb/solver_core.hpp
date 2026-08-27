@@ -84,6 +84,20 @@ namespace triqs_cthyb {
     /// Analytic density-density bath coefficients K_n[a][b][n].
     std::vector<std::vector<std::vector<double>>> K_n;
 
+    /// Aggregate density-density interaction matrix implied by every Lang-Firsov
+    /// K'(0) shift applied in the last solve, on top of h_loc's own static
+    /// interaction: lang_firsov_U_renorm[a][b] is the *total* off-diagonal coupling
+    /// between orbitals a and b (h_loc's own static coupling plus what the dynamical
+    /// interaction's static part added), lang_firsov_mu_renorm[a] is the diagonal
+    /// (chemical-potential-like) analogue. If h_loc0's mu was chosen from a static
+    /// half-filling formula that ignores the dynamical interaction (e.g. from
+    /// h_int_kanamori's U/J alone), it needs retuning: the correct half-filling mu for
+    /// orbital a is 0.5 * sum_{b!=a} lang_firsov_U_renorm[a][b], to be compared
+    /// against the *effective* mu actually used, lang_firsov_mu_renorm[a]. Both are
+    /// empty if no vertex was routed through the Lang-Firsov path.
+    std::vector<std::vector<double>> lang_firsov_U_renorm;
+    std::vector<double> lang_firsov_mu_renorm;
+
     /**
      * Construct a CTHYB solver.
      *
@@ -224,6 +238,8 @@ namespace triqs_cthyb {
       h5_write(grp, "solve_status", s._solve_status);
       h5_write(grp, "Delta_infty_vec", s.Delta_infty_vec);
       h5_write(grp, "K_n", s.K_n);
+      h5_write(grp, "lang_firsov_U_renorm", s.lang_firsov_U_renorm);
+      h5_write(grp, "lang_firsov_mu_renorm", s.lang_firsov_mu_renorm);
     }
 
     // Function that read all containers to hdf5 file
@@ -249,6 +265,8 @@ namespace triqs_cthyb {
       h5::try_read(grp, "solve_status", s._solve_status);
       h5::try_read(grp, "Delta_infty_vec", s.Delta_infty_vec);
       h5::try_read(grp, "K_n", s.K_n);
+      h5::try_read(grp, "lang_firsov_U_renorm", s.lang_firsov_U_renorm);
+      h5::try_read(grp, "lang_firsov_mu_renorm", s.lang_firsov_mu_renorm);
 
       return s;
     }
