@@ -1,0 +1,388 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=0.9in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{caption}
+\usepackage{verbatim}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{microtype}
+\sloppy
+
+\newcommand{\aver}[1]{\ensuremath{\langle#1\rangle}}
+\renewcommand{\t}{\ensuremath{\tau}}
+\newcommand{\w}{\ensuremath{\omega}}
+\newcommand{\TT}{\ensuremath{\mathcal{T}_\t}}
+\newcommand{\Hloc}{\ensuremath{H_{\rm loc}}}
+\newcommand{\ndag}{\ensuremath{^\dagger}}
+
+\begin{document}
+\title{Implementation notes: multi-orbital dynamical interactions and the\\
+Lang--Firsov resummation in \texttt{CTHYB}}
+\author{Andrew Hardy}
+\maketitle
+
+\begin{abstract}
+This note documents the multi-orbital generalization of \texttt{CTHYB}'s retarded
+(dynamical) interaction machinery on the \texttt{multiorbital-v2} branch: a general
+4-index vertex representation, an exact symbolic-algebra criterion for routing each
+vertex to the analytic Lang--Firsov resummation vs.\ the stochastic double expansion,
+a linear-algebra generalization of that criterion to \emph{combinations} of orbital
+densities (needed for a genuine Hubbard--Kanamori $h_{\rm loc}$), and the static
+(chemical-potential/interaction) shift the resummation induces. The last of these is
+derived here in closed form directly from the code's own boundary-value problem and
+independently cross-checked against the exactly-solvable single-phonon (Lang--Firsov)
+polaron shift and against a real data set in which forgetting it visibly broke
+particle-hole symmetry.
+\end{abstract}
+
+\tableofcontents
+
+\section{Overview of what changed}
+
+\begin{itemize}
+  \item \textbf{General 4-index vertex.} A dynamical vertex is now an ordinary pair of
+    fermion bilinears with a retarded coupling, $D(\t)\,O_1(\t)\,O_2(0)$
+    (\texttt{dyn\_vertex\_t} in \texttt{configuration.hpp}), registered via
+    \texttt{solver.add\_dyn\_vertex(op1,op2,coupling)}. The old hardcoded
+    Jperp/D0 shapes are now convenience sugar that expand into the same
+    representation (Sec.~\ref{sec:setup}).
+  \item \textbf{Exact eligibility criterion.} Each vertex is Lang--Firsov-eligible
+    only if both $O_1,O_2$ are number operators \emph{and individually commute with
+    $\Hloc$}, checked by plain symbolic operator algebra
+    (\texttt{classify\_dyn\_vertices}), not by guessing from the input's shape and not
+    via \texttt{atom\_diag} (Sec.~\ref{sec:eligibility}).
+  \item \textbf{Conserved-density-combination recovery.} A genuine Hubbard--Kanamori
+    $\Hloc$ (with spin-flip and pair-hopping) does \emph{not} conserve individual
+    orbital densities, only certain linear combinations of them ($N_\uparrow$,
+    $N_\downarrow$ for the standard case). \texttt{find\_conserved\_density\_combinations}
+    finds this subspace exactly (nullspace of a commutator map), and
+    \texttt{recover\_conserved\_density\_groups} promotes a completely-specified group
+    of vertices to the analytic path only when it reconstructs an exact coupling to
+    that subspace, order by order in Legendre space (Sec.~\ref{sec:conserved}).
+  \item \textbf{The static (K$'(0)$) shift and its effect on $\mu$.} The analytic
+    resummation is exact only after subtracting an instantaneous piece of the retarded
+    coupling from $\Hloc$ before diagonalizing it. This piece renormalizes the
+    effective chemical potential and interaction matrix; not accounting for it when
+    picking a target filling silently moves the model off half filling and breaks
+    particle-hole symmetry (Secs.~\ref{sec:shift}--\ref{sec:ph}). This is derived here
+    from scratch, cross-checked against the exactly-solvable single-oscillator
+    Lang--Firsov shift, and matched numerically against a real run in which the
+    correction was missing.
+
+\end{itemize}
+
+\section{Setup: retarded density-density interactions in the local trace}
+\label{sec:setup}
+
+Consider a local Hamiltonian $\Hloc$ (Kanamori interaction, crystal field, etc.) plus a
+retarded density-density coupling between spin-orbitals $a,b$,
+\begin{equation}
+  S_{\rm ret} = \tfrac12 \int_0^\beta\!\!\int_0^\beta d\t\, d\t'\;
+  n_a(\t)\, D_{ab}(\t-\t')\, n_b(\t'),
+  \label{eq:sret}
+\end{equation}
+where $n_a(\t) = e^{\t \Hloc} n_a e^{-\t \Hloc}$ (Heisenberg picture under $\Hloc$
+alone, between hybridization events) and $D_{ab}(\t)$ is whatever bosonic bath was
+integrated out (a phonon, a plasmon, a $GW$-derived screened interaction, \ldots). In
+this code $D_{ab}$ is exactly the \texttt{coupling} member of a
+\texttt{dyn\_vertex\_t}. The concrete example used throughout
+(\texttt{kanamori\_dyn.py}) is a single dispersionless phonon of frequency $\w_0$,
+coupled with strength $g$ to every spin-orbital's density through the standard
+harmonic-oscillator coordinate $x=(b+b\ndag)/\sqrt{2\w_0}$,
+\begin{equation}
+  H = \Hloc + \w_0 b\ndag b + g\Big(\sum_a n_a\Big) x .
+  \label{eq:holstein}
+\end{equation}
+Integrating out the free phonon gives exactly the coupling used in the code,
+\begin{equation}
+  D(\t) = g^2\, Q(\t), \qquad
+  Q(\t) = -\frac{1}{2\w_0}\,\frac{\cosh\!\big(\w_0(\t-\beta/2)\big)}{\sinh(\w_0\beta/2)},
+  \qquad 0<\t<\beta,
+  \label{eq:Qtau}
+\end{equation}
+identical for every pair $(a,b)$ since the coupling in Eq.~\eqref{eq:holstein} is
+democratic. Two mechanisms can sample Eq.~\eqref{eq:sret}:
+\begin{itemize}
+  \item \textbf{Stochastic double expansion} (\texttt{moves/insert\_dyn.cpp},
+    \texttt{remove\_dyn.cpp}): samples the double integral directly by inserting
+    auxiliary vertices, always correct, always available.
+  \item \textbf{Analytic Lang--Firsov resummation}: exact \emph{only} when $n_a$ (or a
+    combination of densities) is a constant of motion between hybridization events;
+    Secs.~\ref{sec:eligibility}--\ref{sec:conserved} make this precise.
+\end{itemize}
+
+\section{The Lang--Firsov resummation and its eligibility condition}
+\label{sec:eligibility}
+
+If $[n_a,\Hloc]=0$, then along the imaginary-time trace $n_a(\t)$ is a piecewise
+constant, integer-valued function of $\t$ that only jumps when a $c_a\ndag$ or $c_a$
+hybridization operator is inserted or removed. Under that condition the double
+integral \eqref{eq:sret} can be performed exactly (Lang \& Firsov 1962
+\cite{LangFirsov1962}; see \cite{WernerMillis2007,WernerMillis2010,GullRMP2011} for the
+CT-HYB/CT-INT incarnation), and the local trace picks up an extra factor
+per accepted/proposed move,
+\begin{equation}
+  w^{\rm dyn}_{\rm loc} = \exp\Big\{ \sum_{\alpha,\beta} s_\alpha s_\beta\,
+  K_{a(\alpha)\,b(\beta)}(\t_\alpha-\t_\beta) \Big\},
+  \label{eq:ratio}
+\end{equation}
+where the sum runs over pairs of fermion-operator insertions/removals $\alpha,\beta$
+(each contributing $s=+1$ if it is a creation operator being inserted or an
+annihilation operator being removed, $s=-1$ otherwise), and $K_{ab}$ is built once per
+solve from $D_{ab}$ (\texttt{build\_K\_n}) and evaluated by
+\texttt{qmc\_data::compute\_lang\_firsov\_ratio} (\texttt{qmc\_data.hpp}). This is
+literally what the code computes; Eq.~\eqref{eq:ratio} is copied from the comment
+above that function.
+
+\texttt{classify\_dyn\_vertices} enforces the eligibility condition by direct symbolic
+operator algebra, $(O\,\Hloc - \Hloc\,O).\mathtt{is\_almost\_zero()}$, on the actual
+$\Hloc$ used in the solve --- not via \texttt{atom\_diag}. This was a deliberate
+choice: \texttt{atom\_diag}'s quantum-number machinery labels Fock states by diagonal
+matrix elements in the \emph{fundamental} operator basis, which is only faithful when
+the candidate operator is already diagonal there, and (a genuine upstream issue found
+while implementing this) segfaults during construction when fed $\ge 2$
+simultaneously non-commuting \texttt{qn\_vector} entries. Plain operator algebra has
+neither problem.
+
+\section{From $D_{ab}(\t)$ to $K_{ab}(\t)$: a boundary-value problem in Legendre space}
+\label{sec:shift}
+
+\subsection{The pairwise kernel}
+
+\texttt{fit\_legendre\_coeffs} expands the coupling curve in ordinary (non-normalized)
+Legendre polynomials on $\t\in[0,\beta]$,
+\begin{equation}
+  D(\t) = \sum_{n\ge0} d_n\, P_n\big(x(\t)\big), \qquad x(\t) = \frac{2\t}{\beta}-1,
+  \qquad d_n = \frac{2n+1}{\beta}\int_0^\beta \! d\t\, D(\t)\, P_n(x(\t)).
+  \label{eq:dn}
+\end{equation}
+\texttt{build\_M\_matrix} then maps $\{d_n\}\to\{k_n\}$, the Legendre coefficients of
+$K(\t)=\sum_n k_n P_n(x(\t))$, via a fixed matrix independent of $D$. One can check
+directly that this matrix is exactly the representation, in Legendre space, of the
+two-point boundary-value problem
+\begin{equation}
+  K''(\t) = D(\t), \qquad K(0)=K(\beta)=0,
+  \label{eq:bvp}
+\end{equation}
+i.e.\ $K$ is the doubly-integrated coupling curve, pinned to vanish at both ends of the
+trace. (Check: for $D(\t)=d_0$ constant, Eq.~\eqref{eq:bvp} gives
+$K(\t)=\tfrac{d_0}{2}\t(\t-\beta) = \tfrac{d_0\beta^2}{12}\big(P_2(x)-P_0(x)\big)$ using
+$x^2=\tfrac13(2P_2+P_0)$, i.e.\ $k_0=-d_0\beta^2/12$, $k_2=+d_0\beta^2/12$ ---
+exactly \texttt{build\_M\_matrix}'s $M(0,0)=-\beta^2/12$ and $M(2,0)=+\beta^2/12$.)
+Physically, $K$ is the retarded pair potential between two density kinks a time $\t$
+apart; the Dirichlet condition $K(0)=0$ is why \texttt{compute\_lang\_firsov\_ratio}'s
+comment notes that coincident-time pairs contribute nothing to Eq.~\eqref{eq:ratio}.
+
+\subsection{The static part, $K'(0)$}
+\label{sec:kprime}
+
+What is \emph{not} captured by pairs of distinct kinks is the instantaneous
+(Hartree-like) part of the interaction --- exactly the piece that must instead be
+folded into $\Hloc$ before it is diagonalized (\texttt{apply\_lang\_firsov\_shift}), or
+it is missed entirely. Solving the BVP \eqref{eq:bvp} with the Dirichlet Green's
+function of $\partial_\t^2$ on $[0,\beta]$,
+$G(\t,\t') = \t_<(\t_>-\beta)/\beta$ ($\t_<=\min(\t,\t')$, $\t_>=\max(\t,\t')$), gives
+\begin{equation}
+  K'(0^+) = \int_0^\beta \frac{\t'-\beta}{\beta}\, D(\t')\, d\t'
+  = \frac1\beta\int_0^\beta \t' D(\t')\,d\t' \;-\; \int_0^\beta D(\t')\,d\t'.
+\end{equation}
+Both integrals are exactly the $n=0,1$ Legendre moments of $D$ (using
+$x^0=P_0$, $x=P_1$, and orthogonality $\int_{-1}^1 P_nP_m\,dx = \tfrac{2}{2n+1}\delta_{nm}$):
+$\int_0^\beta D\,d\t = \beta d_0$ and $\int_0^\beta \t' D\,d\t' =
+\tfrac{\beta^2}{2}\big(d_0+\tfrac{d_1}{3}\big)$, giving the closed form
+\begin{equation}
+  K'(0^+) = -\frac{\beta}{2}\Big(d_0 - \frac{d_1}{3}\Big).
+  \label{eq:kprime0plus}
+\end{equation}
+This uses \emph{only} the first two Legendre moments of $D$ --- exact, not a
+truncation. The kernel \texttt{compute\_lang\_firsov\_ratio} actually evaluates is not
+$K(\t)$ on $[0,\beta]$ as-is, but folded/reflected into $[0,\beta/2]$
+(\texttt{eval\_K}'s \texttt{if (t > beta/2.0) t = beta - t;} after wrapping negative
+$\t$ into $[0,\beta)$), which is equivalent to extending $K$ \emph{evenly} about
+$\t=0$. Since $K'(0^+)\neq0$ in general, this even extension has a genuine kink at the
+origin: approaching from below, $K_{\rm used}(\t)=K(-\t)$ gives
+$K_{\rm used}'(0^-) = -K'(0^+)$, so the total derivative discontinuity at coincidence
+is
+\begin{equation}
+  K'(0) \;\equiv\; K_{\rm used}'(0^+) - K_{\rm used}'(0^-) \;=\; 2K'(0^+)
+  \;=\; -\beta\Big(d_0-\frac{d_1}{3}\Big),
+  \label{eq:kprime0}
+\end{equation}
+which is exactly \texttt{apply\_lang\_firsov\_shift}'s
+\verb|Kprime_0 = -beta*(d0 - d1/3)|. Physically, this discontinuity is the
+correction a single density segment's own self-interaction contributes as its two
+bounding kinks are brought together --- the Hartree/instantaneous piece the pairwise
+sum in Eq.~\eqref{eq:ratio} genuinely cannot see (it starts at $K(0)=0$, not at the
+one-sided slope). \texttt{apply\_lang\_firsov\_shift} moves it into $\Hloc$ instead:
+\begin{align}
+  a=b\ (\text{diagonal}): &\quad \Hloc \;\to\; \Hloc - \tfrac12 K'(0)\, n_a, \\
+  a\neq b\ (\text{off-diagonal}): &\quad \Hloc \;\to\; \Hloc - \tfrac12 K'(0)\, n_a n_b
+\end{align}
+applied for both orderings $(a,b),(b,a)$, giving a total $K'(0)$ per unordered pair.
+
+\subsection{Cross-check: the exactly-solvable single-phonon polaron shift}
+
+For the concrete model \eqref{eq:holstein}, the phonon coordinate can be integrated
+out exactly (this is the original Lang--Firsov canonical transformation, and also just
+completing the square classically, since the coupling is linear): minimizing
+$g\,n\,x+\tfrac{\w_0^2}{2}x^2$ over $x$ at fixed $n=\sum_a n_a$ gives
+$x^\star=-gn/\w_0^2$ and an energy shift $-\tfrac{g^2}{2\w_0^2}n^2$. Writing
+$n^2=\sum_a n_a + \sum_{a\neq b} n_an_b$ (fermion idempotency, $n_a^2=n_a$) gives an
+exact, textbook chemical-potential shift of $-\tfrac{g^2}{2\w_0^2}$ per orbital and an
+exact interaction shift of $-\tfrac{g^2}{\w_0^2}$ per unordered pair. Independently,
+\eqref{eq:Qtau}--\eqref{eq:kprime0} give, using
+$\int_0^\beta Q(\t)\,d\t = -1/\w_0^2$ (elementary, and $\beta$-independent) so that
+$d_0 = g^2\!\int Q\,d\t/\beta = -g^2/(\w_0^2\beta)$ and $d_1=0$ (by the manifest
+symmetry $Q(\t)=Q(\beta-\t)$),
+\begin{equation}
+  K'(0) = -\beta\Big({-\frac{g^2}{\w_0^2\beta}}\Big) = \frac{g^2}{\w_0^2}.
+\end{equation}
+Hence $-\tfrac12 K'(0) = -\tfrac{g^2}{2\w_0^2}$ (diagonal) and $-K'(0) =
+-\tfrac{g^2}{\w_0^2}$ (off-diagonal),
+identical to the classical/exact Lang--Firsov result above, and independent of
+$\beta$ as it must be (a $T=0$-like intrinsic property of the phonon; only the
+pairwise, retarded part $K(\t)$ in Sec.~\ref{sec:shift} knows about $\beta$). For
+$g=0.5,\ \w_0=1$: $K'(0) = 0.25$.
+
+\section{Consequence: particle-hole symmetry and the $\mu$ correction}
+\label{sec:ph}
+
+For a purely static density-density Hamiltonian $\sum_{i<j}U_{ij}n_in_j$, half filling
+($\langle n_i\rangle=\tfrac12$ for every spin-orbital $i$) is obtained at
+$\mu_i = \tfrac12\sum_{j\neq i}U_{ij}$. \texttt{kanamori\_dyn.py} computes exactly this
+for the bare Kanamori $H_{\rm int}$ alone,
+\begin{equation}
+  \mu_i^{\rm bare} = \tfrac12 U + (n_{\rm orb}-1)\tfrac12(U-2J) + (n_{\rm orb}-1)\tfrac12(U-3J),
+\end{equation}
+which is correct for $H_{\rm int}$ by itself (spin-flip and pair-hopping are
+off-diagonal 4-fermion processes and do not shift this formula --- see
+Sec.~\ref{sec:kanamori-check} for why they conserve $N_\uparrow,N_\downarrow$
+individually, which is what makes the standard PH transformation still apply). But
+once the phonon's static part (Sec.~\ref{sec:kprime}) is folded into $\Hloc$, the
+\emph{total} interaction matrix seen by the model is $U^{\rm renorm}_{ij} =
+U^{\rm bare}_{ij} - K'(0)_{ij}$, and the true half-filling point is
+$\mu_i^{\rm half} = \tfrac12\sum_{j\neq i}U^{\rm renorm}_{ij}$, not $\mu_i^{\rm bare}$.
+Since \texttt{solve()} \emph{also} applies the diagonal shift internally
+($\mu_i^{\rm eff} = \mu_i^{\rm input} + \tfrac12 K'(0)_{ii}$ automatically, whatever
+input $\mu$ is supplied), the input one must actually pass is
+\begin{equation}
+  \mu_i^{\rm input} \;=\; \mu_i^{\rm half} - \tfrac12 K'(0)_{ii},
+  \label{eq:mucorr}
+\end{equation}
+so that the two shifts compose to the correct target. This is exactly what
+\texttt{kanamori\_dyn.py}'s ``mu correction'' block computes, using a one-cycle probe
+solve to read off \texttt{S.lang\_firsov\_U\_renorm} (which already
+\emph{is} $U^{\rm renorm}$, since \texttt{apply\_lang\_firsov\_shift} is
+deterministic) and \texttt{S.lang\_firsov\_mu\_renorm}
+($=\mu^{\rm bare}_i+\tfrac12K'(0)_{ii}$, the probe's own effective $\mu$):
+\begin{equation*}
+  \texttt{mu[i]} = \texttt{mu\_bare} + \big(\underbrace{\tfrac12\textstyle\sum_{j\neq i}U^{\rm renorm}_{ij}}_{\mu_i^{\rm half}} - \underbrace{(\mu^{\rm bare}+\tfrac12K'(0)_{ii})}_{\texttt{mu\_renorm[i]}}\big)
+  = \mu_i^{\rm half}-\tfrac12K'(0)_{ii},
+\end{equation*}
+i.e.\ $\mu^{\rm bare}$ cancels and Eq.~\eqref{eq:mucorr} is recovered exactly.
+
+\subsection{What it looks like when this is skipped}
+
+For the two-orbital benchmark ($U=2.0$, $J=0.2$, $g=0.5$, $\w_0=1$, $\beta=10$, so
+$K'(0)=0.25$ per Sec.~\ref{sec:shift}, uniform over all $2n_{\rm orb}=4$
+spin-orbitals): $\mu^{\rm bare}=2.5$, and Eq.~\eqref{eq:mucorr} with 3 other
+spin-orbitals per site gives
+\begin{equation}
+  \mu^{\rm half} = 2.5 - \tfrac32(0.25) = 2.125, \qquad
+  \mu^{\rm input} = 2.125 - \tfrac12(0.25) = 2.0,
+\end{equation}
+matching the actual solver output (\texttt{S.lang\_firsov\_mu\_renorm}-corrected run)
+to 5 significant figures. A production run that predates this correction (same
+physical parameters, run before the fix landed) used the uncorrected
+$\mu^{\rm bare}=2.5$ throughout, and shows exactly the expected symptom in the raw
+data:
+\begin{center}
+\begin{tabular}{lccc}
+  \toprule
+  & $G(0)$ & $G(\beta)$ & $\max_\t|G(\t)-G(\beta-\t)|$ \\
+  \midrule
+  uncorrected ($\mu=2.5$) & $-0.469$ & $-0.531$ & up to $0.55$ \\
+  corrected ($\mu=2.0$)   & $-0.499$ & $-0.501$ & $\le 0.003$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+i.e.\ the uncorrected run sits at filling $n\approx0.47$ rather than $0.5$ per
+spin-orbital --- precisely the density shift implied by a $0.5$ error in $\mu$ against
+an interaction scale $U\sim2$ --- and the corrected run recovers $\t\to\beta-\t$
+symmetry to noise level, matching a $g=0$ control run solved with the same code.
+
+\section{Beyond a single density: conserved combinations}
+\label{sec:conserved}
+
+Section~\ref{sec:eligibility}'s criterion is correct but conservative: a real Kanamori
+$\Hloc$ with spin-flip and pair-hopping does not conserve any individual $n_a$, only
+certain \emph{combinations}.
+
+\subsection{Why $N_\uparrow,N_\downarrow$ are conserved but individual $n_a$ are not}
+\label{sec:kanamori-check}
+
+The Kanamori spin-flip term is $H_{\rm sf} = -J_X\sum_{m\neq m'} d_{m\uparrow}\ndag
+d_{m\downarrow}^{\phantom\dagger} d_{m'\downarrow}\ndag d_{m'\uparrow}^{\phantom\dagger}$.
+Writing it as $d_{m\uparrow}\ndag\, B\, d_{m'\uparrow}$ with
+$B=d_{m\downarrow}d_{m'\downarrow}\ndag$ (which commutes with $N_\uparrow$, since $B$
+only involves down operators),
+\begin{equation}
+  [N_\uparrow,\, d_{m\uparrow}\ndag B d_{m'\uparrow}]
+  = (+1)\,d_{m\uparrow}\ndag B d_{m'\uparrow} + d_{m\uparrow}\ndag B\,(-1)\,d_{m'\uparrow} = 0
+\end{equation}
+exactly, for every $J_X$: an up-electron hops $m'\!\to\!m$ while a down-electron hops
+$m\!\to\!m'$ \emph{simultaneously}; no single electron ever changes spin, so
+$N_\uparrow$ (and by the identical argument $N_\downarrow$) is untouched. The
+pair-hopping term $J_P\sum_{m\neq m'}d_{m\uparrow}\ndag d_{m\downarrow}\ndag
+d_{m'\downarrow}d_{m'\uparrow}$ moves one up- and one down-electron together from
+$m'\to m$, again leaving $N_\uparrow,N_\downarrow$ individually fixed. Neither term
+conserves any single orbital's $n_{m\uparrow}$ or $n_{m\downarrow}$.
+
+\subsection{The conserved subspace as a nullspace, and exact recovery}
+
+$[\,\sum_a c_a n_a,\ \Hloc\,]=0$ is linear in $c$, so the set of conserved
+combinations is exactly the nullspace of the linear map $c \mapsto \sum_a c_a\,[n_a,\Hloc]$.
+\texttt{find\_conserved\_density\_combinations} builds this map by expanding every
+$[n_a,\Hloc]$ symbolically, collecting the (real and imaginary parts of the)
+coefficient of every monomial that appears as a row of a real matrix, and computing
+its nullspace by SVD --- for the standard 2-orbital Kanamori case this returns
+exactly the 2-dimensional space spanned by $N_\uparrow,N_\downarrow$, matching
+Sec.~\ref{sec:kanamori-check} directly rather than assuming it.
+
+A vertex whose two densities individually fail Sec.~\ref{sec:eligibility} can still be
+handled analytically if, together with every other vertex on the same connected group
+of orbitals (found by shared-orbital connectivity, \emph{including the diagonal
+self-terms} --- nothing is inferred if a diagonal term is missing, since that changes
+the physical interaction being asked for, not just its bookkeeping), its coupling is
+\emph{exactly} representable as $\sum_{ij}\Gamma_{ij}\,O_i(a)O_j(b)$ for some symmetric
+$\Gamma$ built from the conserved combinations $O_i$ restricted to the group. This is
+checked \emph{per Legendre order}: \texttt{recover\_conserved\_density\_groups} fits
+each order's target (the $(a,b)$ pair's own Legendre coefficient of $D_{ab}$, exactly
+what \texttt{build\_K\_n} would compute for it directly) against the design matrices
+$O_i(a)O_j(b)+O_j(a)O_i(b)$ by least squares, and only promotes the group if
+\emph{every} order's residual vanishes. Because $N_\uparrow$ and $N_\downarrow$ have
+disjoint orbital support, same-spin and opposite-spin pairs land on non-overlapping
+matrix entries, so $U(\t)\neq U'(\t)$ (the physically standard Kanamori shape, not a
+degenerate special case) is fully, exactly recoverable this way --- verified
+numerically (\texttt{test/python/kanamori\_dyn\_nonuniform.py}: 16/16 vertices
+analytic) as well as derived here.
+
+\begin{thebibliography}{9}
+\bibitem{LangFirsov1962} I.~G.~Lang and Yu.~A.~Firsov, \emph{Zh. Eksp. Teor. Fiz.}
+  \textbf{43}, 1843 (1962).
+\bibitem{WernerMillis2007} P.~Werner and A.~J.~Millis, \emph{Phys. Rev. Lett.}
+  \textbf{99}, 146404 (2007).
+\bibitem{WernerMillis2010} P.~Werner and A.~J.~Millis, \emph{Phys. Rev. Lett.}
+  \textbf{104}, 146401 (2010).
+\bibitem{GullRMP2011} E.~Gull, A.~J.~Millis, A.~I.~Lichtenstein, A.~N.~Rubtsov,
+  M.~Troyer, and P.~Werner, \emph{Rev. Mod. Phys.} \textbf{83}, 349 (2011).
+\bibitem{Nomura2015} Y.~Nomura, S.~Sakai, M.~Capone, and R.~Arita, \emph{Sci. Adv.}
+  \textbf{1}, e1500568 (2015).
+\bibitem{Steiner2015} K.~Steiner, Y.~Nomura, and P.~Werner, \emph{Phys. Rev. B}
+  \textbf{92}, 115123 (2015).
+\bibitem{Georges2013} A.~Georges, L.~de'~Medici, and J.~Mravlje, \emph{Annu. Rev.
+  Condens. Matter Phys.} \textbf{4}, 137 (2013).
+\end{thebibliography}
+
+\end{document}
