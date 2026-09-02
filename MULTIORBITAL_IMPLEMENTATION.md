@@ -26,6 +26,15 @@ resummation) to:
 4. Eventually validate all of this against a rotated-basis (bonding/antibonding)
    two-site dimer DCA test. **Not started yet.**
 
+## Theory / derivations
+
+`doc/notes/dynamical_interactions.tex` has the full closed-form physics derivation
+backing the items below: the K'(0) static-shift formula derived directly from the
+code's own boundary-value problem (and cross-checked against the exactly-solvable
+single-phonon Lang-Firsov polaron shift), the conserved-density-combination nullspace
+construction, and the same bug list as here with more derivation detail. Currently
+**untracked** (not yet committed) — see "What's left" below.
+
 ## What's done
 
 ### 1. Core vertex data model (`c++/triqs_cthyb/configuration.hpp`)
@@ -289,6 +298,40 @@ group from) — see the `kanamori_dyn`/`kanamori_dyn_selfconsistency` tests (see
 "Conserved-density-combination recovery" above) for the first real exercise of the
 multi-orbital conserved-combination path.
 
+### 9. Lang-Firsov static shift exposed to the caller, and used for a real mu correction (2026-08-27)
+
+`apply_lang_firsov_shift` (`dynamical_interactions.cpp`/`.hpp`) now returns a new
+`lang_firsov_shift_t{U_renorm, mu_renorm}` (previously `void`) — the same aggregate
+before/after density-density interaction matrix it already computed for the
+`verbosity>=2` print, now actually handed back to the caller instead of discarded.
+`solver_core.hpp` gained two new solver properties, `lang_firsov_U_renorm` (total
+off-diagonal coupling between every orbital pair, `h_loc`'s own static coupling plus
+whatever the dynamical interaction's static part added) and `lang_firsov_mu_renorm`
+(the diagonal analogue), both empty when no vertex was routed through Lang-Firsov;
+both get h5 read/write and are exposed to Python via `solver_core.wrap.cxx`. See
+`doc/notes/dynamical_interactions.tex` Secs.~4-5 for the closed-form derivation of
+what this shift actually is (a two-point boundary-value problem in Legendre space)
+and why it needs to feed back into the chemical potential.
+
+**Why this matters**: a static `h_loc0` chosen from the bare interaction's own
+half-filling formula (e.g. `h_int_kanamori`'s usual `mu` formula) ignores the
+dynamical interaction's own static (Hartree-like) contribution once it's folded into
+`h_loc` — so the model silently sits off half filling and particle-hole symmetry
+breaks (worked example with real numbers in the theory doc, Sec.~5.1: `G(0)`/`G(beta)`
+diverge by up to 0.55 uncorrected vs. <=0.003 corrected). `benchmark/dynamic_int/kanamori_dyn.py`
+(the production benchmark script — the small, deterministic `test/python/kanamori_dyn.py`
+ctest is unchanged) now does a cheap 1-cycle probe solve to read `lang_firsov_mu_renorm`/
+`lang_firsov_U_renorm` back, computes the true half-filling `mu` from them, and only
+then runs the real production solve at the corrected `mu`. The same commit also
+switched that benchmark script's bath from a two-pole analytic bath to a Bethe-lattice
+(semicircular) bath, and added `benchmark/dynamic_int/run_kanamori_static.sh` (a `g=0`
+SLURM reference run to compare the dynamical run against).
+
+**Bug fix riding along in the same commit**: `impurity_trace.hpp`'s `try_delete` had
+`EXPECTS_WITH_MESSAGE(node, ...)` where it meant `EXPECTS_WITH_MESSAGE(x, ...)` —
+asserting on the wrong (unrelated, in-scope-from-elsewhere) variable instead of the
+one actually being checked. Fixed.
+
 ## Session update (2026-08-13)
 
 **Superseded 2026-08-14** — the "total-density decomposition" mechanism this entry
@@ -547,6 +590,12 @@ session's own work, from an unknown prior edit), so which side (or what merge) a
 ended up in the file is unverified — needs a real content review against the policy
 below, not assumed correctly resolved just because it parses.
 
+**Still open as of 2026-09-02**: the notebook has since been actively edited three more
+times (`8ecbd61`, `280fe41`, `2086d47`, 2026-08-24 through 2026-08-31), presumably to
+plot/analyze the new mu-corrected Kanamori benchmark runs (item 9 above) — the "needs a
+real content review" note above is now more relevant, not less, and should be revisited
+together with the user rather than assumed fine because more work has landed on it since.
+
 **New conflict-resolution policy established this session** (saved to memory,
 `feedback_merge_conflict_policy.md`): default to **unstable's side** for
 multiorbital/unstable conflicts, unless there's a specific, verified reason to prefer
@@ -647,6 +696,38 @@ single-orbital case's root cause.
   `lang_firsov=False`, which neither `spin_spin.cpp` nor `spin_spin.py` do by default;
   this regeneration is the ordinary, default `lang_firsov=True` path). Item 4's own
   regeneration is still pending its own investigation — don't conflate the two.
+- **New gap (2026-09-02)**: the Lang-Firsov mu-correction machinery (item 9 above,
+  `lang_firsov_U_renorm`/`lang_firsov_mu_renorm`) is currently exercised only by the
+  production benchmark script (`benchmark/dynamic_int/kanamori_dyn.py`), not by any
+  committed/CI-gating test. Worth a small deterministic Python test that checks the
+  exposed `U_renorm`/`mu_renorm` directly against the closed-form `K'(0)` formula
+  derived in `doc/notes/dynamical_interactions.tex` Sec.~4 — would turn a derivation
+  currently checked only by eye (production-run comparison, Sec.~5.1 of the theory doc)
+  into a real regression test.
+- **Dynamical spin-flip (stochastic path), production setup added 2026-09-02**: until
+  now *no* test or benchmark exercised the stochastic path for a genuinely multi-orbital
+  dynamical Jperp-type vertex. Every `kanamori_dynamical_vertices` call site in the repo
+  passed `spin_flip=False`, so the whole `kanamori_dyn*` family is density-only on the
+  dynamical side (their `spin_flip=True` is `h_int_kanamori`'s *static* argument, which
+  never touches the dynamical pipeline); the only stochastic-path coverage was
+  `spin_spin.cpp`/`.py`, which is single-orbital and goes through the separate scalar
+  `Jperp_tau` path, not `add_dyn_vertex`. New:
+  `benchmark/dynamic_int/kanamori_dyn_spinflip.py` + `run_kanamori_dyn_spinflip.sh`
+  (cluster job) + `plot_kanamori_dyn_spinflip.py` (analysis), which add a retarded
+  inter-orbital spin-flip channel (`spin_flip=True`, own coupling `g_sf`) on top of the
+  usual density phonon. Confirmed locally at small statistics: mixed routing works
+  (`16 analytic (Lang-Firsov), 4 stochastic` for `n_orb=2`), the `insert_dyn`/`remove_dyn`
+  moves accept, the mu correction is unaffected (the spin-flip channel never reaches
+  `apply_lang_firsov_shift`), and `lang_firsov=False` correctly forces all 20 stochastic.
+  The production run itself has not been done — that's the point of the launcher.
+- **Data point for item 4 above**: in that same local scan the multi-orbital dynamical
+  spin-flip stochastic channel showed *no* severe sign problem — average sign 0.97 / 0.89
+  / 0.86 / 0.75 at `g_sf` = 0.3 / 0.5 / 0.7 / 1.0 (beta=10, U=2, J=0.2), degrading
+  smoothly with coupling. That's a completely different regime from `spin_spin.cpp`'s
+  ~0.009, and is a second independent case (after `kanamori_dyn_selfconsistency`) where
+  forcing real dynamical vertices through `insert_dyn`/`remove_dyn` behaves fine — which
+  makes a stale `spin_spin.ref.h5` look more likely than a weight-formula bug in the
+  moves themselves, though still not proof.
 - Eventually: the rotated-basis (bonding/antibonding) two-site dimer DCA test from the
   original plan (goal 4 at the top) — not started, lowest priority, exploratory.
 - Eventually: compare against CTINT for the multi-orbital total-density case, once
@@ -657,6 +738,12 @@ single-orbital case's root cause.
 
 Once the above settles, walk through the complete diff against `48cb130` (or against
 `unstable` for the full picture) with the user before considering this mergeable.
+
+### 7. Commit the theory doc
+
+`doc/notes/dynamical_interactions.tex` (see "Theory / derivations" at the top) is
+currently untracked. Commit it once it's been looked over, so the derivation it
+contains isn't at risk of being lost.
 
 ## Design principles established this session (apply going forward)
 
