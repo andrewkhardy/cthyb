@@ -138,7 +138,9 @@ namespace triqs_cthyb {
     /// Minimum number of operator insertions in the \f$ O(\tau) \f$ insertion measure.
     int measure_O_tau_min_ins = 10;
 
-    /// Measure density-density correlator from Lang-Firsov K coefficients
+    /// Measure the density-density correlator from the occupation kinks (dyn_n_l Legendre
+    /// coefficients): Q_tau_ab = <n_a(tau) n_b(0)> - <n_a n_b>, i.e. without its equal-time value.
+    /// Exact whenever every n_a commutes with h_loc; Lang-Firsov is not required.
     bool measure_D0_corr = false;
 
     /// Measure \f$ G^{(2)}(\tau,\tau',\tau'') \f$ with three fermionic times.

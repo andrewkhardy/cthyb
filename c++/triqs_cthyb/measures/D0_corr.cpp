@@ -13,12 +13,10 @@ namespace triqs_cthyb {
                                    int n_leg, gf_struct_t const &gf_struct)
      : data(data), average_sign(0), n_leg(n_leg) {
 
-    if (!data.use_lang_firsov || data.K_n_size == 0) {
-      TRIQS_RUNTIME_ERROR << "measure_D0_corr requires lang_firsov=true with non-empty K_n.";
-    }
-    if (data.K_n_size != n_leg) {
-      TRIQS_RUNTIME_ERROR << "measure_D0_corr requires n_leg to match K_n size: " << n_leg << " != " << data.K_n_size;
-    }
+    // Only the occupation kinks enter, not the Lang-Firsov kernel: the estimator is exact whenever
+    // every n_a is piecewise constant between trace operators (commutes with h_loc), with or
+    // without Lang-Firsov.
+    if (n_leg <= 0) TRIQS_RUNTIME_ERROR << "measure_D0_corr requires n_leg > 0, got " << n_leg;
 
     n_lin = static_cast<int>(data.linindex.size());
     if (n_lin <= 0) TRIQS_RUNTIME_ERROR << "measure_D0_corr requires non-empty linindex.";
@@ -57,6 +55,9 @@ namespace triqs_cthyb {
         double dt = double(ops[i].first - ops[j].first);
         if (dt < 0.0) dt += beta;
         if (dt > beta) dt -= beta;
+        // The two operators of one stochastic dynamical vertex sit one tick (tau_seg epsilon) apart:
+        // a single event, i.e. a contact term at tau = 0 like i == j, not two kinks at separation dt.
+        if (dt < 1e-10 * beta || dt > beta * (1.0 - 1e-10)) continue;
 
         triqs::utility::legendre_generator leg;
         leg.reset(2.0 * dt / beta - 1.0);
