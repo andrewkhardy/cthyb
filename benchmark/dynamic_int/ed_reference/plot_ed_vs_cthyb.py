@@ -36,6 +36,10 @@ with HDFArchive(args.cthyb_file, 'r') as A:
     conserved_vectors, equal_time_added = A['conserved_vectors'], A['equal_time_added']
     lang_firsov, average_sign, n_cycles = A['lang_firsov'], A['average_sign'], A['n_cycles']
     cthyb_params = A['params']
+    keys = list(A.keys())
+    dyn_pairs = A['dyn_vertex_pairs'] if 'dyn_vertex_pairs' in keys else None
+    dyn_corr = A['dyn_vertex_corr'] if 'dyn_vertex_corr' in keys else None
+    dyn_tau = A['dyn_vertex_tau'] if 'dyn_vertex_tau' in keys else None
 
 for key, value in ed['params'].items():
     if not np.isclose(value, cthyb_params[key]):
@@ -118,5 +122,33 @@ fig.suptitle(fr"$\beta$={p['beta']}, U={p['U']}, J={p['J']}, V={p['V']}, $\omega
 
 out = args.out or os.path.splitext(args.cthyb_file)[0] + '_vs_ed.png'
 fig.savefig(out, dpi=150)
+
+# Second figure: orbital-resolved <n_a(tau) n_b(0)> from the stochastic vertices (the
+# coupling-derivative estimator). Unlike the kink estimator this carries its own equal-time value,
+# so it is compared to ED directly. Points the estimator had to mask (negligible coupling) are
+# stored as exactly 0 and left out of the line.
+if dyn_corr is not None:
+    density_types = [t for t in range(len(dyn_pairs)) if dyn_pairs[t][0] >= 0 and dyn_pairs[t][1] >= 0]
+    if density_types:
+        fig2, ax2 = plt.subplots(2, 1, figsize=(7.5, 6), sharex=True, gridspec_kw=dict(height_ratios=[2, 1]), constrained_layout=True)
+        for k, t in enumerate(density_types[:len(SERIES_COLORS)]):
+            a, b = dyn_pairs[t]
+            name = f"n({labels[a][0]},{labels[a][1]})-n({labels[b][0]},{labels[b][1]})"
+            ed_curve = ed['chi'][a, b]
+            cthyb_curve = np.where(dyn_corr[t] == 0.0, np.nan, dyn_corr[t])
+            color = SERIES_COLORS[k]
+            ax2[0].plot(ed['tau'], ed_curve, color=color, linewidth=2, label=f'ED  {name}')
+            ax2[0].plot(dyn_tau, cthyb_curve, color=color, linewidth=1, linestyle=(0, (4, 2)), label=f'CTHYB  {name}')
+            residual = cthyb_curve - np.interp(dyn_tau, ed['tau'], ed_curve)
+            ax2[1].plot(dyn_tau, residual, color=color, linewidth=1)
+            summary.append(f"chi {name}: max |CTHYB - ED| = {np.nanmax(np.abs(residual)):.4f}")
+        style_axis(ax2[0], r'$\langle n_a(\tau) n_b(0)\rangle$')
+        style_axis(ax2[1], 'CTHYB $-$ ED')
+        ax2[0].legend(fontsize=8, frameon=False)
+        ax2[0].set_title('From the stochastic vertices (coupling derivative)', color=INK, loc='left')
+        out2 = os.path.splitext(out)[0] + '_chi_ab.png'
+        fig2.savefig(out2, dpi=150)
+        print(f"Saved {out2}")
+
 print('\n'.join(summary))
 print(f"Saved {out}")

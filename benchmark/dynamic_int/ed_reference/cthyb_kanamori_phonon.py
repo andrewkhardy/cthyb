@@ -62,6 +62,20 @@ if mpi.is_master_node():
             (_, (bl, idx)), _ = term
             conserved_vectors[i, M.labels.index((bl, idx))] = np.real(coeff)
 
+    # Orbital-resolved correlators from the stochastic (residual) vertices: the coupling-derivative
+    # estimator, <n_a(tau) n_b(0)> per vertex type. dyn_vertex_pairs gives each type's (a, b) as
+    # indices into model.labels, or -1 for a type that is not a density-density vertex.
+    dyn_vertex_pairs, dyn_vertex_corr = [], []
+    if S.dyn_vertex_corr_tau is not None:
+        def density_orbital(op):
+            (term, _), = list(op)
+            (_, indices_dag), (_, indices) = term[0], term[1]
+            return M.labels.index(tuple(indices_dag)) if list(indices_dag) == list(indices) else -1
+
+        for (op1, op2), g in zip(S.dyn_vertex_operators, S.dyn_vertex_corr_tau):
+            dyn_vertex_pairs.append([density_orbital(op1), density_orbital(op2)])
+            dyn_vertex_corr.append(g.data.real)
+
     os.makedirs(args.out_dir, exist_ok=True)
     filename = os.path.join(args.out_dir, f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}.h5")
     with HDFArchive(filename, 'w') as A:
@@ -72,6 +86,10 @@ if mpi.is_master_node():
         A['equal_time_added'] = args.density_matrix
         A['average_sign'] = S.average_sign
         A['average_order'] = S.average_order
+        if len(dyn_vertex_pairs) > 0:
+            A['dyn_vertex_pairs'] = np.array(dyn_vertex_pairs)
+            A['dyn_vertex_corr'] = np.array(dyn_vertex_corr)
+            A['dyn_vertex_tau'] = np.linspace(0, M.beta, n_tau_bosonic)
         if S.perturbation_order_dyn is not None:
             A['perturbation_order_dyn'] = S.perturbation_order_dyn
         A['params'] = M.params()
