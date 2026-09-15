@@ -39,13 +39,9 @@ namespace triqs_cthyb {
     dyn_pair          = data.dyn_op_list[dyn_pair_idx];
 
     // Insert operators in the tree
+    auto vertex_ops = data.dyn_vertex_ops(dyn_pair, tau1, tau2);
     try {
-      auto insert_op_pair = [&](auto tau, const auto &op) {
-        data.imp_trace.try_insert(tau, op.opL);
-        data.imp_trace.try_insert(tau - data.tau_seg.get_epsilon(), op.opR);
-      };
-      insert_op_pair(tau1, dyn_pair.op1);
-      insert_op_pair(tau2, dyn_pair.op2);
+      for (auto const &[tau, op] : vertex_ops) data.imp_trace.try_insert(tau, op);
     } catch (rbt_insert_error const &) { // FIXME what this error ???
       std::cerr << "Insert error : recovering ... " << std::endl;
       data.imp_trace.cancel_insert();
@@ -55,6 +51,10 @@ namespace triqs_cthyb {
     // The ratio for the dynamic interaction
     double dyn_term_ratio = -1 * data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2));
 
+    // Lang-Firsov dressing: the vertex's operators change orbital occupations like any
+    // other operator in the trace (see qmc_data::trace_ops)
+    double lang_firsov_ratio = data.compute_lang_firsov_ratio(vertex_ops, {});
+
     // Proposal probability ratio
     mc_weight_t direct_probability  = (2.0 / (config.beta() * config.beta())) * (1.0 / data.dyn_op_list.size());
     mc_weight_t reverse_probability = 1.0 / double(config.dyn_oplist.size() + 1);
@@ -63,7 +63,7 @@ namespace triqs_cthyb {
     // For quick abandon
     double random_number = rng.preview();
     if (random_number == 0.0) return 0;
-    double p_yee = std::abs(t_ratio * dyn_term_ratio / data.atomic_weight);
+    double p_yee = std::abs(t_ratio * dyn_term_ratio * lang_firsov_ratio / data.atomic_weight);
 
     // computation of the new trace after insertion
     std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
@@ -73,7 +73,7 @@ namespace triqs_cthyb {
       TRIQS_RUNTIME_ERROR << "(insert_dyn) trace_ratio not finite " << new_atomic_weight << " " << data.atomic_weight << " "
                           << new_atomic_weight / data.atomic_weight << " in config " << config.get_id();
 
-    mc_weight_t p = atomic_weight_ratio * dyn_term_ratio;
+    mc_weight_t p = atomic_weight_ratio * dyn_term_ratio * lang_firsov_ratio;
 
 #ifdef EXT_DEBUG
     std::cerr << "Atomic ratio: " << atomic_weight_ratio << '\t';
