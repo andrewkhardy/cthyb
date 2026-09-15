@@ -27,6 +27,10 @@ mpirun -n 96 python run_cthyb.py --J 1.0 --jperp 1 --szsz 1 --n_cycles 1000000
 #mpirun -n 96 python run_cthyb.py --J 1.0 --jperp 1 --szsz 0 --n_cycles 1000000
 #mpirun -n 96 python run_cthyb.py --J 1.0 --jperp 0 --szsz 1 --n_cycles 1000000
 
+# CTHYB fully stochastic (no Lang-Firsov). Short local probe: sign ~0.6 at J=0.5, ~0.3 at J=1
+#mpirun -n 96 python run_cthyb.py --J 0.5 --jperp 1 --szsz 1 --n_cycles 2000000 --lang_firsov False
+#mpirun -n 96 python run_cthyb.py --J 1.0 --jperp 1 --szsz 1 --n_cycles 4000000 --lang_firsov False
+
 #mpirun -n 96 python run_ctseg.py --J 1.0 --jperp 1 --szsz 1 --n_cycles 1000000
 #mpirun -n 96 python run_ctseg.py --J 1.0 --jperp 1 --szsz 0 --n_cycles 1000000
 #mpirun -n 96 python run_ctseg.py --J 1.0 --jperp 0 --szsz 1 --n_cycles 1000000
