@@ -2,14 +2,14 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Physics validation for the dynamical Hubbard-Kanamori conserved-density recovery (see
+# Physics validation for the dynamical Hubbard-Kanamori conserved-density split (see
 # kanamori_dyn.py for the physical setup and find_conserved_density_combinations /
-# recover_conserved_density_groups in dynamical_interactions.cpp for the mechanism). No
-# external reference exists for this case (ctseg/CTINT can't do multi-orbital dynamical
-# interactions), so the only correctness check available is internal: solve the identical
-# physical setup (off-diagonal vertices *and* the explicit diagonal self-terms, together a
-# completely specified coupling to total spin-up/spin-down density) twice -- once with
-# lang_firsov=True (recovers every vertex to the analytic path: individual orbital
+# split_density_couplings in dynamical_interactions.cpp for the mechanism). ctseg/CTINT
+# can't do multi-orbital dynamical interactions, so the check here is internal (for an
+# external check, benchmark/dynamic_int/ed_reference solves a similar model exactly):
+# solve the identical physical setup (off-diagonal vertices *and* the explicit diagonal
+# self-terms, together a coupling to total spin-up/spin-down density) twice -- once with
+# lang_firsov=True (sends every vertex to the analytic path: individual orbital
 # densities do not commute with h_loc under real spin-flip/pair-hopping, but total
 # spin-up and total spin-down density each do) and once with lang_firsov=False (forces
 # every vertex through the stochastic insert_dyn/remove_dyn path instead) -- and check the

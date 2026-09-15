@@ -125,24 +125,17 @@ namespace triqs_cthyb {
                                     std::vector<std::function<double(double)>> &dyn_interactions);
 
   // ---------------------------------------------------------------------------------
-  // Recovering vertices classify_dyn_vertices had to reject: a density vertex n_a-n_b
-  // is only Lang-Firsov-eligible there if n_a AND n_b *individually* commute with
-  // h_loc -- exactly what compute_lang_firsov_ratio's per-operator phase dressing
-  // needs. That's correct but conservative: under a genuine Hubbard-Kanamori h_loc with
-  // spin-flip/pair-hopping, no individual n_a commutes, even though *some combination*
-  // of densities usually still does -- e.g. total charge N_total = sum_a n_a always
-  // (spin-flip/pair-hopping only move particles between orbitals), and total S_z =
-  // sum_a +-0.5 n_a whenever the Hamiltonian doesn't break spin-rotation symmetry.
+  // Density vertices classify_dyn_vertices had to reject: a density vertex n_a-n_b is
+  // only Lang-Firsov-eligible there if n_a AND n_b *individually* commute with h_loc --
+  // exactly what compute_lang_firsov_ratio's per-operator phase dressing needs. Under a
+  // Hubbard-Kanamori h_loc with spin-flip/pair-hopping no individual n_a commutes, but
+  // combinations of densities usually still do (total charge always; N_up and N_down
+  // whenever spin-rotation symmetry about z isn't broken).
   // find_conserved_density_combinations finds every such combination directly from
-  // h_loc (not by guessing N_total specifically), and recover_conserved_density_groups
-  // uses them to rescue whatever vertices classify_dyn_vertices correctly rejected but
-  // that are, together, exactly equivalent to a coupling to one or more of those
-  // combinations. See the .cpp for the operator-algebra argument for why this only
-  // works when the group is *completely* user-specified (diagonal a==b self-terms
-  // included, not silently inferred) -- a previous version of this mechanism only
-  // required completeness among the off-diagonal pairs and inferred the rest, which was
-  // an unsound approximation, not an exact resummation (it broke a genuine J*Sz*Sz
-  // interaction, where the off-diagonal and diagonal couplings genuinely differ).
+  // h_loc, and split_density_couplings sends the part of the rejected coupling that only
+  // involves them to Lang-Firsov and the rest to the stochastic expansion -- an exact
+  // identity, see doc/notes/dynamical_interactions.tex, "Splitting a density coupling
+  // into Lang-Firsov and stochastic parts".
   // ---------------------------------------------------------------------------------
 
   /// Find a basis for the space of density-operator linear combinations that commute
@@ -156,32 +149,48 @@ namespace triqs_cthyb {
   /// and imaginary parts of each coefficient kept as separate rows, so this is correct
   /// whether h_scalar_t is real or complex), and taking that matrix's nullspace via
   /// SVD. Returns each basis vector as an nda::vector<double> of length M, indexed by
-  /// linear index. Empty if no such combination exists (or if every n_a individually
-  /// commutes already, a degenerate case classify_dyn_vertices already handles alone).
+  /// linear index. If every n_a individually commutes with h_loc, this is the M unit
+  /// vectors; empty only if no combination is conserved at all.
   std::vector<nda::vector<double>> find_conserved_density_combinations(many_body_op_t const &h_loc, fundamental_operator_set const &fops,
                                                                         std::map<std::pair<int, int>, int> const &linindex);
 
-  /// Attempt to recover Lang-Firsov eligibility for vertices in `classified.stochastic`
-  /// by checking whether a complete set of them exactly reconstructs a combination of
-  /// `conserved_combinations`. Only ever recovers a group that is *completely*,
-  /// explicitly specified: every ordered pair (a,b) among the touched orbitals,
-  /// including the diagonal a==b self-terms, must already exist as its own vertex --
-  /// nothing is inferred or filled in (a missing diagonal self-term is never silently
-  /// added). Different (a,b) pairs are *not* required to share one coupling curve: the
-  /// fit is done per Legendre order (each pair contributes its own coefficients, via
-  /// `fit_legendre_coeffs` at `beta`/`N_leg`, exactly as `build_K_n` would for it
-  /// individually), so e.g. a Kanamori-shaped `U(tau) != U'(tau)` (same-spin vs.
-  /// opposite-spin pairs on independent curves) is recovered in full when the
-  /// conserved-combination structure allows it (which for `{N_up, N_down}` it always
-  /// does, since they have disjoint support -- see the .cpp module notes). If every
-  /// order fits exactly, the group's vertices (already fully specified, so nothing
-  /// needs reconstructing) are moved from `classified.stochastic` to
-  /// `classified.lang_firsov` in place; otherwise `classified` is left untouched for
-  /// that group. The ordinary, unmodified `apply_lang_firsov_shift`/`build_K_n` handle
-  /// everything recovered this way, exactly as if `classify_dyn_vertices` had accepted
-  /// it directly.
-  void recover_conserved_density_groups(classified_dyn_vertices_t &classified, std::vector<nda::vector<double>> const &conserved_combinations,
-                                        fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex, double beta,
-                                        int N_leg);
+  /// The conserved density combinations of find_conserved_density_combinations in a
+  /// readable basis, together with the operators O_i = sum_a vectors[i][a] n_a. The SVD
+  /// returns an arbitrary rotation of the conserved subspace; this uses its reduced
+  /// row-echelon form instead (unique for a given subspace, leading coefficient 1), which
+  /// gives exactly N_up and N_down for a Kanamori h_loc with spin-flip and pair-hopping,
+  /// and the individual n_a for a density-only h_loc.
+  struct conserved_densities_t {
+    std::vector<nda::vector<double>> vectors; // indexed by linear index
+    std::vector<many_body_op_t> operators;
+  };
+  conserved_densities_t conserved_densities(many_body_op_t const &h_loc, fundamental_operator_set const &fops,
+                                            std::map<std::pair<int, int>, int> const &linindex);
+
+  /// Split the density-density vertices in `classified.stochastic` into an exact
+  /// Lang-Firsov part and a stochastic residual, D = D_LF + R pointwise in tau. Their
+  /// couplings are collected into a matrix D_ab(tau) over all orbitals (zero for pairs no
+  /// vertex couples; vertices on the same pair add up). `conserved_combinations` must be in
+  /// the form conserved_densities returns: when they are indicator vectors of disjoint
+  /// orbital sets S_i (N, or N_up and N_down), D_LF may be any matrix constant on each
+  /// block S_i x S_j, and is chosen sign-preserving: the entry of smallest magnitude when
+  /// all entries of the block share a sign, zero otherwise. Then D_LF couples only
+  /// conserved combinations, so it is resummed exactly, and every entry of R keeps the
+  /// sign of D or vanishes, so the residual vertices add no weight of the opposite sign.
+  /// The split is an identity, so the physics is unchanged, and R = 0 exactly when D is
+  /// block-constant. The rejected density vertices are replaced by one vertex per pair
+  /// with a non-zero entry of D_LF (appended to `classified.lang_firsov`) or of R (appended
+  /// to `classified.stochastic`), on the finest of their meshes; the other stochastic
+  /// vertices (spin-flip, ...) are untouched. If the conserved combinations are not of
+  /// that disjoint form, nothing is split (block_structured = false).
+  /// See doc/notes/dynamical_interactions.tex, sec:split and sec:split-sign.
+  struct density_split_counts_t {
+    int n_input           = 0;    // rejected density vertices
+    int n_lang_firsov     = 0;    // vertices appended to classified.lang_firsov
+    int n_stochastic      = 0;    // residual vertices appended to classified.stochastic
+    bool block_structured = true; // false: conserved combinations not disjoint indicators, nothing split
+  };
+  density_split_counts_t split_density_couplings(classified_dyn_vertices_t &classified, std::vector<nda::vector<double>> const &conserved_combinations,
+                                                 fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex);
 
 } // namespace triqs_cthyb

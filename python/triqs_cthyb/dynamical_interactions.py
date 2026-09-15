@@ -68,13 +68,13 @@ def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=No
     expand_Jperp_into_vertices's validated coupling/2-with-both-orderings convention,
     so it keeps its 1/2.)
 
-    Pair-hopping has no dynamical analogue here: add_dyn_vertex requires each side to
-    reduce to a single fermion bilinear (one creation, one annihilation -- see
-    dynamical_interactions.hpp), but pair-hopping's c^dag_{a,up} c^dag_{a,down} is a pair
-    creation operator, not a bilinear, so it cannot be expressed this way. Representing
-    it would need a genuinely different vertex type (op_desc_pair_t, insert_dyn.cpp and
-    remove_dyn.cpp all assume one creation + one annihilation per side) -- not attempted
-    here, and there is no `pair_hopping` argument.
+    Pair-hopping is not registered here, but not because it cannot be: reordering
+    c^dag_{a1,up} c^dag_{a1,down} c_{a2,down} c_{a2,up} gives
+    (c^dag_{a1,up} c_{a2,up}) (c^dag_{a1,down} c_{a2,down}), a product of two ordinary
+    bilinears, which is exactly what add_dyn_vertex takes. A retarded pair-hopping term
+    can therefore be registered directly with add_dyn_vertex; it is not a density
+    coupling, so it would be sampled stochastically. This helper simply does not add it
+    (there is no `pair_hopping` argument), and no test covers it yet.
 
     Parameters
     ----------

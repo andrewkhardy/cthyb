@@ -9,26 +9,49 @@ namespace triqs_cthyb {
   using namespace triqs::gfs;
   using namespace triqs::mesh;
 
-  measure_D0_corr::measure_D0_corr(std::optional<Q_l_t> &Q_l_opt, std::optional<Q_tau_t> &Q_tau_opt, qmc_data const &data, int n_tau,
-                                   int n_leg, gf_struct_t const &gf_struct)
-     : data(data), average_sign(0), n_leg(n_leg) {
+  measure_D0_corr::measure_D0_corr(std::optional<Q_l_t> &Q_l_opt, std::optional<Q_tau_t> &Q_tau_opt,
+                                   std::optional<Q_conserved_l_t> &Q_conserved_l_opt, std::optional<Q_conserved_tau_t> &Q_conserved_tau_opt,
+                                   qmc_data const &data, int n_tau, int n_leg, gf_struct_t const &gf_struct,
+                                   std::vector<nda::vector<double>> const &conserved_vectors)
+     : data(data), average_sign(0), n_leg(n_leg), conserved_vectors(conserved_vectors) {
 
-    // Only the occupation kinks enter, not the Lang-Firsov kernel: the estimator is exact whenever
-    // every n_a is piecewise constant between trace operators (commutes with h_loc), with or
-    // without Lang-Firsov.
+    // Only the occupation kinks enter, not the Lang-Firsov kernel. They determine exactly the
+    // correlators of the density combinations that commute with h_loc (piecewise constant between
+    // trace operators), and nothing else, with or without Lang-Firsov: see
+    // doc/notes/dynamical_interactions.tex, "Measuring correlators as coupling derivatives".
     if (n_leg <= 0) TRIQS_RUNTIME_ERROR << "measure_D0_corr requires n_leg > 0, got " << n_leg;
 
     n_lin = static_cast<int>(data.linindex.size());
     if (n_lin <= 0) TRIQS_RUNTIME_ERROR << "measure_D0_corr requires non-empty linindex.";
 
-    Q_l_opt   = make_block2_gf<legendre>({data.config.beta(), Boson, n_leg}, gf_struct);
-    Q_tau_opt = make_block2_gf<imtime>({data.config.beta(), Boson, n_tau}, gf_struct);
+    n_conserved = static_cast<int>(conserved_vectors.size());
+    if (n_conserved == 0)
+      TRIQS_RUNTIME_ERROR << "measure_D0_corr: no combination of orbital densities commutes with h_loc, so the kink estimator determines nothing.";
 
-    Q_l.rebind(*Q_l_opt);
-    Q_tau.rebind(*Q_tau_opt);
+    // Every n_a commutes with h_loc: the conserved basis is the n_a themselves
+    orbital_resolved = (n_conserved == n_lin);
 
-    Q_l()   = 0.0;
-    Q_tau() = 0.0;
+    double beta         = data.config.beta();
+    Q_conserved_l_opt   = Q_conserved_l_t({beta, Boson, n_leg}, {n_conserved, n_conserved});
+    Q_conserved_tau_opt = Q_conserved_tau_t({beta, Boson, n_tau}, {n_conserved, n_conserved});
+    Q_conserved_l.rebind(*Q_conserved_l_opt);
+    Q_conserved_tau.rebind(*Q_conserved_tau_opt);
+    Q_conserved_l()   = 0.0;
+    Q_conserved_tau() = 0.0;
+
+    if (orbital_resolved) {
+      Q_l_opt   = make_block2_gf<legendre>({beta, Boson, n_leg}, gf_struct);
+      Q_tau_opt = make_block2_gf<imtime>({beta, Boson, n_tau}, gf_struct);
+
+      Q_l.rebind(*Q_l_opt);
+      Q_tau.rebind(*Q_tau_opt);
+
+      Q_l()   = 0.0;
+      Q_tau() = 0.0;
+    } else {
+      Q_l_opt.reset();
+      Q_tau_opt.reset();
+    }
 
     alpha_n = nda::zeros<mc_weight_t>(std::array<long, 3>{n_lin, n_lin, n_leg});
   }
@@ -103,6 +126,26 @@ namespace triqs_cthyb {
       }
     }
     q_n = q_n_symm;
+
+    // Contract with the conserved combinations: <O_i(tau) O_j(0)> = sum_ab v_i[a] v_j[b] Q_ab(tau)
+    for (auto l : Q_conserved_l.mesh()) {
+      for (int i = 0; i < n_conserved; ++i) {
+        for (int j = 0; j < n_conserved; ++j) {
+          mc_weight_t sum = 0.0;
+          for (int a = 0; a < n_lin; ++a)
+            for (int b = 0; b < n_lin; ++b) sum += conserved_vectors[i](a) * conserved_vectors[j](b) * q_n(a, b, l.index());
+          Q_conserved_l[l](i, j) = sum;
+        }
+      }
+    }
+    triqs::utility::legendre_generator leg_conserved;
+    for (auto tau : Q_conserved_tau.mesh()) {
+      leg_conserved.reset(2.0 * tau.value() / beta - 1.0);
+      Q_conserved_tau[tau] = 0.0;
+      for (auto l : Q_conserved_l.mesh()) Q_conserved_tau[tau] += leg_conserved.next() * Q_conserved_l[l];
+    }
+
+    if (!orbital_resolved) return;
 
     // Pack q_n into the block2 Legendre Green's function and reconstruct Q_tau
     for (auto bl1 : range(Q_l.size1())) {

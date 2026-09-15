@@ -57,9 +57,11 @@ particle-hole symmetry.
     orbital densities, only certain linear combinations of them ($N_\uparrow$,
     $N_\downarrow$ for the standard case). \texttt{find\_conserved\_density\_combinations}
     finds this subspace exactly (nullspace of a commutator map), and
-    \texttt{recover\_conserved\_density\_groups} promotes a completely-specified group
-    of vertices to the analytic path only when it reconstructs an exact coupling to
-    that subspace, order by order in Legendre space (Sec.~\ref{sec:conserved}).
+    \texttt{split\_density\_couplings} splits the coupling of the rejected density
+    vertices into a part built only from those combinations, resummed analytically, and
+    a residual, sampled stochastically --- an exact identity, with the split chosen so
+    that the residual carries no weight of the opposite sign
+    (Secs.~\ref{sec:conserved}--\ref{sec:split-sign}).
   \item \textbf{The static (K$'(0)$) shift and its effect on $\mu$.} The analytic
     resummation is exact only after subtracting an instantaneous piece of the retarded
     coupling from $\Hloc$ before diagonalizing it. This piece renormalizes the
@@ -339,7 +341,7 @@ d_{m'\downarrow}d_{m'\uparrow}$ moves one up- and one down-electron together fro
 $m'\to m$, again leaving $N_\uparrow,N_\downarrow$ individually fixed. Neither term
 conserves any single orbital's $n_{m\uparrow}$ or $n_{m\downarrow}$.
 
-\subsection{The conserved subspace as a nullspace, and exact recovery}
+\subsection{The conserved subspace as a nullspace}
 
 $[\,\sum_a c_a n_a,\ \Hloc\,]=0$ is linear in $c$, so the set of conserved
 combinations is exactly the nullspace of the linear map $c \mapsto \sum_a c_a\,[n_a,\Hloc]$.
@@ -350,23 +352,355 @@ its nullspace by SVD --- for the standard 2-orbital Kanamori case this returns
 exactly the 2-dimensional space spanned by $N_\uparrow,N_\downarrow$, matching
 Sec.~\ref{sec:kanamori-check} directly rather than assuming it.
 
-A vertex whose two densities individually fail Sec.~\ref{sec:eligibility} can still be
-handled analytically if, together with every other vertex on the same connected group
-of orbitals (found by shared-orbital connectivity, \emph{including the diagonal
-self-terms} --- nothing is inferred if a diagonal term is missing, since that changes
-the physical interaction being asked for, not just its bookkeeping), its coupling is
-\emph{exactly} representable as $\sum_{ij}\Gamma_{ij}\,O_i(a)O_j(b)$ for some symmetric
-$\Gamma$ built from the conserved combinations $O_i$ restricted to the group. This is
-checked \emph{per Legendre order}: \texttt{recover\_conserved\_density\_groups} fits
-each order's target (the $(a,b)$ pair's own Legendre coefficient of $D_{ab}$, exactly
-what \texttt{build\_K\_n} would compute for it directly) against the design matrices
-$O_i(a)O_j(b)+O_j(a)O_i(b)$ by least squares, and only promotes the group if
-\emph{every} order's residual vanishes. Because $N_\uparrow$ and $N_\downarrow$ have
-disjoint orbital support, same-spin and opposite-spin pairs land on non-overlapping
-matrix entries, so $U(\t)\neq U'(\t)$ (the physically standard Kanamori shape, not a
-degenerate special case) is fully, exactly recoverable this way --- verified
-numerically (\texttt{test/python/kanamori\_dyn\_nonuniform.py}: 16/16 vertices
-analytic) as well as derived here.
+A vertex whose two densities individually fail Sec.~\ref{sec:eligibility} is neither
+simply accepted nor simply rejected: its coupling is split (Sec.~\ref{sec:split}) into a
+part built only from the conserved combinations, $\sum_{ij}\Gamma_{ij}\,O_i(a)O_j(b)$,
+which is resummed analytically, and a residual, which is sampled stochastically. A
+coupling that is entirely of that form leaves no residual and goes analytic in full.
+Because $N_\uparrow$ and $N_\downarrow$ have disjoint orbital support, same-spin and
+opposite-spin pairs land on non-overlapping matrix entries, so $U(\t)\neq U'(\t)$ (the
+physically standard Kanamori shape, not a degenerate special case) is of that form and
+is handled entirely analytically --- verified numerically
+(\texttt{test/python/kanamori\_dyn\_nonuniform.py}: 16/16 vertices analytic) as well as
+derived here.
+
+\section{Splitting a density coupling into Lang--Firsov and stochastic parts}
+\label{sec:split}
+
+\emph{Status: implemented as \texttt{split\_density\_couplings}
+(\texttt{dynamical\_interactions.cpp}), with the sign-preserving choice of
+Sec.~\ref{sec:split-sign}, replacing the all-or-nothing fit of Sec.~\ref{sec:conserved}
+(\texttt{recover\_conserved\_density\_groups}).}
+
+\subsection{The coupling as a matrix, and the projector $P$}
+
+Collect the density-density vertices into an $M\times M$ matrix $D(\t)$ over the $M$
+spin-orbitals, with $D_{ab}=0$ for every pair the user did not specify, and write
+$\mathbf n=(n_1,\dots,n_M)^T$, so that the density part of Eq.~\eqref{eq:sret} reads
+$S_{\rm ret}=\tfrac12\int\!\!\int d\t\,d\t'\,\mathbf n(\t)^T D(\t-\t')\,\mathbf n(\t')$.
+Vertices that are not density-density (spin-flip, \ldots) are not part of $D$ and are
+untouched by what follows.
+
+A density combination $\sum_a c_a n_a = c\cdot\mathbf n$ is labelled by its coefficient
+vector $c\in\mathbb R^M$. The conserved ones form the subspace
+$\mathcal C=\{c : [c\cdot\mathbf n,\Hloc]=0\}$ of Sec.~\ref{sec:conserved}. Pick an
+orthonormal basis $v_1,\dots,v_r$ of $\mathcal C$ (the SVD null vectors returned by
+\texttt{find\_conserved\_density\_combinations} already are one) and let
+$O_i=v_i\cdot\mathbf n$. Define
+\begin{equation}
+  P=\sum_{i=1}^r v_i v_i^T ,
+  \label{eq:projector}
+\end{equation}
+the orthogonal projector onto $\mathcal C$: a real symmetric $M\times M$ matrix with
+$P^2=P$, $Pc=c$ for $c\in\mathcal C$ and $Pc=0$ for $c\perp\mathcal C$. It depends only
+on $\mathcal C$, not on the basis chosen (for a non-orthonormal basis stacked as the rows
+of $W$, $P=W^T(WW^T)^{-1}W$), and only on $\Hloc$, not on $\t$ or on the Monte Carlo
+configuration. $P$ acts on coefficient vectors, not on Fock space. Acting on the vector
+of densities, $(P\mathbf n)_a=\sum_i v_i[a]\,O_i$ is the conserved part of $n_a$: the
+piece of it the Lang--Firsov resummation can see.
+
+\subsection{The split and why it is exact}
+
+Write
+\begin{equation}
+  D(\t)=P\,D(\t)\,P+R(\t),\qquad R\equiv D-PDP .
+  \label{eq:split}
+\end{equation}
+This is an identity, and $S_{\rm ret}$ is linear in $D$, so treating $PDP$ and $R$ by
+different methods changes no physics and adds no coupling the user did not ask for.
+
+\paragraph{$PDP$ couples only conserved combinations.}
+$\mathbf n^T PDP\,\mathbf n=(P\mathbf n)^T D\,(P\mathbf n)=\sum_{ij}\Gamma_{ij}(\t)\,O_iO_j$
+with $\Gamma_{ij}=v_i^TDv_j$. Each $O_i(\t)$ is piecewise constant, jumping by
+$\pm v_i[a]$ at every creation/annihilation operator on orbital $a$ in the trace
+(hybridization and stochastic-vertex operators alike, cf.\ \texttt{qmc\_data::trace\_ops}),
+so the argument of Sec.~\ref{sec:eligibility} applies unchanged. The code never needs
+$\Gamma$ explicitly: $K$ and $K'(0)$ are linear in the coupling, so building the
+orbital-resolved $K_{ab}$ of Eq.~\eqref{eq:ratio} and the static shift directly from
+$(PDP)_{ab}=\sum_{ij}v_i[a]v_j[b]\Gamma_{ij}$ gives
+$\sum_{\alpha\beta}s_\alpha s_\beta K_{a_\alpha b_\beta}
+=\sum_{ij}\sum_{\alpha\beta}(v_i[a_\alpha]s_\alpha)(v_j[b_\beta]s_\beta)K^{\Gamma}_{ij}$,
+the Lang--Firsov weight of $\sum_{ij}\Gamma_{ij}O_iO_j$, together with a static shift
+$-\tfrac12\sum_{ij}K'^{\Gamma}_{ij}(0)\,O_iO_j$ that commutes with $\Hloc$. Being a
+polynomial in densities, the shift also leaves $\mathcal C$ unchanged.
+
+\paragraph{$R$ has no conserved--conserved part.}
+Since $Pv_i=v_i$, $v_i^TRv_j=v_i^TDv_j-v_i^TDv_j=0$ for all $i,j$: every term left in
+$R$ has at least one non-conserved factor, so it cannot be resummed and goes to the
+stochastic expansion, which is exact for any coupling.
+
+\paragraph{The Lang--Firsov part is as large as possible.}
+A density coupling can be resummed only if it is of the form $\sum_{ij}\Gamma_{ij}O_iO_j$,
+i.e.\ lies in $\mathcal L=\{E:PEP=E\}$. $PDP$ is the orthogonal (Frobenius) projection of
+$D$ onto $\mathcal L$ ($PRP=0$ implies ${\rm tr}(R^TE)=0$ for every $E\in\mathcal L$), so
+$R$ is as small as it can be, and $R=0$ exactly when $D$ is representable
+($D=V^T\Gamma V\Leftrightarrow PDP=D$, with $V$ the matrix of rows $v_i$). That is the
+existing recovery criterion, so the split reproduces today's behavior whenever today's
+fit succeeds, and generalizes it otherwise. Smallest is not the same as best:
+Sec.~\ref{sec:split-sign} explains why the implementation uses a different, sign-preserving
+choice.
+
+\paragraph{Practicalities.} $P$ is $\t$-independent, so Eq.~\eqref{eq:split} is applied
+pointwise on the $\t$ grid, with no Legendre refit. $P$ is symmetric, so if
+$D_{ab}(\t)=D_{ba}(\beta-\t)$ both pieces inherit this symmetry and are valid couplings
+in the same vertex convention as $D$.
+
+\subsection{Examples}
+
+\begin{itemize}
+  \item \textbf{Density-only $\Hloc$.} Every $n_a$ is conserved, $\mathcal C=\mathbb R^M$,
+    $P=1$, $R=0$: everything goes to Lang--Firsov, as now.
+  \item \textbf{Only $N$ conserved.} $v=\mathbf 1/\sqrt M$, $P=\mathbf 1\mathbf 1^T/M$ and
+    $PDP=\bar U(\t)\,\mathbf 1\mathbf 1^T$ with $\bar U=M^{-2}\sum_{ab}D_{ab}$: exactly the
+    ``$U_{\rm tot}+\delta U$'' split, with $U_{\rm tot}$ the average of all entries and
+    $\delta U_{ab}=D_{ab}-\bar U$.
+  \item \textbf{Kanamori, two orbitals} ($N_\uparrow,N_\downarrow$ conserved, ordering
+    $0\!\uparrow,1\!\uparrow,0\!\downarrow,1\!\downarrow$):
+    \[
+      P=\frac12\begin{pmatrix}1&1&0&0\\1&1&0&0\\0&0&1&1\\0&0&1&1\end{pmatrix},
+    \]
+    so $PDP$ replaces every entry of each spin block $(\sigma,\sigma')$ of $D$ by that
+    block's average. A phonon on orbital 0 only, $D=g^2Q(\t)\,uu^T$ with $u=(1,0,1,0)$,
+    gives $Pu=\tfrac12\mathbf 1$, $PDP=\tfrac14g^2Q\,\mathbf 1\mathbf 1^T$ and
+    $R=g^2Q\,(uu^T-\tfrac14\mathbf 1\mathbf 1^T)$. Equivalently, with
+    $n_0=\tfrac12N+\tfrac12\delta$ and $\delta=n_0-n_1$ the orbital polarization,
+    $n_0n_0=\tfrac14NN+\tfrac14(N\delta+\delta N)+\tfrac14\delta\delta$: Lang--Firsov takes
+    $\tfrac14NN$, the stochastic expansion the rest.
+\end{itemize}
+
+\paragraph{Bug in the previous fit.} \texttt{recover\_conserved\_density\_groups}
+restricted the $v_i$ to the orbitals touched by a vertex group before fitting. In the
+last example the restricted vectors are just $n_{0\uparrow}$ and $n_{0\downarrow}$, the
+fit is trivially exact, and all four orbital-0 vertices were routed to Lang--Firsov,
+treating the non-conserved $n_0$ as if it were conserved (confirmed by a zero-cycle
+probe: ``recovered 4 vertex(es)''). The projector uses the full $v_i$, so this cannot
+happen: $Pu\neq u$.
+
+\subsection{Which split: the sign}
+\label{sec:split-sign}
+
+Any Lang--Firsov part $D_{\rm LF}\in\mathcal L$ gives an exact split $D=D_{\rm LF}+R$: the
+argument for $PDP$ above only used $D_{\rm LF}\in\mathcal L$. $PDP$ makes $R$ as small as
+possible, but $R$ can then take either sign, and can be non-zero where $D$ is zero, while a
+stochastic vertex carries weight $-R_{ab}(\t)$. Take the two-orbital Kanamori $\Hloc$ with a
+phonon of orbital-dependent coupling, $D_{ab}=g_ag_bQ$ with $(g_0,g_1)=(0.7,0.3)$. Every entry of
+$D$ has the sign of $Q<0$, so the fully stochastic expansion has only positive weights. $PDP$
+replaces each spin block by its average, $0.25\,Q$, and leaves
+$R/Q = 0.49-0.25 = +0.24$, $0.21-0.25 = -0.04$, $0.09-0.25 = -0.16$ for orbital pairs $00$,
+$01$, $11$: two of the three residual couplings have the opposite sign. The measured average
+sign drops from $1.0$ (fully stochastic) to $0.23$ ($\beta=5$, $U=2$, $J=0.3$, $V=0.7$,
+$\w_0=1$). Both agree with exact diagonalization, but the statistical error grows as
+$1/\text{sign}$.
+
+\texttt{split\_density\_couplings} therefore uses a sign-preserving split. When the conserved
+combinations are indicator vectors of disjoint sets of orbitals $S_i$ (as for $N$, or
+$N_\uparrow,N_\downarrow$; \texttt{conserved\_densities} returns them in this form), $\mathcal L$
+is the set of matrices that are constant on each block $S_i\times S_j$ and zero outside, and for
+each $\t$ and each block the Lang--Firsov part is
+\begin{equation}
+  c_{ij}(\t)=\begin{cases}
+    \min_{a\in S_i,\,b\in S_j} D_{ab}(\t) & \text{if every entry of the block is} >0,\\
+    \max_{a\in S_i,\,b\in S_j} D_{ab}(\t) & \text{if every entry is} <0,\\
+    0 & \text{otherwise,}
+  \end{cases}
+  \label{eq:signsplit}
+\end{equation}
+the entry of smallest magnitude when all entries share a sign. Every entry of $R=D-c$ then has
+the sign of the corresponding entry of $D$ or vanishes, so the split adds no weight of the opposite
+sign; for a block of one sign, $c$ is the largest block-constant part with that property. In the
+example, $c=0.09\,Q$ and $R/Q=0.40,\ 0.12,\ 0$. An exactly representable coupling is
+block-constant, so $c=D$ and $R=0$, as with $PDP$. If some pair in a block is not coupled at all,
+$c=0$ for that block: the phonon on orbital 0 only stays fully stochastic, which is sign-free
+there. $c(\t)$ is continuous but has kinks where the minimizing pair changes with $\t$; it is
+resummed through its Legendre expansion like any coupling, so \texttt{dyn\_n\_l} must resolve
+it. If the conserved combinations are not of the disjoint form, the rejected density vertices
+stay fully stochastic; a general sign-preserving split would be a small linear program per $\t$,
+not implemented.
+
+\section{Measuring correlators as coupling derivatives}
+\label{sec:derivative}
+
+Every correlator in this section is a derivative of $\ln Z$ with respect to a retarded
+coupling, estimated in whichever representation carries that coupling. This is the same
+logic as the standard Green's function estimator,
+$G(\t)=-\tfrac1\beta\aver{\sum_{ij}M^{-1}_{ji}\,\delta(\t-(\t_i-\t_j))}
+=\delta\ln Z/\delta\Delta$~\cite{GullRMP2011}, and it fails in the same way: the
+estimator divides by the coupling, so it becomes noisy as the coupling goes to zero.
+There are two cases:
+\begin{itemize}
+  \item a coupling direction handled by Lang--Firsov gives the kink estimator
+    (\texttt{measure\_D0\_corr}), exact even at zero coupling
+    (Sec.~\ref{sec:kink-derivative});
+  \item a coupling sampled stochastically gives the vertex-separation histogram
+    (Sec.~\ref{sec:histogram}), exact but noisy wherever the coupling is small.
+\end{itemize}
+Directions that are neither (a non-conserved density pair with no stochastic vertex)
+need an insertion estimator, which is not covered here.
+
+Throughout, $\aver{X}$ is the Monte Carlo average including the sign $s$ and
+\texttt{atomic\_reweighting} $r$: $\aver{X}=\sum sr\,X/\sum sr$. We assume the coupling
+is real and symmetric,
+\begin{equation}
+  D_{ab}(\t)=D_{ba}(\t)=D_{ab}(\beta-\t),
+  \label{eq:dsym}
+\end{equation}
+as for any coupling obtained from a bosonic bath with real vertices (the phonon
+$g_ag_bQ(\t)$ of Eq.~\eqref{eq:Qtau}, or a cRPA/$GW$ $U_{ab}(\t)$ in a real orbital
+basis). \texttt{eval\_K}'s folding of $\t$ into $[0,\beta/2]$ already relies on this.
+
+\subsection{What the stochastic moves sample}
+\label{sec:sampled-weight}
+
+\texttt{insert\_dyn} draws $\t_1,\t_2$ uniformly and orders them so that $\t_1>\t_2$. It
+picks a catalogue entry (type) $t$ uniformly among $N_t$, which gives a proposal density
+$2/(\beta^2N_t)$, and has weight ratio $-f_t(\t_1-\t_2)$ times the trace and Lang--Firsov
+ratios. \texttt{remove\_dyn} picks one of the $k$ vertices uniformly and uses the
+inverse ratio. Detailed balance then fixes the stationary weight of $k$ vertices as
+\[
+  \frac1{k!}\prod_{v}\big[-f_{t_v}(s_v)\,d\t_{1v}\,d\t_{2v}\big]\times
+  \mathrm{Tr}\times\det\times w^{\rm dyn}_{\rm loc},\qquad s_v=\t_{1v}-\t_{2v}\in(0,\beta),
+\]
+the time-ordered expansion of $Z=\mathrm{Tr}\,\TT\,e^{-S_{\rm samp}}$ with
+\begin{equation}
+  S_{\rm samp}=\sum_t\int\!\!\int_{\t_1>\t_2}d\t_1\,d\t_2\;f_t(\t_1-\t_2)\,
+  O_{1,t}(\t_1)\,O_{2,t}(\t_2).
+  \label{eq:ssamp}
+\end{equation}
+\texttt{swap\_dyn} only exchanges the times of two bilinears of the same kind, so every
+operator stays where it is, and it accepts with the ratio of coupling products. It
+therefore samples the same weight.
+
+Relation to Eq.~\eqref{eq:sret}: split the square $[0,\beta]^2$ into $\t>\t'$ and
+$\t<\t'$. In the second region use bosonic periodicity, $D(s-\beta)=D(s)$, and rename
+$\t\leftrightarrow\t'$, $a\leftrightarrow b$ (densities commute under $\TT$):
+\[
+  S_{\rm ret}=\sum_{ab}\int\!\!\int_{\t>\t'}n_a(\t)\,
+  \tfrac12\big[D_{ab}(s)+D_{ba}(\beta-s)\big]\,n_b(\t'),\qquad s=\t-\t'.
+\]
+Under Eq.~\eqref{eq:dsym} the bracket is $D_{ab}(s)$. So every ordered pair $(a,b)$ is
+its own type with $f_{(a,b)}=D_{ab}$ at full weight, which is exactly how
+\texttt{expand\_D0\_into\_vertices} builds the catalogue.
+
+\subsection{Stochastic channels: the vertex histogram}
+\label{sec:histogram}
+
+Perturb one type, $f_t\to f_t+\epsilon g$. In the sampled weight every vertex of type
+$t$ carries a factor $-(f_t+\epsilon g)(s_v)$, so
+$\partial_\epsilon\ln Z|_{0}=\aver{\sum_{v\in t}g(s_v)/f_t(s_v)}$. From
+Eq.~\eqref{eq:ssamp}, with translation invariance,
+$C_t(s)\equiv\aver{\TT\,O_{1,t}(s)\,O_{2,t}(0)}$ for $s\in(0,\beta)$, and
+$\int_0^\beta d\t_2\int_{\t_2}^\beta d\t_1\,F(\t_1-\t_2)=\int_0^\beta ds\,(\beta-s)F(s)$,
+we get $\partial_\epsilon\ln Z=-\int_0^\beta ds\,(\beta-s)\,g(s)\,C_t(s)$. Since this
+holds for every $g$, the histogram of vertex separations is
+\begin{equation}
+  H_t(s)\equiv\aver{\sum_{v\in t}\delta(s-s_v)}=-(\beta-s)\,f_t(s)\,C_t(s).
+  \label{eq:hist}
+\end{equation}
+The factor $(\beta-s)$ is the length of the ordered region at separation $s$: a
+short-separation pair fits into $[0,\beta]$ in more ways than a long one.
+
+\paragraph{Fold.} Let $\bar t$ be the reversed type ($O_{1,\bar t}=O_{2,t}$,
+$O_{2,\bar t}=O_{1,t}$: $(b,a)$ for $(a,b)$, $S^-S^+$ for $S^+S^-$, and $\bar t=t$ for
+$(a,a)$). By cyclicity of the trace, $C_{\bar t}(\beta-s)=C_t(s)$. Adding
+Eq.~\eqref{eq:hist} for $t$ at $s$ and for $\bar t$ at $\beta-s$ gives
+\begin{equation}
+  C_t(s)=-\,\frac{H_t(s)+H_{\bar t}(\beta-s)}{(\beta-s)\,f_t(s)+s\,f_{\bar t}(\beta-s)},
+  \label{eq:histest}
+\end{equation}
+with $f_{\bar t}=0$ if $\bar t$ is not in the catalogue. Under Eq.~\eqref{eq:dsym} the
+denominator is $\beta f_t(s)$. The fold matters: without it the denominator
+$(\beta-s)f_t(s)$ vanishes as $s\to\beta$.
+
+\paragraph{Legendre form.} Accumulate $h_{t,l}=\aver{\sum_{v\in t}P_l(x(s_v))}$. Then
+$H_t(s)=\sum_l\frac{2l+1}{\beta}h_{t,l}P_l(x(s))$, and since $P_l(-x)=(-1)^lP_l(x)$ the
+folded numerator has coefficients $h_{t,l}+(-1)^lh_{\bar t,l}$. The division in
+Eq.~\eqref{eq:histest} is done on the $\t$ grid.
+
+\paragraph{Hellmann--Feynman check.} Integrating Eq.~\eqref{eq:hist} gives
+$\aver{k_t}=-\int_0^\beta(\beta-s)f_t(s)C_t(s)\,ds=\lambda\partial_\lambda\ln Z$ for
+$f_t\to\lambda f_t$, where $k_t$ is the number of type-$t$ vertices. This is a scalar
+consistency check on the reconstructed $C_t$.
+
+\paragraph{Properties.}
+\begin{itemize}
+  \item \emph{Exact}, because it is a derivative of the sampled weight, which equals $Z$
+    only if the sampling is ergodic (\texttt{swap\_dyn}) and the vertex operators carry
+    their Lang--Firsov dressing (\texttt{qmc\_data::trace\_ops}).
+  \item \emph{Free}: it uses only the vertex times, with no extra trace evaluations.
+  \item \emph{Noisy where $|f_t|$ is small}: the variance diverges as the coupling goes
+    to zero, like the $M^{-1}$ estimator of $G$ as $\Delta\to0$. It only exists for
+    channels that are actually sampled with $f_t\neq0$. Under the split of
+    Sec.~\ref{sec:split} these are the residual $R$ vertices: for a density pair,
+    Eq.~\eqref{eq:histest} gives the full-model $\aver{n_a(s)n_b(0)}$ wherever
+    $R_{ab}\neq0$.
+  \item A dynamical spin-flip channel gives $\aver{S^+(s)S^-(0)}$, which with SU(2)
+    symmetry must equal $2\aver{S_z(s)S_z(0)}$ from the kink estimator. This is an
+    exact cross-check between the two estimators.
+\end{itemize}
+
+\subsection{Lang--Firsov channels: the kink estimator is the same derivative}
+\label{sec:kink-derivative}
+
+Take a perturbation $E$ in the Lang--Firsov space $\mathcal L$ of Sec.~\ref{sec:split}
+($PEP=E$), obeying Eq.~\eqref{eq:dsym}. The Lang--Firsov representation of
+$Z[D+\epsilon E]$ is exact for every $\epsilon$, and linear in $E$ through two pieces:
+the factor $\exp\{\sum_{\alpha<\beta}s_\alpha s_\beta K^E_{a_\alpha b_\beta}\}$ and the
+static shift $-\tfrac\epsilon2\sum_{ab}K'^E_{ab}(0)\,n_an_b$ in $\Hloc$ (with
+$n_an_a=n_a$). Hence
+\[
+  \partial_\epsilon\ln Z=\aver{\sum_{\alpha<\beta}s_\alpha s_\beta
+  K^E_{a_\alpha b_\beta}(\t_\alpha-\t_\beta)}
+  +\frac\beta2\sum_{ab}K'^E_{ab}(0)\aver{n_an_b}.
+\]
+On the physical side, with $E$ and $\chi_{ab}(s)=\aver{\TT\,n_a(s)n_b(0)}$ both periodic
+on the full square (so there is no $(\beta-s)$ factor here),
+$\partial_\epsilon\ln Z=-\tfrac12\int\!\!\int\sum_{ab}E_{ab}(\t-\t')\aver{n_a(\t)n_b(\t')}
+=-\tfrac\beta2\sum_{ab}\int_0^\beta E_{ab}(s)\chi_{ab}(s)\,ds$.
+
+Expand in Legendre polynomials with the normalization of Eq.~\eqref{eq:dn}:
+$\int_0^\beta E\chi\,ds=\sum_n\frac{\beta}{2n+1}e_n\chi_n$; $K^E$ has coefficients
+$k=Me$ (\texttt{build\_K\_n}); and $K'^E(0)=-\beta e_0$ by Eq.~\eqref{eq:kprime0}, since
+$e_1=0$ under Eq.~\eqref{eq:dsym}. Define the ordered-pair kink correlator
+\[
+  \alpha^{ab}_p=\aver{\sum_{\alpha\neq\beta}s_\alpha s_\beta\,
+  P_p\big(x(\t_\alpha-\t_\beta\bmod\beta)\big)},\qquad
+  \alpha\ \text{on orbital}\ a,\ \beta\ \text{on orbital}\ b,
+\]
+which is exactly what \texttt{measure\_D0\_corr} accumulates, over all trace operators
+including stochastic-vertex ones. Because $K^E_{ab}(t)=K^E_{ab}(\beta-t)=K^E_{ba}(t)$,
+the folded sum over $\alpha<\beta$ equals half the ordered sum:
+$\sum_{\alpha<\beta}s_\alpha s_\beta K^E=\tfrac12\sum_{ab}\sum_n e^{ab}_n(M^T\alpha^{ab})_n$.
+Equating the coefficients of $e^{ab}_n$ gives
+\begin{equation}
+  \chi^{ab}_n=-\frac{2n+1}{\beta^2}\big(M^T\alpha^{ab}\big)_n
+  \;+\;\aver{n_an_b}\,\delta_{n0}.
+  \label{eq:kinkest}
+\end{equation}
+The first term is line for line the code's \verb|q_n = -sum_p M(p,n) alpha(p) (2n+1)/beta^2|.
+The second term is the $\aver{n_an_b}$ offset that \texttt{solver.py} adds to
+$Q_l[0]$. So the offset is not an ad hoc fix: it is the derivative of the $K'(0)$ static
+shift. (Allowing $e_1\neq0$ for $a\neq b$ adds $-\tfrac\beta3e_1$ to $K'(0)$, which
+cancels between $(a,b)$ and $(b,a)$ because $\aver{n_an_b}=\aver{n_bn_a}$.) Three
+consequences:
+\begin{itemize}
+  \item \textbf{Only conserved components are determined.} $E\in\mathcal L$ means
+    $e^{ab}_n=\sum_{ij}v_i[a]v_j[b]\gamma^{ij}_n$, so Eq.~\eqref{eq:kinkest} fixes only
+    the contractions $\sum_{ab}v_i[a]v_j[b]\chi^{ab}_n=\aver{O_iO_j}_n$, and nothing
+    else. If some $n_a$ is not conserved, the orbital-resolved $\chi_{ab}$ it would
+    report is not a measurement of anything; the conserved-basis output is the complete
+    and correct result.
+  \item \textbf{No Lang--Firsov coupling is needed.} The identity holds at any base
+    point, including zero Lang--Firsov coupling, because the representation of
+    $Z[D+\epsilon E]$ is exact for all $\epsilon$. This is why \texttt{measure\_D0\_corr}
+    does not require \texttt{lang\_firsov}.
+  \item \textbf{The contact pairs drop out.} The two operators of one stochastic density
+    vertex sit one tick apart and contribute $K^E(0^+)=0$ to the weight, so skipping
+    them in $\alpha$ (as \texttt{measure\_D0\_corr} does) is exact, not an
+    approximation.
+\end{itemize}
+Supporting evidence for the all-densities-conserved case: $\chi_{S_zS_z}$ from this
+estimator agrees with CT-INT and CT-SEG for the spin--spin model. The ED reference with
+a phonon and a discrete bath (to be added) tests the multi-orbital case independently.
 
 \begin{thebibliography}{9}
 \bibitem{LangFirsov1962} I.~G.~Lang and Yu.~A.~Firsov, \emph{Zh. Eksp. Teor. Fiz.}

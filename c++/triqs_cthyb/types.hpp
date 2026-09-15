@@ -65,6 +65,14 @@ namespace triqs_cthyb {
   using Q_tau_t = block2_gf<imtime, matrix_valued>;
   using Q_l_t   = block2_gf<triqs::gfs::legendre, matrix_valued>;
 
+  // Correlators of the stochastic dynamical vertices' bilinears, one entry per catalog type
+  using dyn_vertex_corr_tau_t = std::vector<gf<imtime, scalar_valued>>;
+  using dyn_vertex_hist_l_t   = std::vector<gf<triqs::gfs::legendre, scalar_valued>>;
+
+  // Density-density correlator of the density combinations that commute with h_loc (bosonic)
+  using Q_conserved_tau_t = gf<imtime, matrix_valued>;
+  using Q_conserved_l_t   = gf<triqs::gfs::legendre, matrix_valued>;
+
   // Two-particle Green's function types
   using imtime_cube_mesh_t = prod<imtime, imtime, imtime>;
   using G2_tau_t           = block2_gf<imtime_cube_mesh_t, tensor_valued<4>>;

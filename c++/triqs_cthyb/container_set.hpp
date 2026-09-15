@@ -53,6 +53,22 @@ namespace triqs_cthyb {
     /// Density-density correlator in Legendre representation.
     std::optional<Q_l_t> Q_l;
 
+    /// Correlator :math:`\langle O_i(\tau) O_j(0) \rangle` of the density combinations that commute with h_loc
+    /// (conserved_density_operators), in imaginary time.
+    std::optional<Q_conserved_tau_t> Q_conserved_tau;
+
+    /// Conserved-combination density-density correlator in Legendre representation.
+    std::optional<Q_conserved_l_t> Q_conserved_l;
+
+    /// :math:`\langle O_1(\tau) O_2(0) \rangle` for every stochastic dynamical vertex type, from the
+    /// histogram of vertex separations (see measures/dyn_vertex_corr.hpp). The operators of each type
+    /// are in solver_core::dyn_vertex_operators, their couplings in dyn_vertex_couplings. Measured
+    /// whenever there is at least one stochastic dynamical vertex.
+    std::optional<dyn_vertex_corr_tau_t> dyn_vertex_corr_tau;
+
+    /// Legendre coefficients of the raw vertex-separation histogram, before folding and division.
+    std::optional<dyn_vertex_hist_l_t> dyn_vertex_hist_l;
+
     // -- Two-particle Green's functions
 
     /// Two-particle Green's function \f$ G^{(2)}(\tau_1,\tau_2,\tau_3) \f$ with three fermionic times.

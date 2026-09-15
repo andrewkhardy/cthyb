@@ -8,26 +8,21 @@
 # U(tau) != U'(tau), which is the physically realistic case (e.g. GW-derived screening
 # generically gives different retarded couplings for same-spin vs. opposite-spin channels).
 #
-# This is still recovered in full to the analytic Lang-Firsov path (0 stochastic), and it's
-# worth spelling out why that's not a coincidence: find_conserved_density_combinations finds
+# This still goes in full to the analytic Lang-Firsov path (0 stochastic), and it's worth
+# spelling out why that's not a coincidence: find_conserved_density_combinations finds
 # N_up = sum_a n_{a,up} and N_down = sum_a n_{a,down} as the conserved combinations (see
 # kanamori_dyn.py's docstring). As *vectors* over the 4 spin-orbitals, N_up and N_down have
-# disjoint support (N_up is zero on every down-orbital and vice versa), so their outer
-# products outer(N_up,N_up), outer(N_down,N_down), and cross(N_up,N_down) land on completely
-# non-overlapping matrix entries -- same-spin pairs only ever touch the first two, opposite-
-# spin pairs only the third. There is no interference between them, so same-spin and
-# opposite-spin couplings are free to be entirely independent functions of tau and the fit
-# is still exact. recover_conserved_density_groups checks this directly: it does NOT require
-# every vertex in a group to share one coupling curve, it fits per Legendre order (each
-# vertex contributes its own coefficients, exactly as build_K_n would for it individually)
-# and only requires that fit to be exact at every order -- so this is not a special case
-# needing separate code, it's the same mechanism as kanamori_dyn.py's uniform example,
-# just exercised on a coupling matrix where the "off the block-diagonal" independence
-# actually gets used.
+# disjoint support (N_up is zero on every down-orbital and vice versa), so the Lang-Firsov
+# part split_density_couplings may use is any coupling matrix that is constant on each spin
+# block, with the same-spin and opposite-spin blocks entirely independent of each other.
+# Here every same-spin entry is Q_tau and every opposite-spin entry is 0.5*Q_tau, so each
+# block is already constant, the split takes all of it and the residual vanishes. Same-spin
+# and opposite-spin couplings being different functions of tau is therefore not a special
+# case needing separate code.
 #
-# Diagonal (Holstein) self-terms are still required, same reasoning as kanamori_dyn.py: each
-# uses U's curve (Q_tau) here, since a same-spin self-term (a==a) has the same design-matrix
-# support as a same-spin cross-term (a!=b).
+# The diagonal (Holstein) self-terms use U's curve (Q_tau) here: a same-spin self-term (a==a)
+# sits in the same spin block as a same-spin cross-term (a!=b), so giving it a different curve
+# would make that block non-constant, and whatever does not fit would be sampled stochastically.
 #
 # To regenerate kanamori_dyn_nonuniform.ref.h5:
 #   1. Run this script once (produces kanamori_dyn_nonuniform.out.h5)
