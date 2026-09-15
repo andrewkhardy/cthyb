@@ -174,6 +174,26 @@ namespace triqs_cthyb {
     qmc_data(qmc_data const &)            = delete; // Member imp_trace is not copyable
     qmc_data &operator=(qmc_data const &) = delete;
 
+    /// The four trace operators of a stochastic dynamical vertex, exactly where
+    /// insert_dyn places them: op1 as opL(tau1) opR(tau1 - eps), op2 as opL(tau2) opR(tau2 - eps).
+    std::vector<std::pair<time_pt, op_desc>> dyn_vertex_ops(bosonic_op_pair_t const &ops, time_pt tau1, time_pt tau2) const {
+      auto eps = tau_seg.get_epsilon();
+      return {{tau1, ops.op1.opL}, {tau1 - eps, ops.op1.opR}, {tau2, ops.op2.opL}, {tau2 - eps, ops.op2.opR}};
+    }
+
+    /// Every fermion operator in the trace: the hybridization operators in config, plus the
+    /// operators of the stochastic dynamical vertices (config.dyn_oplist), which are not in
+    /// config's oplist but change orbital occupations all the same. These are the density
+    /// kinks the Lang-Firsov weight is built from.
+    std::vector<std::pair<time_pt, op_desc>> trace_ops() const {
+      std::vector<std::pair<time_pt, op_desc>> ops(config.begin(), config.end());
+      for (auto const &vertex : config.dyn_oplist) {
+        auto vertex_ops = dyn_vertex_ops(vertex.ops, vertex.tau1, vertex.tau2);
+        ops.insert(ops.end(), vertex_ops.begin(), vertex_ops.end());
+      }
+      return ops;
+    }
+
 /// Ratio of dynamical MC weights w^dyn_loc for a proposed operator update:
 ///   exp{ Σ_{op pairs (α,β)} s_α s_β K_{i(α)j(β)}(τ_α - τ_β) }
 double compute_lang_firsov_ratio(
@@ -204,9 +224,11 @@ double compute_lang_firsov_ratio(
     return s1 * s2 * val;
   };
 
-  // 1. Interactions with the persistent background (config ops not being removed)
+  // 1. Interactions with the persistent background: every trace operator not being removed,
+  //    hybridization and stochastic dynamical-vertex operators alike
+  auto const background = trace_ops();
   auto background_interaction = [&](op_desc const& op, time_pt const& t, double sign) {
-    for (auto const& [t_bg, op_bg] : config) {
+    for (auto const& [t_bg, op_bg] : background) {
       bool is_removed = std::any_of(removed.begin(), removed.end(), [&](auto const& r) {
         return r.first == t_bg && r.second.block_index == op_bg.block_index && r.second.inner_index == op_bg.inner_index
            && r.second.dagger == op_bg.dagger;

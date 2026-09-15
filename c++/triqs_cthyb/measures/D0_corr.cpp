@@ -39,9 +39,8 @@ namespace triqs_cthyb {
     s *= data.atomic_reweighting;
     average_sign += s;
 
-    std::vector<std::pair<time_pt, op_desc>> ops;
-    ops.reserve(data.config.size());
-    for (auto const &entry : data.config) ops.push_back(entry);
+    // Every occupation kink in the trace, including the stochastic dynamical vertices' operators
+    auto ops = data.trace_ops();
 
     if (ops.size() < 2) return;
 

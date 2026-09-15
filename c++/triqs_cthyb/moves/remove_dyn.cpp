@@ -43,16 +43,14 @@ namespace triqs_cthyb {
     // Mirror the insertion pattern: we need to delete 4 operators (opL and opR for both op1 and op2)
     // These operators are in config.oplist, so we can count through config to find their indices
 
-    data.imp_trace.try_delete(tau1);
-    data.imp_trace.try_delete(tau2);
-    data.imp_trace.try_delete(tau1 - data.tau_seg.get_epsilon());
-    data.imp_trace.try_delete(tau2 - data.tau_seg.get_epsilon());
-
-    //delete_op_pair(tau1, dyn_pair.op1);
-    //delete_op_pair(tau2, dyn_pair.op2);
+    auto vertex_ops = data.dyn_vertex_ops(dyn_pair, tau1, tau2);
+    for (auto const &vertex_op : vertex_ops) data.imp_trace.try_delete(vertex_op.first);
 
     // The ratio for the dynamic interaction (inverse of insertion)
     double dyn_term_ratio = -1.0 / data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2));
+
+    // Lang-Firsov dressing of the removed vertex's operators (inverse of insertion)
+    double lang_firsov_ratio = data.compute_lang_firsov_ratio({}, vertex_ops);
 
     // Proposal probability ratio (inverse of insertion)
     // Proposal probability ratio
@@ -63,7 +61,7 @@ namespace triqs_cthyb {
     // For quick abandon
     double random_number = rng.preview();
     if (random_number == 0.0) return 0;
-    double p_yee = std::abs(t_ratio * dyn_term_ratio / data.atomic_weight);
+    double p_yee = std::abs(t_ratio * dyn_term_ratio * lang_firsov_ratio / data.atomic_weight);
 
     // computation of the new trace after removal
     std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
@@ -73,7 +71,7 @@ namespace triqs_cthyb {
       TRIQS_RUNTIME_ERROR << "(remove_dyn) trace_ratio not finite " << new_atomic_weight << " " << data.atomic_weight << " "
                           << new_atomic_weight / data.atomic_weight << " in config " << config.get_id();
 
-    mc_weight_t p = atomic_weight_ratio * dyn_term_ratio;
+    mc_weight_t p = atomic_weight_ratio * dyn_term_ratio * lang_firsov_ratio;
 
 #ifdef EXT_DEBUG
     std::cerr << "Atomic ratio: " << atomic_weight_ratio << '\t';
