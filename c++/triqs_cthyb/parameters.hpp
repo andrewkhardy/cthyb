@@ -139,7 +139,8 @@ namespace triqs_cthyb {
     int measure_O_tau_min_ins = 10;
 
     /// Measure the density-density correlator from the occupation kinks (dyn_n_l Legendre
-    /// coefficients): Q_tau_ab = <n_a(tau) n_b(0)> - <n_a n_b>, i.e. without its equal-time value.
+    /// coefficients): Q_tau_ab = <n_a(tau) n_b(0)> - <n_a n_b>, i.e. without its equal-time value
+    /// (the Python Solver adds <n_a n_b> back when measure_density_matrix is also on).
     /// Exact whenever every n_a commutes with h_loc; Lang-Firsov is not required.
     bool measure_D0_corr = false;
 
