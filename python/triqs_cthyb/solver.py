@@ -239,10 +239,17 @@ class Solver(SolverCore):
                 self.Sigma_iw = dyson(G0_iw=G0_iw, G_iw=self.G_iw)
 
         if getattr(self.last_solve_parameters, "measure_D0_corr", False) and getattr(self.last_solve_parameters, "measure_density_matrix", False):
-            if hasattr(self, 'Q_tau') and self.Q_tau is not None and hasattr(self, 'Q_l') and self.Q_l is not None:
-                from triqs.operators import c, c_dag
-                from triqs.atom_diag import trace_rho_op
+            from triqs.operators import c, c_dag
+            from triqs.atom_diag import trace_rho_op
 
+            # Add back the equal-time values <O_i O_j> of the conserved density combinations
+            ops = self.conserved_density_operators
+            offset = np.array([[trace_rho_op(self.density_matrix, Oi * Oj, self.h_loc_diagonalization).real for Oj in ops] for Oi in ops])
+            self.Q_conserved_l.data[0, :, :] += offset
+            self.Q_conserved_tau.data[:] += offset
+
+            # Orbital-resolved Q_tau is only measured when every orbital density commutes with h_loc
+            if self.Q_tau is not None and self.Q_l is not None:
                 for bl1, bl2 in self.Q_tau.indices:
                     size1 = self.Q_tau[bl1, bl2].target_shape[0]
                     size2 = self.Q_tau[bl1, bl2].target_shape[1]

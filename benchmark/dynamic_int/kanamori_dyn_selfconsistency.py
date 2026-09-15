@@ -5,8 +5,8 @@
 # Production-scale version of test/python/kanamori_dyn_selfconsistency.py: solves the
 # same dynamical Hubbard-Kanamori setup as kanamori_dyn.py (off-diagonal vertices from
 # kanamori_dynamical_vertices *plus* explicit diagonal self-terms -- see kanamori_dyn.py's
-# module docstring for why the diagonal is required) twice -- once with lang_firsov=True
-# (analytic, via recover_conserved_density_groups) and once with lang_firsov=False
+# module docstring for what the diagonal self-terms are) twice -- once with lang_firsov=True
+# (analytic, via split_density_couplings) and once with lang_firsov=False
 # (forced stochastic double expansion) -- and saves both results so they can be compared
 # (e.g. via G_l, which converges much faster than raw G_tau; see the module docstring in
 # test/python/kanamori_dyn_selfconsistency.py for why).

@@ -8,11 +8,12 @@
 # boson/phonon coupled uniformly to total density across every spin-orbital -- every
 # off-diagonal pair via kanamori_dynamical_vertices (U=Uprime=Q_tau), *and* every
 # diagonal (a==a) self-term explicitly via add_dyn_vertex, all sharing the same Q_tau
-# coupling. The diagonal terms are required, not optional: recover_conserved_density_groups
-# only ever promotes a *completely* user-specified coupling matrix (diagonal included) to
-# the analytic Lang-Firsov path (lang_firsov=True, the default) -- dropping them changes
-# the physics being asked for (no Holstein self-term) and correctly falls back to the
-# stochastic double expansion instead. Pass --lang_firsov False to force the stochastic
+# coupling. The diagonal self-terms are part of the interaction being asked for, not
+# bookkeeping: with them the coupling matrix is constant on each spin block, so
+# split_density_couplings sends all of it to the analytic Lang-Firsov path (lang_firsov=True,
+# the default); dropping them asks for a different interaction (no Holstein self-term), whose
+# blocks then contain uncoupled pairs and which stays fully stochastic. Pass
+# --lang_firsov False to force the stochastic
 # path even with the diagonal present, for comparison (see kanamori_dyn_selfconsistency.py
 # for a scripted version of that comparison).
 

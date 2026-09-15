@@ -45,6 +45,7 @@
 #include "./measures/G_l.hpp"
 #include "./measures/O_tau_ins.hpp"
 #include "./measures/D0_corr.hpp"
+#include "./measures/dyn_vertex_corr.hpp"
 #include "./measures/perturbation_hist.hpp"
 #include "./measures/density_matrix.hpp"
 #include "./measures/average_sign.hpp"
@@ -220,19 +221,15 @@ namespace triqs_cthyb {
     // list unconditionally (classify_dyn_vertices never evaluates eligibility), so
     // this flag remains the master on/off switch it always was.
     //
-    // After the per-vertex classification, attempt to recover vertices that failed it:
+    // After the per-vertex classification, split the density vertices that failed it:
     // classify_dyn_vertices requires each vertex's own n_a and n_b to *individually*
     // commute with h_loc, which correctly rejects everything under a genuine
-    // Hubbard-Kanamori h_loc with spin-flip/pair-hopping (no individual orbital density
-    // is conserved there). But a *combination* of densities is usually still conserved
-    // (total charge N_total = sum_a n_a always; total S_z whenever spin-rotation
-    // symmetry isn't broken) -- find_conserved_density_combinations finds every such
-    // combination directly from h_loc via linear algebra (not by guessing N_total
-    // specifically), and recover_conserved_density_groups rescues any *completely*
-    // user-specified set of rejected vertices (diagonal a==b self-terms included, not
-    // inferred) that exactly reconstructs a coupling to one of them. See
-    // dynamical_interactions.hpp/.cpp for the operator-algebra argument for why
-    // completeness (including the diagonal) is required, not just a convenience.
+    // Hubbard-Kanamori h_loc with spin-flip/pair-hopping. But combinations of densities
+    // are usually still conserved (total charge always; N_up, N_down whenever spin-rotation
+    // symmetry about z isn't broken) -- find_conserved_density_combinations finds them
+    // directly from h_loc, and split_density_couplings sends the part of the rejected
+    // coupling that only involves them to Lang-Firsov and the residual to the stochastic
+    // path (an exact identity, see doc/notes/dynamical_interactions.tex).
     //
     // Lang-Firsov's K'(0) static shift must be applied here, before h_diag is built
     // below; the K_n kernel and the stochastic dyn_op_list/dyn_interactions catalog
@@ -242,13 +239,18 @@ namespace triqs_cthyb {
     auto dyn_vertices = collect_dyn_vertices(inputs.dyn_vertices, inputs.D0t, inputs.Jperpt, gf_struct);
     auto classified_dyn_vertices = classify_dyn_vertices(dyn_vertices, _h_loc, fops, linindex, params.lang_firsov);
     if (params.lang_firsov) {
-      auto conserved_density_combinations = find_conserved_density_combinations(_h_loc, fops, linindex);
-      size_t stochastic_before = classified_dyn_vertices.stochastic.size();
-      recover_conserved_density_groups(classified_dyn_vertices, conserved_density_combinations, fops, linindex, beta, params.dyn_n_l);
-      if (params.verbosity >= 2 && !conserved_density_combinations.empty())
-        std::cout << "Found " << conserved_density_combinations.size() << " conserved density combination(s); recovered "
-                  << (stochastic_before - classified_dyn_vertices.stochastic.size())
-                  << " vertex(es) from the stochastic path to Lang-Firsov." << std::endl;
+      auto conserved = conserved_densities(_h_loc, fops, linindex);
+      auto split     = split_density_couplings(classified_dyn_vertices, conserved.vectors, fops, linindex);
+      if (params.verbosity >= 2 && split.n_input > 0) {
+        if (split.block_structured)
+          std::cout << "Found " << conserved.vectors.size() << " conserved density combination(s); split the coupling of " << split.n_input
+                    << " density vertex(es) not individually commuting with h_loc into " << split.n_lang_firsov << " Lang-Firsov and "
+                    << split.n_stochastic << " stochastic residual vertex(es)." << std::endl;
+        else
+          std::cout << "The " << conserved.vectors.size() << " conserved density combination(s) are not indicator vectors of disjoint "
+                    << "orbital sets; the " << split.n_input << " density vertex(es) not individually commuting with h_loc stay stochastic."
+                    << std::endl;
+      }
     }
     auto lang_firsov_shift = apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
     int lf_n_orb = lang_firsov_shift.mu_renorm.size();
@@ -334,6 +336,15 @@ namespace triqs_cthyb {
 
     K_n = build_K_n(classified_dyn_vertices.lang_firsov, beta, linindex, fops, params.dyn_n_l);
     fold_into_stochastic_catalog(classified_dyn_vertices.stochastic, fops, linindex, dyn_op_list, dyn_interactions);
+
+    // What the stochastic catalog ended up holding, in its own order: the labels of
+    // dyn_vertex_corr_tau / dyn_vertex_hist_l
+    dyn_vertex_operators.clear();
+    dyn_vertex_couplings.clear();
+    for (auto const &v : classified_dyn_vertices.stochastic) {
+      dyn_vertex_operators.emplace_back(v.op1, v.op2);
+      dyn_vertex_couplings.push_back(v.coupling);
+    }
 
     if (params.verbosity >= 2)
       std::cout << "Dynamical interaction vertices: " << classified_dyn_vertices.lang_firsov.size() << " analytic (Lang-Firsov), "
@@ -492,7 +503,21 @@ namespace triqs_cthyb {
     }
 
     if (params.measure_D0_corr) {
-      qmc.add_measure(measure_D0_corr{Q_l, Q_tau, data, constr_parameters.n_tau_bosonic, params.dyn_n_l, gf_struct},
+      // The occupation kinks only determine correlators of density combinations that commute with
+      // h_loc (doc/notes/dynamical_interactions.tex), so measure in that basis; orbital-resolved
+      // only if every n_a commutes
+      auto conserved              = conserved_densities(_h_loc, fops, linindex);
+      conserved_density_operators = conserved.operators;
+      if (conserved.vectors.size() < linindex.size() && params.verbosity >= 1) {
+        std::cerr << "WARNING (measure_D0_corr): not every orbital density commutes with h_loc (e.g. spin-flip or\n"
+                     "pair-hopping terms), so <n_a(tau) n_b(0)> cannot be measured from occupation kinks and\n"
+                     "Q_tau / Q_l are left empty. Measuring instead <O_i(tau) O_j(0)> in Q_conserved_tau / Q_conserved_l\n"
+                     "for the "
+                  << conserved.operators.size() << " density combination(s) that do commute with h_loc (conserved_density_operators):\n";
+        for (size_t i = 0; i < conserved.operators.size(); ++i) std::cerr << "    O_" << i << " = " << conserved.operators[i] << "\n";
+      }
+      qmc.add_measure(measure_D0_corr{Q_l, Q_tau, Q_conserved_l, Q_conserved_tau, data, constr_parameters.n_tau_bosonic, params.dyn_n_l,
+                                      gf_struct, conserved.vectors},
                       "D0 density-density correlator measure");
     }
 
@@ -518,6 +543,11 @@ namespace triqs_cthyb {
     if (has_dyn_interactions) {
       perturbation_order_dyn = histogram{};
       qmc.add_measure(measure_perturbation_hist_dyn(data, *perturbation_order_dyn), "Perturbation order (dynamical interactions)");
+
+      // <O_1(tau) O_2(0)> per vertex type, from the vertex separations alone: no trace evaluation,
+      // so this is automatically enabled too
+      qmc.add_measure(measure_dyn_vertex_corr{dyn_vertex_corr_tau, dyn_vertex_hist_l, data, constr_parameters.n_tau_bosonic, params.dyn_n_l},
+                      "Dynamical vertex correlators");
     }
 
     if (params.measure_density_matrix) {

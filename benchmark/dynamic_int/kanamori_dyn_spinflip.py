@@ -10,8 +10,8 @@
 # pair-hopping), exactly as in kanamori_dyn.py. The dynamical part now has two pieces:
 #   1. The same uniform density-density phonon coupling as kanamori_dyn.py (every
 #      off-diagonal pair via kanamori_dynamical_vertices(U=Uprime=Q_tau), every
-#      diagonal self-term explicit) -- completely specified, so it is still fully
-#      recovered to the analytic Lang-Firsov path when lang_firsov=True.
+#      diagonal self-term explicit) -- constant on each spin block, so it still goes
+#      entirely to the analytic Lang-Firsov path when lang_firsov=True.
 #   2. A genuine *dynamical* (retarded) inter-orbital spin-flip coupling,
 #      kanamori_dynamical_vertices(..., spin_flip=True, J_hund=Jsf_tau): each such
 #      vertex is c_dag(s1,a1)*c(s2,a1) (tau) * c_dag(s2,a2)*c(s1,a2) (0), a1 != a2,
@@ -110,9 +110,9 @@ n_ops = [n(s, a) for s, a in spin_orbitals]
 S = Solver(beta=beta, gf_struct=gf_struct, n_iw=n_iw, n_tau=n_tau, delta_interface=True)
 S.Delta_tau << Fourier(delta_w)
 
-# Dynamical part 1: uniform density-density coupling, completely specified (off-diagonal
-# + diagonal self-terms) -- recovers exactly to the analytic Lang-Firsov path, as in
-# kanamori_dyn.py.
+# Dynamical part 1: uniform density-density coupling (off-diagonal + diagonal self-terms)
+# -- constant on each spin block, so it goes entirely to the analytic Lang-Firsov path,
+# as in kanamori_dyn.py.
 kanamori_dynamical_vertices(S, spin_names, list(range(n_orb)), U=Q_tau, Uprime=Q_tau, spin_flip=False)
 for s in spin_names:
     for a in range(n_orb):

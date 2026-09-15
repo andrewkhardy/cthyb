@@ -9,15 +9,14 @@
 # off-diagonal pair via kanamori_dynamical_vertices (U=Uprime=Q_tau), *and* every diagonal
 # (a==a) self-term explicitly via add_dyn_vertex, all sharing the same Q_tau coupling.
 #
-# The diagonal terms are not optional here: find_conserved_density_combinations finds that
-# individual orbital densities do not commute with h_loc (real spin-flip/pair-hopping), but
-# that total spin-up density and total spin-down density each individually do (equivalently,
-# total charge and total S_z) -- and recover_conserved_density_groups only ever promotes a
-# *completely* user-specified coupling matrix (diagonal entries included) to the analytic
-# Lang-Firsov path, matching it exactly against those conserved combinations. Nothing is
-# inferred: dropping the diagonal vertices below silently changes the physics being asked
-# for (no Holstein self-term), so it correctly falls back to the stochastic path instead --
-# see test/python/kanamori_dyn_selfconsistency.py's docstring for that case.
+# The diagonal self-terms are part of the interaction being asked for here, not bookkeeping:
+# find_conserved_density_combinations finds that individual orbital densities do not commute
+# with h_loc (real spin-flip/pair-hopping), but that total spin-up density and total spin-down
+# density each individually do (equivalently, total charge and total S_z). With the diagonal
+# included the coupling matrix is constant on each spin block, so split_density_couplings
+# sends all of it to the analytic Lang-Firsov path. Dropping the diagonal vertices asks for a
+# different interaction (no Holstein self-term), whose blocks then contain uncoupled pairs and
+# which therefore stays fully stochastic -- see test/python/kanamori_dyn_selfconsistency.py.
 #
 # To regenerate kanamori_dyn.ref.h5:
 #   1. Run this script once (produces kanamori_dyn.out.h5)
@@ -84,15 +83,15 @@ S.Delta_tau << Fourier(delta_w)
 # dynamical spin-flip channel in this example.
 kanamori_dynamical_vertices(S, spin_names, list(range(n_orb)), U=Q_tau, Uprime=Q_tau, spin_flip=False)
 
-# Diagonal (Holstein) self-terms, explicitly, with the same shared coupling -- required
-# for the group to be *completely* specified (see module docstring above).
+# Diagonal (Holstein) self-terms, explicitly, with the same shared coupling (see module
+# docstring above for what they mean physically).
 for s in spin_names:
     for a in range(n_orb):
         S.add_dyn_vertex(n(s, a), n(s, a), _as_scalar_gf(Q_tau))
 
 # Solve parameters -- deterministic, small statistics (matches kanamori.cpp/kanamori_py.py).
 # lang_firsov defaults to True; this test never touches the stochastic dynamical path since
-# recover_conserved_density_groups resums the fully-specified uniform coupling analytically.
+# split_density_couplings resums the whole uniform coupling analytically (0 stochastic).
 solve_params = {
     "h_int": H_int,
     "h_loc0": mu * N,

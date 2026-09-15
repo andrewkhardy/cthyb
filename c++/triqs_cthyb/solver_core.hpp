@@ -98,6 +98,20 @@ namespace triqs_cthyb {
     std::vector<std::vector<double>> lang_firsov_U_renorm;
     std::vector<double> lang_firsov_mu_renorm;
 
+    /// The combinations of orbital densities that commute with h_loc, O_i = sum_a c_ia n_a, in
+    /// reduced row-echelon form (e.g. N_up and N_down for a Kanamori h_loc with spin-flip and
+    /// pair-hopping, the individual n_a for a density-only h_loc), with
+    /// Q_conserved_tau[i, j] = <O_i(tau) O_j(0)>. Filled when measure_D0_corr is on.
+    std::vector<many_body_op_t> conserved_density_operators;
+
+    /// The two bilinears (op1, op2) of every stochastic dynamical vertex type, in the order of
+    /// dyn_vertex_corr_tau / dyn_vertex_hist_l.
+    std::vector<std::pair<many_body_op_t, many_body_op_t>> dyn_vertex_operators;
+
+    /// The retarded coupling each of those vertex types carries -- for a density pair this is the
+    /// residual R_ab(tau) left by split_density_couplings, not the coupling as registered.
+    std::vector<gf<imtime, scalar_valued>> dyn_vertex_couplings;
+
     /**
      * Construct a CTHYB solver.
      *
@@ -240,6 +254,9 @@ namespace triqs_cthyb {
       h5_write(grp, "K_n", s.K_n);
       h5_write(grp, "lang_firsov_U_renorm", s.lang_firsov_U_renorm);
       h5_write(grp, "lang_firsov_mu_renorm", s.lang_firsov_mu_renorm);
+      h5_write(grp, "conserved_density_operators", s.conserved_density_operators);
+      h5_write(grp, "dyn_vertex_operators", s.dyn_vertex_operators);
+      h5_write(grp, "dyn_vertex_couplings", s.dyn_vertex_couplings);
     }
 
     // Function that read all containers to hdf5 file
@@ -267,6 +284,9 @@ namespace triqs_cthyb {
       h5::try_read(grp, "K_n", s.K_n);
       h5::try_read(grp, "lang_firsov_U_renorm", s.lang_firsov_U_renorm);
       h5::try_read(grp, "lang_firsov_mu_renorm", s.lang_firsov_mu_renorm);
+      h5::try_read(grp, "conserved_density_operators", s.conserved_density_operators);
+      h5::try_read(grp, "dyn_vertex_operators", s.dyn_vertex_operators);
+      h5::try_read(grp, "dyn_vertex_couplings", s.dyn_vertex_couplings);
 
       return s;
     }

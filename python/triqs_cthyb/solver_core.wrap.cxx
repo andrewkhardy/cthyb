@@ -668,6 +668,21 @@ constexpr auto _c2py_doc_member_82 = R"DOC(Two-particle Green's function :math:`
 constexpr auto _c2py_doc_member_83 = R"DOC(Histogram of the total perturbation order.)DOC";
 constexpr auto _c2py_doc_member_84 = R"DOC(Histograms of the perturbation order for each block.)DOC";
 constexpr auto _c2py_doc_member_85 = R"DOC(Histogram of the perturbation order in dynamical interactions)DOC";
+constexpr auto _c2py_doc_member_86 = R"DOC(The combinations of orbital densities that commute with h_loc, O_i = sum_a c_ia n_a, in
+reduced row-echelon form (e.g. N_up and N_down for a Kanamori h_loc with spin-flip and
+pair-hopping, the individual n_a for a density-only h_loc), with
+Q_conserved_tau[i, j] = <O_i(tau) O_j(0)>. Filled when measure_D0_corr is on.)DOC";
+constexpr auto _c2py_doc_member_87 = R"DOC(Correlator :math:`\langle O_i(\tau) O_j(0) \rangle` of the density combinations that commute with h_loc
+(conserved_density_operators), in imaginary time.)DOC";
+constexpr auto _c2py_doc_member_88 = R"DOC(Conserved-combination density-density correlator in Legendre representation.)DOC";
+constexpr auto _c2py_doc_member_89 = R"DOC(<O_1(tau) O_2(0)> for every stochastic dynamical vertex type, from the histogram of vertex
+separations. The operators of each type are in dyn_vertex_operators, their couplings in
+dyn_vertex_couplings. Measured whenever there is at least one stochastic dynamical vertex.)DOC";
+constexpr auto _c2py_doc_member_90 = R"DOC(Legendre coefficients of the raw vertex-separation histogram, before folding and division.)DOC";
+constexpr auto _c2py_doc_member_91 = R"DOC(The two bilinears (op1, op2) of every stochastic dynamical vertex type, in the order of
+dyn_vertex_corr_tau / dyn_vertex_hist_l.)DOC";
+constexpr auto _c2py_doc_member_92 = R"DOC(The retarded coupling each of those vertex types carries -- for a density pair this is the
+residual R_ab(tau) left by split_density_couplings, not the coupling as registered.)DOC";
 static constexpr auto prop_doc_0   = R"DOC(Dynamical density-density interaction :math:`D_0()`)DOC";
 static constexpr auto prop_doc_1   = R"DOC(:math:`G_0^{-1}(i\omega_n = \infty)` in Matsubara frequencies.)DOC";
 static constexpr auto prop_doc_2   = R"DOC(Hybridization function :math:`\Delta(\tau)` in imaginary time.)DOC";
@@ -699,6 +714,7 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_2>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_2::K_n, _c2py_cls_2>("K_n", _c2py_doc_member_64),
    c2py::getsetdef_from_member<&_c2py_cls_2::lang_firsov_U_renorm, _c2py_cls_2>("lang_firsov_U_renorm", _c2py_doc_member_65),
    c2py::getsetdef_from_member<&_c2py_cls_2::lang_firsov_mu_renorm, _c2py_cls_2>("lang_firsov_mu_renorm", _c2py_doc_member_66),
+   c2py::getsetdef_from_member<&_c2py_cls_2::conserved_density_operators, _c2py_cls_2>("conserved_density_operators", _c2py_doc_member_86),
    c2py::getsetdef_from_member<&_c2py_cls_2::G_tau, _c2py_cls_2>("G_tau", _c2py_doc_member_67),
    c2py::getsetdef_from_member<&_c2py_cls_2::G_tau_accum, _c2py_cls_2>("G_tau_accum", _c2py_doc_member_68),
    c2py::getsetdef_from_member<&_c2py_cls_2::asymmetry_G_tau, _c2py_cls_2>("asymmetry_G_tau", _c2py_doc_member_69),
@@ -706,6 +722,12 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_2>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_2::O_tau, _c2py_cls_2>("O_tau", _c2py_doc_member_71),
    c2py::getsetdef_from_member<&_c2py_cls_2::Q_tau, _c2py_cls_2>("Q_tau", _c2py_doc_member_72),
    c2py::getsetdef_from_member<&_c2py_cls_2::Q_l, _c2py_cls_2>("Q_l", _c2py_doc_member_73),
+   c2py::getsetdef_from_member<&_c2py_cls_2::Q_conserved_tau, _c2py_cls_2>("Q_conserved_tau", _c2py_doc_member_87),
+   c2py::getsetdef_from_member<&_c2py_cls_2::Q_conserved_l, _c2py_cls_2>("Q_conserved_l", _c2py_doc_member_88),
+   c2py::getsetdef_from_member<&_c2py_cls_2::dyn_vertex_corr_tau, _c2py_cls_2>("dyn_vertex_corr_tau", _c2py_doc_member_89),
+   c2py::getsetdef_from_member<&_c2py_cls_2::dyn_vertex_hist_l, _c2py_cls_2>("dyn_vertex_hist_l", _c2py_doc_member_90),
+   c2py::getsetdef_from_member<&_c2py_cls_2::dyn_vertex_operators, _c2py_cls_2>("dyn_vertex_operators", _c2py_doc_member_91),
+   c2py::getsetdef_from_member<&_c2py_cls_2::dyn_vertex_couplings, _c2py_cls_2>("dyn_vertex_couplings", _c2py_doc_member_92),
    c2py::getsetdef_from_member<&_c2py_cls_2::G2_tau, _c2py_cls_2>("G2_tau", _c2py_doc_member_74),
    c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw, _c2py_cls_2>("G2_iw", _c2py_doc_member_75),
    c2py::getsetdef_from_member<&_c2py_cls_2::G2_iw_nfft, _c2py_cls_2>("G2_iw_nfft", _c2py_doc_member_76),
