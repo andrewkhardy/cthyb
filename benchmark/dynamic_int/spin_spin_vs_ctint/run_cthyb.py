@@ -7,6 +7,7 @@
 Sz.Sz goes through D0_tau (Lang-Firsov when lang_firsov=True), s+s- through Jperp_tau
 (always the stochastic insert_dyn/remove_dyn path)."""
 import triqs.utility.mpi as mpi
+from triqs.atom_diag import trace_rho_op
 from triqs.gfs import Fourier
 from triqs_cthyb import Solver
 
@@ -35,12 +36,20 @@ S.solve(h_int=common.h_int(args.U), h_loc0=common.h_loc0(args.U),
         length_cycle=100, n_warmup_cycles=args.n_warmup_cycles, n_cycles=args.n_cycles,
         measure_pert_order=True, measure_O_tau=(common.SZ, common.SZ),
         measure_O_tau_min_ins=args.measure_O_tau_min_ins,
+        measure_D0_corr=True, measure_density_matrix=True, use_norm_as_weight=True,
         lang_firsov=args.lang_firsov, dyn_n_l=args.dyn_n_l)
 
 if mpi.is_master_node():
     G_up = S.G_tau["up"]
+    # Kink (Legendre) estimator, as in holstein.py: Q_tau is <n_a(tau) n_b(0)> minus its
+    # equal-time value, so add back <Sz^2> from the density matrix.
+    Sz2 = trace_rho_op(S.density_matrix, common.SZ * common.SZ, S.h_loc_diagonalization).real
+    Q = S.Q_tau
+    SzSz_LF = 0.25 * (Q["up", "up"].data[:, 0, 0] + Q["down", "down"].data[:, 0, 0]
+                      - Q["up", "down"].data[:, 0, 0] - Q["down", "up"].data[:, 0, 0]).real + Sz2
     common.save_results(common.output_file(args, "cthyb", tag=f"_lf-{args.lang_firsov}"), args, "cthyb",
                         common.tau_points(G_up), G_up.data[:, 0, 0].real,
                         common.tau_points(S.O_tau), S.O_tau.data.real,
                         average_sign=S.average_sign, pert_order_jperp=S.perturbation_order_dyn,
-                        raw={"G_tau": S.G_tau, "O_tau": S.O_tau, "K_n": S.K_n})
+                        raw={"G_tau": S.G_tau, "O_tau": S.O_tau, "K_n": S.K_n, "Q_tau": Q, "Q_l": S.Q_l,
+                             "SzSz_offset": Sz2, "tau_SzSz_LF": common.tau_points(Q["up", "up"]), "SzSz_LF": SzSz_LF})

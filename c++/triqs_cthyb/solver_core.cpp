@@ -489,11 +489,6 @@ namespace triqs_cthyb {
     }
 
     if (params.measure_D0_corr) {
-      if (!params.lang_firsov)
-        TRIQS_RUNTIME_ERROR << "measure_D0_corr requires lang_firsov=true";
-      if (data.K_n_size == 0)
-        TRIQS_RUNTIME_ERROR << "measure_D0_corr requires non-empty K_n (check D0_tau and dyn_n_l)";
-
       qmc.add_measure(measure_D0_corr{Q_l, Q_tau, data, constr_parameters.n_tau_bosonic, params.dyn_n_l, gf_struct},
                       "D0 density-density correlator measure");
     }

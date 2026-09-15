@@ -21,6 +21,7 @@ STYLE = {"ctint": dict(color="green", linestyle="-", linewidth=3.0, label="CTINT
          "ctseg": dict(color="blue", linestyle="--", linewidth=2.0, label="CTSEG"),
          "cthyb": dict(color="orange", linestyle=":", linewidth=2.0, label="CTHYB"),
          "cthyb lf=False": dict(color="red", linestyle="-.", linewidth=1.5, label="CTHYB lf=False")}
+LEGENDRE_COLOR = {"cthyb": "purple", "cthyb lf=False": "brown"}
 
 
 def load(name, jperp, szsz):
@@ -29,7 +30,8 @@ def load(name, jperp, szsz):
     if not os.path.exists(f):
         return None
     with HDFArchive(f, "r") as A:
-        return {k: A[k] for k in ("tau_G", "G_up", "tau_SzSz", "SzSz", "average_sign", "pert_order_jperp") if k in A}
+        return {k: A[k] for k in ("tau_G", "G_up", "tau_SzSz", "SzSz", "tau_SzSz_LF", "SzSz_LF", "average_sign", "pert_order_jperp")
+                if k in A}
 
 
 fig, axes = plt.subplots(3, len(CASES), figsize=(15, 11), sharex=True)
@@ -41,6 +43,11 @@ for col, ((jperp, szsz), title) in enumerate(CASES):
             continue
         axes[0, col].plot(r["tau_G"], r["G_up"], **STYLE[solver])
         axes[1, col].plot(r["tau_SzSz"], r["SzSz"], **STYLE[solver])
+        if "SzSz_LF" in r:  # CTHYB kink (Legendre) estimator
+            axes[1, col].plot(r["tau_SzSz_LF"], r["SzSz_LF"], color=LEGENDRE_COLOR[solver], linewidth=1.5,
+                              label=f"{STYLE[solver]['label']} from Legendre")
+            print(f"jperp={jperp} szsz={szsz} {solver} from Legendre: SzSz(beta/2) = "
+                  f"{np.interp(beta / 2, r['tau_SzSz_LF'], r['SzSz_LF']):.4f}")
         if ref is not None and solver != "ctint":
             axes[2, col].plot(r["tau_SzSz"], r["SzSz"] - np.interp(r["tau_SzSz"], ref["tau_SzSz"], ref["SzSz"]), **STYLE[solver])
         p = r.get("pert_order_jperp")
@@ -55,6 +62,7 @@ axes[0, 0].set_ylabel(r"$G_\uparrow(\tau)$")
 axes[1, 0].set_ylabel(r"$\langle S_z(\tau) S_z(0) \rangle$")
 axes[2, 0].set_ylabel(r"$\Delta\langle S_z(\tau) S_z(0) \rangle$ vs CTINT")
 axes[0, 0].legend()
+axes[1, 0].legend()
 fig.suptitle(f"Single-orbital spin-spin, J={J:g}, U={U:g}, beta={beta:g}")
 fig.tight_layout()
 plt.show()
