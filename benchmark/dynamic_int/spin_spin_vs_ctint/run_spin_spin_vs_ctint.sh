@@ -10,10 +10,7 @@
 #SBATCH --ntasks-per-node=96
 #SBATCH --cpus-per-task=1
 #SBATCH --time=72:00:00
-MODULES="devenv9/clang-py3-mkl llvm/20"
-module purge
-module use /mnt/home/wentzell/opt/modules
-module load ${MODULES}
+module load modules/2.5-beta1
 module load triqs/multiorbital     # cthyb
 #module load triqs/unstable        # ctseg
 # ctint (stack from run_compare.sh):
