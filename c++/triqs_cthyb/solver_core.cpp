@@ -40,6 +40,7 @@
 #include "./moves/global.hpp"
 #include "./moves/insert_dyn.hpp"
 #include "./moves/remove_dyn.hpp"
+#include "./moves/swap_dyn.hpp"
 #include "./measures/G_tau.hpp"
 #include "./measures/G_l.hpp"
 #include "./measures/O_tau_ins.hpp"
@@ -411,6 +412,8 @@ namespace triqs_cthyb {
     if (has_dyn_interactions) {
       qmc.add_move(move_insert_dyn(data, qmc.get_rng(), histo_map), "Insert dynamical interaction", 1.0);
       qmc.add_move(move_remove_dyn(data, qmc.get_rng(), histo_map), "Remove dynamical interaction", 1.0);
+      // Re-pairs vertices that insert/remove cannot reach on their own (crossing spin-flip pairings)
+      qmc.add_move(move_swap_dyn(data, qmc.get_rng()), "Swap dynamical vertex partners", 1.0);
       if (params.verbosity >= 2) {
         std::cout << "Dynamical interaction moves enabled due to non-zero Jperp_tau or D0_tau" << std::endl;
       }
