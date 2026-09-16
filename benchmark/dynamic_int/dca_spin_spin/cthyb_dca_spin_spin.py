@@ -60,6 +60,10 @@ parser.add_argument('--lang_firsov', type=str_to_bool, default=True,
                          'density coupling that lies in span{N_up, N_down}. Needed for the site-resolved '
                          'correlator reconstruction, and the independent cross-check of the analytic path')
 parser.add_argument('--measure_O_tau_min_ins', type=int, default=100)
+parser.add_argument('--density_matrix', type=str_to_bool, default=False,
+                    help='Measure the atomic density matrix (also switches on use_norm_as_weight). Off by '
+                         'default: nothing here consumes it, and the post-processing trips over the local '
+                         "atom_diag/cpp2py mismatch ('Can not wrap AtomDiagReal ... legacy cpp2py')")
 parser.add_argument('--random_seed', type=int, default=None,
                     help='Base seed; rank r uses base + 928374 * r. The solver default is fixed, so a plain '
                          'rerun is bit-identical -- pass different values for independent samples')
