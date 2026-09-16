@@ -237,10 +237,17 @@ namespace triqs_cthyb {
     // finalized.
     // ------------------------------------------------------------------
     auto dyn_vertices = collect_dyn_vertices(inputs.dyn_vertices, inputs.D0t, inputs.Jperpt, gf_struct);
-    auto classified_dyn_vertices = classify_dyn_vertices(dyn_vertices, _h_loc, fops, linindex, params.lang_firsov);
+    bool dyn_audit               = params.verbosity >= 4 && !dyn_vertices.empty();
+    auto classified_dyn_vertices = classify_dyn_vertices(dyn_vertices, _h_loc, fops, linindex, params.lang_firsov, dyn_audit);
     if (params.lang_firsov) {
       auto conserved = conserved_densities(_h_loc, fops, linindex);
-      auto split     = split_density_couplings(classified_dyn_vertices, conserved.vectors, fops, linindex);
+      if (dyn_audit) {
+        std::cout << "[dyn_audit] h_loc has " << conserved.operators.size() << " conserved density combination(s); the projector\n"
+                  << "[dyn_audit] split can only route a density coupling analytically inside their span:\n";
+        for (size_t i = 0; i < conserved.operators.size(); ++i)
+          std::cout << "[dyn_audit]   O_" << i << " = " << conserved.operators[i] << "\n";
+      }
+      auto split = split_density_couplings(classified_dyn_vertices, conserved.vectors, fops, linindex);
       if (params.verbosity >= 2 && split.n_input > 0) {
         if (split.block_structured)
           std::cout << "Found " << conserved.vectors.size() << " conserved density combination(s); split the coupling of " << split.n_input
@@ -253,12 +260,23 @@ namespace triqs_cthyb {
       }
     }
     auto lang_firsov_shift = apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
-    int lf_n_orb = lang_firsov_shift.mu_renorm.size();
-    lang_firsov_U_renorm.assign(lf_n_orb, std::vector<double>(lf_n_orb, 0.0));
-    for (int i = 0; i < lf_n_orb; ++i)
-      for (int j = 0; j < lf_n_orb; ++j) lang_firsov_U_renorm[i][j] = lang_firsov_shift.U_renorm(i, j);
-    lang_firsov_mu_renorm.assign(lf_n_orb, 0.0);
-    for (int i = 0; i < lf_n_orb; ++i) lang_firsov_mu_renorm[i] = lang_firsov_shift.mu_renorm(i);
+    if (dyn_audit) {
+      std::cout << "[dyn_audit] final routing: " << classified_dyn_vertices.lang_firsov.size() << " analytic, "
+                << classified_dyn_vertices.stochastic.size() << " stochastic\n";
+      auto report = [](std::string const &tag, std::vector<dyn_vertex_t> const &vs) {
+        for (size_t i = 0; i < vs.size(); ++i) {
+          auto const &d = vs[i].coupling.data();
+          std::cout << "[dyn_audit]   " << tag << "[" << i << "] " << vs[i].op1 << "  x  " << vs[i].op2
+                    << "   D(0) = " << d(0) << ", D(beta/2) = " << d(d.size() / 2) << "\n";
+        }
+      };
+      report("analytic  ", classified_dyn_vertices.lang_firsov);
+      report("stochastic", classified_dyn_vertices.stochastic);
+      std::cout << "[dyn_audit] static K'(0) shift folded into h_loc -- U_renorm:\n"
+                << lang_firsov_shift.U_renorm << "\n[dyn_audit] mu_renorm: " << lang_firsov_shift.mu_renorm
+                << "\n[dyn_audit] h_loc actually used:\n"
+                << _h_loc << std::endl;
+    }
     // ------------------------------------------------------------------
 
 
@@ -488,15 +506,17 @@ namespace triqs_cthyb {
       auto comm_1          = O1 * _h_loc - _h_loc * O1;
       auto comm_2          = O2 * _h_loc - _h_loc * O2;
 
-      if (!comm_0.is_zero() || !comm_1.is_zero() || !comm_2.is_zero()) {
-        if (params.verbosity >= 2) {
-          TRIQS_RUNTIME_ERROR << "Error: measure_O_tau, supplied operators does not commute with "
-                                 "the local Hamiltonian.\n"
-                              << "[O1, O2] = " << comm_0 << "\n"
-                              << "[O1, H_loc] = " << comm_1 << "\n"
-                              << "[O2, H_loc] = " << comm_2 << "\n";
-        }
-      }
+      // Unconditional: this was previously nested inside `if (params.verbosity >= 2)`, so at
+      // lower verbosity a non-commuting pair was accepted and O_tau measured wrongly with no
+      // message at all -- and since non-master ranks default to verbosity 0, rank 0 would throw
+      // while the others carried on. The estimator genuinely requires [O1, O2] = [O_i, h_loc] = 0,
+      // so this is an error at every verbosity and on every rank.
+      if (!comm_0.is_zero() || !comm_1.is_zero() || !comm_2.is_zero())
+        TRIQS_RUNTIME_ERROR << "measure_O_tau: the supplied operators must commute with each other and with the "
+                               "local Hamiltonian; the insertion estimator is only valid then.\n"
+                            << "[O1, O2] = " << comm_0 << "\n"
+                            << "[O1, H_loc] = " << comm_1 << "\n"
+                            << "[O2, H_loc] = " << comm_2 << "\n";
       qmc.add_measure(
          measure_O_tau_ins{O_tau, data, n_tau, O1, O2, params.measure_O_tau_min_ins, qmc.get_rng()},
          "O_tau insertion measure");

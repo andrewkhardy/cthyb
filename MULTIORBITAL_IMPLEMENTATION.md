@@ -760,3 +760,155 @@ contains isn't at risk of being lost.
   h_loc); never a heuristic that could quietly change physics.
 - User approves incremental edits even after accepting an overall plan — don't batch
   large rewrites without checking in first on anything non-mechanical.
+
+## Session update (2026-09-16): two-patch DCA benchmark; `multiorb_spin_spin.py` removed
+
+### 1. `benchmark/dynamic_int/multiorb_spin_spin.py` deleted
+
+Early scaffolding from the first attempt at a multi-orbital dynamical S.S, superseded on
+every axis and **not runnable on the current code**:
+
+- It set `S.Jperp_tau["up_0", "up_0"] << ...`, i.e. indexed `Jperp_tau` as a `Block2Gf`.
+  `inputs.Jperpt` is a plain `gf<imtime>` (`solver_core.hpp:68`), a *single global* up/down
+  coupling matching ctseg. Independently, its `gf_struct` had 4 blocks, which
+  `expand_Jperp_into_vertices` rejects outright ("only supports exactly 2 blocks").
+- Its stated role, "the cthyb analog of the ctseg dynamic_int_multiorb example", is already
+  filled — correctly, with real solid_dmft GW+EDMFT input data — by
+  `benchmark/dynamic_int/multiorb/cthyb_dynamic_int_multiorb.py`.
+- Its other stated role, a multi-orbital *transverse* channel, is filled by
+  `kanamori_dyn_spinflip.py` (dynamical spin-flip through `add_dyn_vertex`) and now by
+  `dca_spin_spin/` (full S.S in an arbitrary basis).
+- Note for the record: the D0 sign "fix" recorded in the 2026-08-13/14 entries above left
+  it *internally* inconsistent rather than correct. An SU(2)-symmetric `lambda(tau) S.S`
+  requires `Jperp_tau = 4 * D0_same-spin` (same sign), since `lambda S^z S^z` gives
+  `(n_s, n_s) -> lambda/4` while `expand_Jperp_into_vertices` consumes `Jperp_tau/2` per
+  ordering of `lambda/2 (S^+S^- + S^-S^+)`. `spin_spin.py` satisfies this
+  (`D0[up,up] = -0.25 J Q`, `Jperp = -J Q`); `multiorb_spin_spin.py` had
+  `D0[up,up] = +0.25 J Q` with `Jperp = -J Q`, so its longitudinal and transverse parts
+  described opposite couplings. This relation is now asserted in
+  `dca_spin_spin/check_rotation.py` rather than left to a comment.
+
+### 2. New benchmark: `benchmark/dynamic_int/dca_spin_spin/`
+
+Two-patch DCA (VBDMFT patches, `|kx|,|ky| < pi/sqrt(2)` and the rest) with a
+**real-space** retarded full S.S interaction. The static `U` and the retarded S.S are both
+local on the two *rotated* cluster sites, so in the solver's working (patch) basis the
+dynamical vertices are off-diagonal bilinears `c^dag_{K s} c_{K' s'}`, `K != K'`. This is
+the first benchmark here whose dynamical interaction is off-diagonal in the working basis,
+and the first where the plain per-vertex Lang-Firsov test rejects *everything* (`n_{K s}`
+does not commute with `h_loc`), leaving only the `span{N_up, N_down}` projector split.
+Files: `dca_model.py` (model + the monomial expander), `check_rotation.py` (22 symbolic
+checks, no solver), `cthyb_dca_spin_spin.py` (driver, has `--dry_run`),
+`plot_dca_spin_spin.py`, `run_dca_spin_spin.sh`. An ED reference is **not** written yet.
+
+Two implementation notes worth keeping:
+
+- `add_dyn_vertex` requires each operator to be a *single* bilinear monomial, so a rotated
+  site-basis spin operator (a sum of 4-8 patch-basis bilinears) has to be expanded by hand
+  into monomial pairs. `expand_retarded_product` in `dca_model.py` does this and merges
+  duplicate pairs: for `J_intra=0, J_inter=0.5` that is 192 raw pairs -> 48 vertices
+  (16 density-density, 32 off-diagonal); for uniform `J`, 384 -> 24, because
+  `sum_{ij} S_i.S_j = S_tot.S_tot` is basis independent and the rotation cancels.
+- The `lang_firsov=True`/`False` pair is only a valid cross-check if both runs use the
+  *same* mu. The static Lang-Firsov shift is a property of the Hamiltonian, not of the
+  route that samples it, but an `lf=False` probe solve reports no renormalization, so the
+  driver deliberately runs its 1-cycle mu probe with `lang_firsov=True` regardless of the
+  production setting, and saves `mu_orbital` so the analysis can verify the two match.
+
+### 3. `add_dyn_vertex` silently ignores its operators' scalar coefficients — a real bug
+
+`extract_bilinear` (`dynamical_interactions.cpp:99-105`) iterates `op`'s terms, keeps the
+monomial and **never reads `coeff`**. A coefficient on `op1`/`op2` is redundant with the
+coupling — `D(tau) (a M1)(b M2) == (a b D(tau)) M1 M2` — so the natural fix is to absorb
+it, but at present it is neither absorbed nor rejected. Worse, it is *inconsistently*
+honoured: `apply_lang_firsov_shift` uses the operators as full expressions, coefficients
+included (`h_loc - 0.5 * Kprime_0 * v.op1`, line 263, and `* v.op1 * v.op2`, line 271),
+while classification, `build_K_n`, `split_density_couplings` and the stochastic
+`dyn_op_list` all go through `extract_bilinear` and see coefficient 1. So
+`add_dyn_vertex(0.5*n(s,a), n(s,b), D)` applies the static shift with the 0.5 and samples
+the retarded part without it: the analytic and stochastic halves of the same vertex
+disagree by that factor, silently.
+
+**No shipped result is affected**: every in-tree caller already puts its factors in the
+coupling and passes unit-coefficient operators — `expand_D0_into_vertices` (line 155),
+`expand_Jperp_into_vertices` (the 0.5 rides in `scalar_component(Jperpt, 0, 0, 0.5)`), and
+`kanamori_dynamical_vertices` (`-0.5 * coupling`). It is purely a trap for hand-written
+vertices, which is what the new DCA benchmark needed.
+
+**FIXED 2026-09-16**: `extract_bilinear` now throws unless `|coeff - 1| < 1e-12`. Throwing was
+chosen over absorbing the factor into the coupling deliberately — absorbing would be another
+silent behaviour, and the guiding preference is a minimal solver with nothing hidden, even at
+the cost of the caller specifying more. No in-tree caller is affected (all already pass
+unit-coefficient operators with their factors in the coupling).
+
+### 4. `lang_firsov_U_renorm` / `lang_firsov_mu_renorm` removed; the static offset is now the user's to add
+
+Both solver members are gone (`solver_core.hpp`, plus their h5 write/read and the copy loops in
+`solver_core.cpp`). They reported the static K'(0) shift of only the vertices a given solve
+*routed analytically*, so they were route dependent, while the offset that actually matters for
+mu is a property of the input coupling alone. For a uniform coupling everything routes
+analytically and they were complete; for a non-uniform one (the interesting Holstein case) part
+of the coupling goes stochastic and they silently under-report, and taking mu from them gave a
+`lang_firsov=True` and a `lang_firsov=False` run *different Hamiltonians*. They were also
+redundant as a diagnostic: `h_loc()` already returns the actual post-shift Hamiltonian exactly
+and completely, including non-density terms a U/mu pair cannot represent.
+
+In their place, four pure functions in `python/triqs_cthyb/dynamical_interactions.py` --
+`kprime_0`, `kprime_0_boson`, `static_shift`, `half_filling_mu` -- computed from the input
+vertex list, with the result added to mu explicitly by the caller. Covered by the new
+`Py_dyn_static_shift` ctest, which pins them to `ed_reference/model.py`'s ED-validated mu and to
+`holstein.py`'s `U/2 - g^2/omega_0^2`.
+
+Facts worth keeping:
+
+- **The two-term Legendre formula for K'(0) is an identity, not a truncation.**
+  `K'(0) = -(1/beta) int_0^beta (beta - tau) D(tau) dtau`, and `(beta - tau)` is degree 1 in
+  `x = 2 tau/beta - 1`, so only `l = 0, 1` can contribute (`P_{l>=2}` are orthogonal to every
+  degree-1 polynomial). **`dyn_n_l` therefore cannot change the static offset**, and raising it
+  cannot fix an offset problem. The only error is quadrature of the two moments: the C++
+  `fit_legendre_coeffs` uses trapezoid, whose error is ~1e-6 at `n_tau_bosonic = 2001` because
+  the boson kernel is most curved exactly at the endpoints. `kprime_0` uses Simpson (~1e-10).
+- **Closed form**: `int_0^beta Q = -1/omega_0^2` and `int_0^beta Q x = 0`, so a coupling
+  `coeff * Q(tau)` has `K'(0) = coeff/(2 omega_0^2)` exactly. For the phonon `D_ab = g_a g_b Q`
+  this is the unordered-pair shift `-g_a g_b/omega_0^2` and level shift `-g_a^2/(2 omega_0^2)`,
+  exactly what `ed_reference/model.py` documents -- conventions confirmed end to end.
+- **`holstein.py`'s zero-frequency shortcut is only valid for a kernel symmetric about beta/2.**
+  Then `<beta - tau> = beta/2` and `K'(0) = -(1/2) D(i nu = 0)`. Ordinary boson propagators are
+  symmetric so it is correct today; for an asymmetric kernel (charged/complex boson, or a
+  `D(tau)` out of a self-consistent loop) the control case in the ctest is off by 44%.
+- **Sign trap**: `level_shift` enters `mu_a = (1/2) sum_{b!=a} W_ab + level_shift_a` with a
+  PLUS, because it is the shift applied to the orbital *energy* (`= -K'(0)`), not to mu. With it
+  flipped, the Kanamori+phonon `g = (0.7, 0.3)` case gives a mu that is *uniform across
+  orbitals* (2.04 for both) instead of 1.55/1.95 -- plausible-looking and wrong. The ctest
+  asserts the two orbitals differ for exactly this reason.
+
+### 5. `verbosity >= 4`: an audit of everything the solver infers
+
+Rather than a new parameter, the existing `verbosity` is reused (it previously used only levels
+1 and 2, with 3 the rank-0 default, so 4 was free). `EXT_DEBUG`, the existing compile-time debug
+option, prints per *Monte Carlo move* -- millions of lines, the wrong home for a one-time setup
+report, and it needs a recompile to toggle.
+
+At `verbosity >= 4` the solver now prints: the conserved density combinations of `h_loc`; every
+vertex with the four conditions the routing decision rests on (`is n_a` and `[op, h_loc] = 0`
+for each of `op1`, `op2`) and the resulting route; the analytic and stochastic vertex lists the
+projector split produced, with each coupling's `D(0)` and `D(beta/2)`; the aggregate K'(0) shift
+folded into `h_loc`; and the final `h_loc`. The inference stays in C++ (it is exact and cheap
+there), but nothing about it has to be reverse-engineered from the result any more.
+
+
+### 6. `measure_O_tau`'s commutation check was gated on verbosity — fixed
+
+Found while adding the check above. The `TRIQS_RUNTIME_ERROR` for
+`[O1, O2] != 0` or `[O_i, h_loc] != 0` sat *inside* `if (params.verbosity >= 2)`, so:
+
+- below verbosity 2 a non-commuting pair was accepted and `O_tau` measured wrongly, silently —
+  the insertion estimator is only valid when those commutators vanish;
+- worse, `verbosity` defaults to 0 on non-master ranks, so rank 0 would throw while every other
+  rank carried on into the Monte Carlo.
+
+The throw is now unconditional, at every verbosity and on every rank. Nothing in the tree is
+affected: every current `measure_O_tau` caller passes commuting operators (`(Sz, Sz)` under a
+density-density `h_int` in `spin_spin.py`/`holstein.py`, `(n_up, n_do)` in `test/python/O_tau_ins.py`
+and `benchmark/O_tau_ins/calc_cthyb.py`, `(Ntot, Ntot)` in `multiorb/`, `(Sz_total, Sz_total)` in
+`dca_spin_spin/`, the last checked symbolically in `check_rotation.py`).

@@ -101,7 +101,14 @@ namespace triqs_cthyb {
     /// Maximum runtime in seconds, use -1 to set infinite.
     long max_time = -1;
 
-    /// Verbosity level.
+    /// Verbosity level. 0 silent, 1 warnings, 2 the standard per-solve report (h_loc, the
+    /// dynamical-interaction split, the Lang-Firsov K'(0) shifts), 3 the default on rank 0,
+    /// 4 additionally a full audit of everything the solver *infers* about the dynamical
+    /// interaction: the conserved density combinations of h_loc, the per-vertex
+    /// analytic/stochastic classification with the reason for each, the vertex lists the
+    /// projector split produced, and the h_loc finally used. Nothing about the routing then
+    /// has to be reverse-engineered from the result. (EXT_DEBUG is a separate compile-time
+    /// option for per-Monte-Carlo-move tracing, far too verbose for this.)
     int verbosity = ((mpi::communicator().rank() == 0) ? 3 : 0); // silence the slave nodes
 
     /// Add shifting an operator as a move?
