@@ -28,7 +28,7 @@
 # analytic path -- unlike kanamori_dyn.py, where a fully-specified run shows 0
 # stochastic. The mu correction (see kanamori_dyn.py) only involves the density part:
 # apply_lang_firsov_shift only ever sees vertices classify_dyn_vertices accepted, so
-# lang_firsov_U_renorm/lang_firsov_mu_renorm are unaffected by the spin-flip channel.
+# the static shift computed below is unaffected by the spin-flip channel.
 
 import argparse
 import numpy as np
@@ -39,7 +39,7 @@ from triqs.operators.util.hamiltonians import h_int_kanamori
 from triqs.operators.util.op_struct import set_operator_structure
 import h5
 from triqs_cthyb import Solver, kanamori_dynamical_vertices
-from triqs_cthyb.dynamical_interactions import _as_scalar_gf
+from triqs_cthyb.dynamical_interactions import _as_scalar_gf, static_shift, half_filling_mu
 from itertools import product
 
 parser = argparse.ArgumentParser(description='Run dynamical Hubbard-Kanamori benchmarking with a dynamical spin-flip channel.')
@@ -102,7 +102,7 @@ H_int = h_int_kanamori(spin_names, n_orb,
                         J, spin_flip=True, pair_hopping=True, off_diag=True)
 
 # Spin-orbitals in the same order as gf_struct/linindex, so a per-orbital mu list lines
-# up positionally with S.lang_firsov_mu_renorm / S.lang_firsov_U_renorm below.
+# up positionally with the static-shift matrices computed below.
 spin_orbitals = list(product(spin_names, range(n_orb)))
 n_ops = [n(s, a) for s, a in spin_orbitals]
 
@@ -133,21 +133,34 @@ solve_params = {
     "dyn_n_l": args.dyn_n_l,
 }
 
-# Mu correction (see kanamori_dyn.py for the derivation): a cheap probe solve exposes
-# how much the density dynamical channel's static part shifts the half-filling mu.
-# Only the density channel enters lang_firsov_U_renorm/lang_firsov_mu_renorm -- the
-# spin-flip channel is never folded into h_loc, so it is correctly absent here.
-probe_params = dict(solve_params, n_cycles=1, n_warmup_cycles=1)
-S.solve(**probe_params, h_loc0=-mu_bare * sum(n_ops))
-mu = [mu_bare] * len(spin_orbitals)
-if len(S.lang_firsov_mu_renorm) > 0:
-    U_renorm = S.lang_firsov_U_renorm
-    mu_renorm = S.lang_firsov_mu_renorm
-    for i in range(len(spin_orbitals)):
-        mu_half_correct_i = 0.5 * sum(U_renorm[i][j] for j in range(len(spin_orbitals)) if j != i)
-        mu[i] = mu_bare + (mu_half_correct_i - mu_renorm[i])
-    if mpi.is_master_node():
-        print(f"Lang-Firsov mu correction: mu_bare={mu_bare}, corrected mu={mu}")
+# Mu. The dynamical interaction's static K'(0) part is a genuine extra density-density
+# interaction (standard Lang-Firsov/polaron physics), and mu_bare above accounts only for
+# h_int's static U/J, so the model would otherwise sit away from half filling.
+#
+# Computed from the *input* coupling, not from a probe solve. The solver's old
+# lang_firsov_U_renorm / lang_firsov_mu_renorm covered only the vertices it routed
+# analytically, so they were route dependent: correct here, where the uniform coupling makes
+# every density vertex analytic, but silently incomplete as soon as part of the coupling goes
+# stochastic (a non-uniform g), and they gave lang_firsov=True and lang_firsov=False runs
+# different Hamiltonians. static_shift/half_filling_mu take the whole registered list and are
+# exact either way; verbosity >= 4 prints the solver's own routing audit to compare against.
+#
+# The registered density vertices are every ordered pair of spin-orbitals, diagonal included
+# (kanamori_dynamical_vertices with U = Uprime = Q_tau, plus the explicit self-terms above),
+# all sharing Q_tau.
+W_kanamori = np.zeros((len(spin_orbitals), len(spin_orbitals)))
+for i, (s1, a1) in enumerate(spin_orbitals):
+    for j, (s2, a2) in enumerate(spin_orbitals):
+        if i != j:
+            W_kanamori[i, j] = U if a1 == a2 else (U - 3 * J if s1 == s2 else U - 2 * J)
+density_vertices = [(i, j, Q_tau) for i in range(len(spin_orbitals)) for j in range(len(spin_orbitals))]
+W_shift, level_shift = static_shift(density_vertices, len(spin_orbitals), beta)
+mu = half_filling_mu(W_kanamori, W_shift, level_shift)
+if mpi.is_master_node():
+    print(f"Static shift of the dynamical interaction: mu_bare={mu_bare} -> mu={np.round(mu, 8)}")
+# The dynamical spin-flip channel is not a density vertex, so it is absent from the list
+# below -- correctly: its instantaneous part is a spin-flip operator, which is particle-hole
+# even and shifts the filling by nothing.
 
 # Solve (real production run, with the corrected mu)
 S.solve(**solve_params, h_loc0=-sum(mu[i] * n_ops[i] for i in range(len(spin_orbitals))))

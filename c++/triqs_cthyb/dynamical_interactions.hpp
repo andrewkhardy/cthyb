@@ -79,9 +79,11 @@ namespace triqs_cthyb {
   /// commute with h_loc (checked by plain operator algebra, op*h_loc - h_loc*op, not
   /// via atom_diag -- see the Double Expansion notes for why). Every vertex ends up in
   /// exactly one of the two lists, so nothing is ever silently dropped.
+  /// With `debug` on (solve_params_t::verbosity >= 4), reports each vertex and the four
+  /// conditions the decision rests on, so a surprising route can be read off directly.
   classified_dyn_vertices_t classify_dyn_vertices(std::vector<dyn_vertex_t> const &vertices, many_body_op_t const &h_loc,
                                                   fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex,
-                                                  bool lang_firsov_requested);
+                                                  bool lang_firsov_requested, bool debug = false);
 
   /// The aggregate density-density interaction matrix / chemical-potential vector
   /// implied by every Lang-Firsov K'(0) shift applied in one apply_lang_firsov_shift
@@ -102,9 +104,12 @@ namespace triqs_cthyb {
   /// Subtract the K'(0) static (instantaneous) part of each Lang-Firsov-eligible
   /// vertex's coupling from h_loc, so it isn't double-counted once the retarded part
   /// is resummed analytically. Must run before h_diag is built from h_loc. Returns the
-  /// aggregate U_renorm/mu_renorm this induced (see lang_firsov_shift_t) -- callers
-  /// that picked h_loc0's mu from a static half-filling formula (ignoring the
-  /// dynamical interaction) need this to retune it; see solver_core::lang_firsov_mu_renorm.
+  /// aggregate U_renorm/mu_renorm this induced (see lang_firsov_shift_t), which is used
+  /// only for reporting -- it covers just the vertices routed analytically here, so it is
+  /// route dependent and must not be used to pick mu. Callers that took h_loc0's mu from a
+  /// static half-filling formula ignoring the dynamical interaction should retune it from
+  /// the *input* coupling instead, with
+  /// triqs_cthyb.dynamical_interactions.{kprime_0, static_shift, half_filling_mu}.
   /// At verbosity>=2, also prints the aggregate before/after density-density
   /// interaction matrix (as in CTSEG), sized to all orbitals regardless of vertex
   /// count/source.

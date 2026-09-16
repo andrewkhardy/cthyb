@@ -97,9 +97,11 @@ namespace triqs_cthyb {
 
     int n_terms = 0;
     monomial_t the_monomial;
+    h_scalar_t the_coeff = 0.0;
     for (auto const &[monomial, coeff] : op) {
       ++n_terms;
       the_monomial = monomial;
+      the_coeff    = coeff;
     }
     if (n_terms != 1)
       TRIQS_RUNTIME_ERROR << op_name << " must be a single fermion bilinear (e.g. c_dag('up',0)*c('down',0)), but has " << n_terms
@@ -110,6 +112,18 @@ namespace triqs_cthyb {
     if (the_monomial[0].dagger == the_monomial[1].dagger)
       TRIQS_RUNTIME_ERROR << op_name << " must contain one creation and one annihilation operator, but has two "
                           << (the_monomial[0].dagger ? "creation" : "annihilation") << " operators.";
+
+    // A scalar prefactor on op1/op2 is redundant with the coupling -- D(tau) (a M1)(b M2) is the
+    // same vertex as (a b D(tau)) M1 M2 -- and only the coupling is ever read here, so a factor
+    // written on the operator would be dropped. Worse, it would be dropped *inconsistently*:
+    // apply_lang_firsov_shift uses op1/op2 as full expressions, coefficients included, so the
+    // analytic static shift and the sampled retarded part of the same vertex would disagree by
+    // that factor. Refuse it rather than pick one interpretation silently.
+    if (std::abs(the_coeff - 1.0) > 1.e-12)
+      TRIQS_RUNTIME_ERROR << op_name << " carries the scalar coefficient " << the_coeff
+                          << ", but a dynamical vertex is coupling(tau) * op1(tau) * op2(0): every numeric factor "
+                             "belongs in the coupling, which is the only place it is read. Pass the bare bilinear "
+                             "(n('up',0), not 0.5*n('up',0)) and multiply the coupling by the factor instead.";
 
     // Reverse-lookup (block_index, inner_index) from the linear index fops already
     // assigns each fundamental operator -- exactly the same primitive the existing
@@ -207,16 +221,33 @@ namespace triqs_cthyb {
 
   classified_dyn_vertices_t classify_dyn_vertices(std::vector<dyn_vertex_t> const &vertices, many_body_op_t const &h_loc,
                                                   fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex,
-                                                  bool lang_firsov_requested) {
+                                                  bool lang_firsov_requested, bool debug) {
     auto commutes_with_hloc = [&](many_body_op_t const &op) { return (op * h_loc - h_loc * op).is_almost_zero(); };
 
+    if (debug)
+      std::cout << "\n[dyn_audit] classifying " << vertices.size() << " dynamical vertex(es)"
+                << (lang_firsov_requested ? "" : " -- lang_firsov=false, so every one is forced stochastic") << ":\n";
+
     classified_dyn_vertices_t result;
-    for (auto const &v : vertices) {
+    for (size_t i = 0; i < vertices.size(); ++i) {
+      auto const &v = vertices[i];
       bool eligible = false;
+      bool dens1 = false, dens2 = false, comm1 = false, comm2 = false;
       if (lang_firsov_requested) {
         auto bp1 = extract_bilinear(v.op1, fops, linindex, "op1");
         auto bp2 = extract_bilinear(v.op2, fops, linindex, "op2");
-        eligible = is_density_bilinear(bp1) && is_density_bilinear(bp2) && commutes_with_hloc(v.op1) && commutes_with_hloc(v.op2);
+        dens1    = is_density_bilinear(bp1);
+        dens2    = is_density_bilinear(bp2);
+        comm1    = commutes_with_hloc(v.op1);
+        comm2    = commutes_with_hloc(v.op2);
+        eligible = dens1 && dens2 && comm1 && comm2;
+      }
+      if (debug) {
+        auto yn = [](bool b) { return b ? "yes" : "no "; };
+        std::cout << "[dyn_audit]   [" << i << "] " << v.op1 << "   (tau) x (0)   " << v.op2 << "\n"
+                  << "[dyn_audit]        is n_a: " << yn(dens1) << " / " << yn(dens2)
+                  << "   [op, h_loc] = 0: " << yn(comm1) << " / " << yn(comm2) << "   ->  "
+                  << (eligible ? "Lang-Firsov (analytic)" : "stochastic") << "\n";
       }
       (eligible ? result.lang_firsov : result.stochastic).push_back(v);
     }

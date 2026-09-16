@@ -84,19 +84,15 @@ namespace triqs_cthyb {
     /// Analytic density-density bath coefficients K_n[a][b][n].
     std::vector<std::vector<std::vector<double>>> K_n;
 
-    /// Aggregate density-density interaction matrix implied by every Lang-Firsov
-    /// K'(0) shift applied in the last solve, on top of h_loc's own static
-    /// interaction: lang_firsov_U_renorm[a][b] is the *total* off-diagonal coupling
-    /// between orbitals a and b (h_loc's own static coupling plus what the dynamical
-    /// interaction's static part added), lang_firsov_mu_renorm[a] is the diagonal
-    /// (chemical-potential-like) analogue. If h_loc0's mu was chosen from a static
-    /// half-filling formula that ignores the dynamical interaction (e.g. from
-    /// h_int_kanamori's U/J alone), it needs retuning: the correct half-filling mu for
-    /// orbital a is 0.5 * sum_{b!=a} lang_firsov_U_renorm[a][b], to be compared
-    /// against the *effective* mu actually used, lang_firsov_mu_renorm[a]. Both are
-    /// empty if no vertex was routed through the Lang-Firsov path.
-    std::vector<std::vector<double>> lang_firsov_U_renorm;
-    std::vector<double> lang_firsov_mu_renorm;
+    // Removed: lang_firsov_U_renorm / lang_firsov_mu_renorm. They reported only the static
+    // shift of the vertices this solve happened to route analytically, so they were route
+    // dependent, while the offset that matters for mu is a property of the input coupling
+    // alone -- picking mu from them gave a lang_firsov=true and a lang_firsov=false run
+    // different Hamiltonians. Compute the offset from the vertex list instead, with
+    // triqs_cthyb.dynamical_interactions.{kprime_0, static_shift, half_filling_mu}, and add
+    // it to mu explicitly. For what was actually folded into the Hamiltonian, h_loc() below
+    // returns it exactly and completely (including the non-density terms a U/mu pair cannot
+    // represent); verbosity >= 2 prints the shift and >= 4 the full audit.
 
     /// The combinations of orbital densities that commute with h_loc, O_i = sum_a c_ia n_a, in
     /// reduced row-echelon form (e.g. N_up and N_down for a Kanamori h_loc with spin-flip and
@@ -252,8 +248,6 @@ namespace triqs_cthyb {
       h5_write(grp, "solve_status", s._solve_status);
       h5_write(grp, "Delta_infty_vec", s.Delta_infty_vec);
       h5_write(grp, "K_n", s.K_n);
-      h5_write(grp, "lang_firsov_U_renorm", s.lang_firsov_U_renorm);
-      h5_write(grp, "lang_firsov_mu_renorm", s.lang_firsov_mu_renorm);
       h5_write(grp, "conserved_density_operators", s.conserved_density_operators);
       h5_write(grp, "dyn_vertex_operators", s.dyn_vertex_operators);
       h5_write(grp, "dyn_vertex_couplings", s.dyn_vertex_couplings);
@@ -282,8 +276,6 @@ namespace triqs_cthyb {
       h5::try_read(grp, "solve_status", s._solve_status);
       h5::try_read(grp, "Delta_infty_vec", s.Delta_infty_vec);
       h5::try_read(grp, "K_n", s.K_n);
-      h5::try_read(grp, "lang_firsov_U_renorm", s.lang_firsov_U_renorm);
-      h5::try_read(grp, "lang_firsov_mu_renorm", s.lang_firsov_mu_renorm);
       h5::try_read(grp, "conserved_density_operators", s.conserved_density_operators);
       h5::try_read(grp, "dyn_vertex_operators", s.dyn_vertex_operators);
       h5::try_read(grp, "dyn_vertex_couplings", s.dyn_vertex_couplings);
