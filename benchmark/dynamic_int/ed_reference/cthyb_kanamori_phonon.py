@@ -28,6 +28,10 @@ parser.add_argument('--dyn_n_l', type=int, default=50, help='Legendre coefficien
 parser.add_argument('--lang_firsov', type=str_to_bool, default=True, help='False forces every vertex stochastic')
 parser.add_argument('--density_matrix', type=str_to_bool, default=True,
                     help='Measure the density matrix, so the equal-time <O_i O_j> is added back to Q_conserved_tau')
+parser.add_argument('--random_seed', type=int, default=None,
+                    help='Base seed; rank r uses base + 928374 * r. The solver default is fixed, so a plain '
+                         'rerun is bit-identical: pass different values to get independent samples, which is '
+                         'the only way to put an error bar on the l = 0 channel (diagnose_residual.py).')
 parser.add_argument('--out_dir', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))
 args = parser.parse_args()
 M = model_def.Model(args)
@@ -52,7 +56,8 @@ S.solve(h_int=M.h_int(),
         measure_D0_corr=True,
         measure_pert_order=True,
         measure_density_matrix=args.density_matrix,
-        use_norm_as_weight=args.density_matrix)
+        use_norm_as_weight=args.density_matrix,
+        **({} if args.random_seed is None else dict(random_seed=args.random_seed + 928374 * mpi.rank)))
 
 if mpi.is_master_node():
     # Conserved combinations as coefficient vectors in model.labels order, for the ED contraction
@@ -76,8 +81,20 @@ if mpi.is_master_node():
             dyn_vertex_pairs.append([density_orbital(op1), density_orbital(op2)])
             dyn_vertex_corr.append(g.data.real)
 
+    # The equal-time constant solver.py adds to Q_conserved_l[0], and the densities behind it. Both
+    # come from the density matrix, not from the kink estimator, and the l = 0 coefficient is where
+    # almost all of the CTHYB - ED residual lives: save them so that channel can be checked on its
+    # own against ED (sum_ab v_i[a] v_j[b] chi_ab(0) and <n_a> = 1/2).
+    if args.density_matrix:
+        from triqs.atom_diag import trace_rho_op
+        ops = S.conserved_density_operators
+        A_equal_time = np.array([[trace_rho_op(S.density_matrix, Oi * Oj, S.h_loc_diagonalization).real
+                                  for Oj in ops] for Oi in ops])
+        A_occupations = np.array([np.real(S.orbital_occupations[bl][o, o]) for bl, o in M.labels])
+
     os.makedirs(args.out_dir, exist_ok=True)
-    filename = os.path.join(args.out_dir, f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}.h5")
+    seed_tag = '' if args.random_seed is None else f"_seed-{args.random_seed}"
+    filename = os.path.join(args.out_dir, f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}{seed_tag}.h5")
     with HDFArchive(filename, 'w') as A:
         A['G_tau'] = S.G_tau
         A['Q_conserved_tau'] = S.Q_conserved_tau
@@ -96,4 +113,8 @@ if mpi.is_master_node():
         A['mu'] = M.mu
         A['lang_firsov'] = args.lang_firsov
         A['n_cycles'] = args.n_cycles
+        A['random_seed'] = -1 if args.random_seed is None else args.random_seed
+        if args.density_matrix:
+            A['equal_time_conserved'] = A_equal_time
+            A['orbital_occupations'] = A_occupations
     print(f"Saved {filename}, average sign {S.average_sign}")

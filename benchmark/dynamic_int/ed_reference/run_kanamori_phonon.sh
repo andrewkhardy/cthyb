@@ -42,6 +42,18 @@ srun -n 1 python ed_kanamori_phonon.py ${MODEL} --g 0.7 0.3
 # orbital-1 residual vanishes by construction, so no correlator is measured for that pair.
 mpirun -n 96 python cthyb_kanamori_phonon.py ${MODEL} ${MC} --g 0.7 0.3 --lang_firsov True
 
+# Seed sweep: is the CTHYB - ED residual a bias or noise? diagnose_residual.py shows that ~90% of
+# it is a single tau-independent constant, the l = 0 Legendre coefficient, whose size (1e-4 .. 4e-4)
+# matches the up<->down symmetry violation the same run commits - i.e. consistent with noise, but
+# two diagonal pairs are only two samples. The solver's default seed is 34788 + 928374 * rank, so a
+# plain rerun is bit-identical and tells you nothing: pass --random_seed. Six of these give a real
+# standard error on every coefficient, and then |z| = |mean - ED| / sem says bias or noise.
+# Each is the same cost as the run above; drop n_cycles to 250000 if six is too much.
+#for SEED in 1 2 3 4 5 6; do
+#  mpirun -n 96 python cthyb_kanamori_phonon.py ${MODEL} ${MC} --g 0.7 0.3 --lang_firsov True --random_seed ${SEED}
+#done
+# Then set SEED_FILES in diagnose_residual.py to the six cthyb_*_seed-*.h5 files and rerun it.
+
 # Uniform coupling: everything is block-constant, so it all goes analytic (16 Lang-Firsov,
 # 0 stochastic) and there is nothing for the vertex estimator to measure. Control for the
 # Lang-Firsov path itself against ED.
@@ -64,8 +76,16 @@ mpirun -n 96 python cthyb_kanamori_phonon.py ${MODEL} ${MC} --g 0.7 0.3 --lang_f
 # Q_conserved_tau is then missing its equal-time constant, but dyn_vertex_corr_tau is unaffected
 # (the coupling-derivative estimator carries its own equal-time value).
 
-##### After the run, inspect with:
-# python plot_ed_vs_cthyb.py ${DATA}/ed_beta-10.0_U-2.0_J-0.3_V-0.7_eb-0.0_w0-1.0_g-0.7-0.3_mu-half_nph-24.h5 \
-#                            ${DATA}/cthyb_beta-10.0_U-2.0_J-0.3_V-0.7_eb-0.0_w0-1.0_g-0.7-0.3_mu-half_lf-True_nc-1000000.h5
-# Two figures: *_vs_ed.png (G and the conserved-combination correlators) and *_vs_ed_chi_ab.png
-# (orbital-resolved <n_a(tau) n_b(0)> from the stochastic vertices, against ED).
+##### After the run: pull the data back (a few MB), then plot.
+# FIsync CTHYB_Data/ed_reference /home/andrewhardy/Documents/Data/CTHYB_Data
+#
+# LOCAL=/home/andrewhardy/Documents/Data/CTHYB_Data/ed_reference
+# python plot_ed_vs_cthyb.py ${LOCAL}/ed_beta-10.0_U-2.0_J-0.3_V-0.7_eb-0.0_w0-1.0_g-0.7-0.3_mu-half_nph-24.h5 \
+#                            ${LOCAL}/cthyb_beta-10.0_U-2.0_J-0.3_V-0.7_eb-0.0_w0-1.0_g-0.7-0.3_mu-half_lf-True_nc-1000000.h5
+# Two figures land next to the CTHYB file: *_vs_ed.png (G and the conserved-combination
+# correlators) and *_vs_ed_chi_ab.png (orbital-resolved <n_a(tau) n_b(0)> from the stochastic
+# vertices, against ED).
+#
+# python diagnose_residual.py ${LOCAL}/ed_...nph-24.h5 ${LOCAL}/cthyb_...nc-1000000.h5
+# decomposes CTHYB - ED into ED error, the plot's interpolation artifact, Legendre truncation,
+# and the MC noise in each Legendre channel, using symmetries that need no ED at all.
