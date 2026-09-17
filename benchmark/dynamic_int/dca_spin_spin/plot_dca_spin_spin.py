@@ -22,6 +22,11 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+# These imports look unused, but they register the Gf / BlockGf / Histogram readers
+# with the h5 format registry. Without them HDFArchive hands back raw
+# HDFArchiveGroups and every .mesh / .data access below fails.
+from triqs.gfs import Gf, BlockGf, MeshImTime
+from triqs.stat.histograms import Histogram
 from h5 import HDFArchive
 
 # ---------------------------------------------------------------------------- paths ----
@@ -188,7 +193,11 @@ for k, (name, r) in enumerate(runs.items()):
         h = r[key]
         if h is None:
             continue
-        data = np.asarray(h.data, dtype=float)
+        # perturbation_order is stored per hybridization block (a dict of histograms);
+        # perturbation_order_dyn is a single histogram. Sum the blocks so each curve is
+        # one distribution.
+        hists = list(h.values()) if isinstance(h, dict) else [h]
+        data = sum(np.asarray(x.data, dtype=float) for x in hists)
         norm = data.sum()
         if norm > 0:
             ax[1, 1].plot(np.arange(len(data)), data / norm, color=COLORS[k], linestyle=ls,
@@ -196,7 +205,7 @@ for k, (name, r) in enumerate(runs.items()):
 ax[1, 1].set_xlabel('expansion order'); ax[1, 1].set_ylabel('probability')
 ax[1, 1].set_title('Expansion orders (solid: hybridization, dashed: dynamical)', fontsize=10)
 ax[1, 1].set_yscale('log')
-
+ax[1, 1].set_xlim(0,50)
 for a_ in ax.flat:
     a_.legend(fontsize=7, frameon=False)
     a_.grid(alpha=0.25, linewidth=0.5)

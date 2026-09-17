@@ -19,60 +19,148 @@
 \begin{document}
 \title{Implementation notes: multi-orbital dynamical interactions and the\\
 Lang--Firsov resummation in \texttt{CTHYB}}
-\author{Andrew Hardy}
+%\author{Andrew Hardy}
 \maketitle
 
 \begin{abstract}
-This note documents the multi-orbital generalization of \texttt{CTHYB}'s retarded
-(dynamical) interaction machinery on the \texttt{multiorbital-v2} branch: a general
-4-index vertex representation, an exact symbolic-algebra criterion for routing each
-vertex to the analytic Lang--Firsov resummation vs.\ the stochastic double expansion,
-a linear-algebra generalization of that criterion to \emph{combinations} of orbital
-densities (needed for a genuine Hubbard--Kanamori $h_{\rm loc}$), and the static
-(chemical-potential/interaction) shift the resummation induces. The last of these is
-derived here in closed form directly from the code's own boundary-value problem and
-independently cross-checked against the exactly-solvable single-phonon (Lang--Firsov)
-polaron shift and against a real data set in which forgetting it visibly broke
-particle-hole symmetry.
+This note documents \texttt{CTHYB}'s multi-orbital retarded (dynamical) interaction
+machinery: the 4-index vertex representation, the symbolic-algebra criterion that routes
+each vertex to the analytic Lang--Firsov resummation or to the stochastic double
+expansion, the linear-algebra extension of that criterion to \emph{combinations} of
+orbital densities (which a genuine Hubbard--Kanamori $\Hloc$ requires), the static
+chemical-potential and interaction shift the resummation induces, and the estimators that
+read correlators off either sampling route. The static shift is derived in closed form
+from the code's own boundary-value problem and cross-checked against the exactly-solvable
+single-phonon polaron shift.
 \end{abstract}
 
 \tableofcontents
 
-\section{Overview of what changed}
+\section{Overview}
 
 \begin{itemize}
-  \item \textbf{General 4-index vertex.} A dynamical vertex is now an ordinary pair of
-    fermion bilinears with a retarded coupling, $D(\t)\,O_1(\t)\,O_2(0)$
-    (\texttt{dyn\_vertex\_t} in \texttt{configuration.hpp}), registered via
-    \texttt{solver.add\_dyn\_vertex(op1,op2,coupling)}. The old hardcoded
-    Jperp/D0 shapes are now convenience sugar that expand into the same
-    representation (Sec.~\ref{sec:setup}).
-  \item \textbf{Exact eligibility criterion.} Each vertex is Lang--Firsov-eligible
-    only if both $O_1,O_2$ are number operators \emph{and individually commute with
-    $\Hloc$}, checked by plain symbolic operator algebra
-    (\texttt{classify\_dyn\_vertices}), not by guessing from the input's shape and not
-    via \texttt{atom\_diag} (Sec.~\ref{sec:eligibility}).
-  \item \textbf{Conserved-density-combination recovery.} A genuine Hubbard--Kanamori
-    $\Hloc$ (with spin-flip and pair-hopping) does \emph{not} conserve individual
-    orbital densities, only certain linear combinations of them ($N_\uparrow$,
-    $N_\downarrow$ for the standard case). \texttt{find\_conserved\_density\_combinations}
-    finds this subspace exactly (nullspace of a commutator map), and
-    \texttt{split\_density\_couplings} splits the coupling of the rejected density
-    vertices into a part built only from those combinations, resummed analytically, and
-    a residual, sampled stochastically --- an exact identity, with the split chosen so
-    that the residual carries no weight of the opposite sign
-    (Secs.~\ref{sec:conserved}--\ref{sec:split-sign}).
-  \item \textbf{The static (K$'(0)$) shift and its effect on $\mu$.} The analytic
-    resummation is exact only after subtracting an instantaneous piece of the retarded
-    coupling from $\Hloc$ before diagonalizing it. This piece renormalizes the
-    effective chemical potential and interaction matrix; not accounting for it when
-    picking a target filling silently moves the model off half filling and breaks
-    particle-hole symmetry (Secs.~\ref{sec:shift}--\ref{sec:ph}). This is derived here
-    from scratch, cross-checked against the exactly-solvable single-oscillator
-    Lang--Firsov shift, and matched numerically against a real run in which the
-    correction was missing.
-
+  \item \textbf{The vertex.} A dynamical vertex is a pair of fermion bilinears with a
+    retarded coupling, $D(\t)\,O_1(\t)\,O_2(0)$ (\texttt{dyn\_vertex\_t} in
+    \texttt{configuration.hpp}), registered through
+    \texttt{solver.add\_dyn\_vertex(op1,op2,coupling)}. \texttt{D0\_tau} and
+    \texttt{Jperp\_tau} are convenience inputs that expand into the same representation
+    (Sec.~\ref{sec:api}).
+  \item \textbf{Routing.} A vertex is Lang--Firsov-eligible if both $O_1,O_2$ are number
+    operators \emph{and} each commutes with $\Hloc$, checked by symbolic operator algebra
+    in \texttt{classify\_dyn\_vertices} (Sec.~\ref{sec:eligibility}). Everything else is
+    sampled stochastically.
+  \item \textbf{Conserved density combinations.} A Kanamori $\Hloc$ with spin-flip and
+    pair-hopping conserves no individual orbital density, only combinations of them
+    ($N_\uparrow,N_\downarrow$ in the standard case).
+    \texttt{find\_conserved\_density\_combinations} obtains that subspace as the nullspace
+    of a commutator map, and \texttt{split\_density\_couplings} writes a rejected density
+    coupling as an analytic part built only from those combinations plus a stochastic
+    residual. The split is an identity, and is chosen so the residual carries no weight of
+    the opposite sign (Secs.~\ref{sec:conserved}--\ref{sec:split-sign}).
+  \item \textbf{The static shift.} The resummation is exact only once an instantaneous
+    piece of the retarded coupling, $K'(0)$, is folded into $\Hloc$ before it is
+    diagonalized. It renormalizes the effective interaction matrix and chemical potential,
+    so a filling target computed from the bare interaction alone misses half filling and
+    breaks particle-hole symmetry (Secs.~\ref{sec:shift}--\ref{sec:ph}).
+  \item \textbf{Ergodicity of the stochastic expansion.} \texttt{insert\_dyn} and
+    \texttt{remove\_dyn} act on whole vertices and cannot reach pairings in which every
+    vertex crosses another. \texttt{swap\_dyn} exchanges partners between two vertices at
+    fixed operator positions and makes the sampling ergodic (Sec.~\ref{sec:swap}).
+  \item \textbf{Estimators.} Both routes admit an exact correlator estimator obtained by
+    differentiating $\ln Z$ with respect to a retarded coupling: a vertex-separation
+    histogram for the stochastic channels, and the density-kink correlator for the
+    Lang--Firsov ones (Sec.~\ref{sec:derivative}).
 \end{itemize}
+
+\section{The vertex representation and the solve-time pipeline}
+\label{sec:api}
+
+\subsection{What a vertex is}
+
+\texttt{dyn\_vertex\_t} (\texttt{configuration.hpp}) holds two
+\texttt{many\_body\_operator} expressions and a coupling curve,
+\begin{verbatim}
+  struct dyn_vertex_t { many_body_op_t op1, op2; gf<imtime, scalar_valued> coupling; };
+\end{verbatim}
+meaning $D(\t)\,O_1(\t)\,O_2(0)$. The operators are written exactly as in
+\texttt{h\_int}, e.g.\ \verb|c_dag('up',0)*c('down',0)|. This reduces to the block/inner-index
+form \texttt{op\_desc\_pair\_t} by \texttt{extract\_bilinear} where the Monte Carlo needs
+it. Three constraints follow from that lowering
+\begin{itemize}
+  \item \textbf{Each side is a single fermion bilinear} --- one creation and one
+    annihilation operator. Pair hopping is therefore not representable:
+    $c\ndag_a c\ndag_b$ is a pair-creation operator, and \texttt{insert\_dyn} /
+    \texttt{remove\_dyn} assume one creation plus one annihilation per side. There is no
+    \texttt{pair\_hopping} argument anywhere, so its absence cannot be mistaken for
+    support.
+  \item \textbf{Each side carries unit coefficient.} \texttt{extract\_bilinear} throws
+    unless $|{\rm coeff}-1|<10^{-12}$. A scalar on $O_1$ or $O_2$ would be redundant with
+    the coupling, $D\,(aM_1)(bM_2)=(abD)\,M_1M_2$, and absorbing it silently would hide a
+    factor the caller can equally well write into $D$.
+  \item \textbf{A sum of bilinears is expanded by the caller.} A spin operator in a
+    rotated basis is a sum of several patch-basis bilinears, and has to be written out
+    as monomial pairs; \texttt{expand\_retarded\_product} in the DCA benchmark's
+    \texttt{dca\_model.py} does this and merges duplicates.
+\end{itemize}
+
+\subsection{The convenience inputs}
+
+\texttt{D0\_tau} and \texttt{Jperp\_tau} expand into the same vertex list:
+\begin{itemize}
+  \item \texttt{expand\_D0\_into\_vertices}: every non-zero $(bl_1,i_1,bl_2,i_2)$ entry
+    becomes its own vertex $n_{bl_1 i_1}(\t)n_{bl_2 i_2}(0)$. No orbital or spin
+    convention is assumed, because a density-density coupling does not need one.
+  \item \texttt{expand\_Jperp\_into\_vertices}: \texttt{Jperp\_tau} is a \emph{scalar}
+    \texttt{gf<imtime>}, a single global up/down coupling matching CT-SEG's interface
+    exactly. It therefore supports only the unambiguous case of exactly two blocks of
+    one mode each, and raises an error otherwise, directing the caller to
+    \texttt{add\_dyn\_vertex} --- anything more general would require guessing an orbital
+    layout.
+\end{itemize}
+For a Kanamori model, \texttt{python/triqs\_cthyb/dynamical\_interactions.py} provides
+\texttt{kanamori\_dynamical\_vertices(solver, spin\_names, orb\_names, U, Uprime, J\_hund,
+spin\_flip)}, the dynamical generalization of \texttt{h\_int\_kanamori}'s density-density
+and spin-flip terms term for term, with each coupling either a single \texttt{Gf}
+broadcast over all pairs or a \texttt{dict[(a1,a2)] -> Gf}.
+
+\subsection{The pipeline}
+
+\texttt{solver\_core::solve()} runs, in order:
+\begin{enumerate}
+  \item \texttt{collect\_dyn\_vertices} --- merge the explicit vertices with the expanded
+    \texttt{D0\_tau}/\texttt{Jperp\_tau} into one list.
+  \item \texttt{classify\_dyn\_vertices} --- route each vertex to \texttt{.lang\_firsov}
+    or \texttt{.stochastic} by the criterion of Sec.~\ref{sec:eligibility}.
+  \item \texttt{conserved\_densities} $+$ \texttt{split\_density\_couplings} --- split the
+    \emph{rejected density} vertices as in Sec.~\ref{sec:split}, moving part of each back
+    to the analytic list.
+  \item \texttt{apply\_lang\_firsov\_shift} --- fold the static $K'(0)$ part of the
+    analytic vertices into $\Hloc$. This must run \emph{before} \texttt{h\_diag} is built.
+  \item \texttt{build\_K\_n} --- build the $K_n[a][b][:]$ Legendre kernel used by
+    \texttt{compute\_lang\_firsov\_ratio}.
+  \item \texttt{fold\_into\_stochastic\_catalog} --- convert the rest into
+    \texttt{dyn\_op\_list}/\texttt{dyn\_interactions} for \texttt{insert\_dyn} /
+    \texttt{remove\_dyn} / \texttt{swap\_dyn}.
+\end{enumerate}
+Every vertex ends in exactly one list, so nothing is dropped, and
+\texttt{has\_dyn\_interactions} --- which gates whether the stochastic moves and measure
+are registered at all --- is simply \verb|!dyn_op_list.empty()|.
+
+\subsection{Switches and the audit}
+
+\texttt{params.lang\_firsov} defaults to \texttt{true}, which is safe because of the
+per-vertex routing above: anything ineligible falls back to the stochastic expansion
+automatically. Setting it to \texttt{false} skips the eligibility test entirely and forces
+every vertex stochastic, which is what the \texttt{lang\_firsov=True}/\texttt{False}
+cross-checks use.
+
+At \texttt{verbosity >= 4} the solver prints an audit of everything it inferred: the
+conserved density combinations of $\Hloc$; every vertex with the four conditions the
+routing rests on (is it $n_a$, and does it commute with $\Hloc$, for each of $O_1,O_2$)
+and the resulting route; the analytic and stochastic lists the split produced, with each
+coupling's $D(0)$ and $D(\beta/2)$; the aggregate $K'(0)$ folded into $\Hloc$; and the
+final $\Hloc$. (The compile-time \texttt{EXT\_DEBUG} option is separate: it prints per
+Monte Carlo move, not once per solve.)
 
 \section{Setup: retarded density-density interactions in the local trace}
 \label{sec:setup}
@@ -133,19 +221,15 @@ where the sum runs over pairs of fermion-operator insertions/removals $\alpha,\b
 (each contributing $s=+1$ if it is a creation operator being inserted or an
 annihilation operator being removed, $s=-1$ otherwise), and $K_{ab}$ is built once per
 solve from $D_{ab}$ (\texttt{build\_K\_n}) and evaluated by
-\texttt{qmc\_data::compute\_lang\_firsov\_ratio} (\texttt{qmc\_data.hpp}). This is
-literally what the code computes; Eq.~\eqref{eq:ratio} is copied from the comment
-above that function.
+\texttt{qmc\_data::compute\_lang\_firsov\_ratio} (\texttt{qmc\_data.hpp}).
 
-\texttt{classify\_dyn\_vertices} enforces the eligibility condition by direct symbolic
-operator algebra, $(O\,\Hloc - \Hloc\,O).\mathtt{is\_almost\_zero()}$, on the actual
-$\Hloc$ used in the solve --- not via \texttt{atom\_diag}. This was a deliberate
-choice: \texttt{atom\_diag}'s quantum-number machinery labels Fock states by diagonal
-matrix elements in the \emph{fundamental} operator basis, which is only faithful when
-the candidate operator is already diagonal there, and (a genuine upstream issue found
-while implementing this) segfaults during construction when fed $\ge 2$
-simultaneously non-commuting \texttt{qn\_vector} entries. Plain operator algebra has
-neither problem.
+\texttt{classify\_dyn\_vertices} tests the condition by direct symbolic operator algebra,
+$(O\,\Hloc-\Hloc\,O).\mathtt{is\_almost\_zero()}$, on the actual $\Hloc$ used in the
+solve. It does not use \texttt{atom\_diag}, whose quantum-number machinery labels Fock
+states by diagonal matrix elements in the \emph{fundamental} operator basis --- faithful
+only when the candidate operator is already diagonal there --- and which segfaults during
+construction when fed two or more simultaneously non-commuting \texttt{qn\_vector}
+entries.
 
 \section{From $D_{ab}(\t)$ to $K_{ab}(\t)$: a boundary-value problem in Legendre space}
 \label{sec:shift}
@@ -223,6 +307,41 @@ one-sided slope). \texttt{apply\_lang\_firsov\_shift} moves it into $\Hloc$ inst
 \end{align}
 applied for both orderings $(a,b),(b,a)$, giving a total $K'(0)$ per unordered pair.
 
+\subsection{Computing the shift in practice}
+\label{sec:kprime-practice}
+
+Four facts about Eq.~\eqref{eq:kprime0} that are easy to get wrong:
+
+\begin{itemize}
+  \item \textbf{The two-term formula is an identity, not a truncation.} Equivalently
+    $K'(0)=-\tfrac1\beta\int_0^\beta(\beta-\t)D(\t)\,d\t$, and $(\beta-\t)$ is degree 1
+    in $x=2\t/\beta-1$, so every $P_{l\ge2}$ is orthogonal to it and cannot contribute.
+    \textbf{\texttt{dyn\_n\_l} therefore cannot change the static offset}, and raising it
+    cannot fix an offset problem. The only error is the quadrature of the two moments:
+    the C++ \texttt{fit\_legendre\_coeffs} uses the trapezoid rule, whose error is
+    ${\sim}10^{-6}$ at \texttt{n\_tau\_bosonic}${}=2001$ because the boson kernel is most
+    curved exactly at the endpoints; the Python \texttt{kprime\_0} uses Simpson
+    (${\sim}10^{-10}$).
+  \item \textbf{Closed form for a boson.} $\int_0^\beta Q = -1/\w_0^2$ and
+    $\int_0^\beta Q\,x = 0$, so a coupling $\lambda\,Q(\t)$ has
+    $K'(0)=\lambda/(2\w_0^2)$ exactly. For the phonon $D_{ab}=g_ag_bQ$ this is an
+    unordered-pair shift $-g_ag_b/\w_0^2$ and a level shift $-g_a^2/(2\w_0^2)$, which is
+    what the cross-check below rederives.
+  \item \textbf{The zero-frequency shortcut needs a symmetric kernel.} If
+    $D(\t)=D(\beta-\t)$ then $\langle\beta-\t\rangle=\beta/2$ and
+    $K'(0)=-\tfrac12 D(i\nu=0)$, as \texttt{holstein.py} uses. Ordinary boson propagators
+    are symmetric, so it is correct there; for an asymmetric kernel (a charged or complex
+    boson, or a $D(\t)$ coming out of a self-consistent loop) it is wrong --- by 44\% for
+    the control case in the \texttt{Py\_dyn\_static\_shift} test.
+  \item \textbf{Sign trap.} The level shift enters
+    $\mu_a=\tfrac12\sum_{b\neq a}W_{ab}+{\rm level\_shift}_a$ with a \emph{plus}, because
+    it is the shift applied to the orbital \emph{energy} ($=-K'(0)$), not to $\mu$. With
+    the sign flipped, the Kanamori-plus-phonon case $g=(0.7,0.3)$ returns a $\mu$ that is
+    \emph{uniform} across orbitals ($2.04$ for both) instead of $1.55/1.95$ --- entirely
+    plausible-looking and wrong. The test asserts that the two orbitals differ for
+    exactly this reason.
+\end{itemize}
+
 \subsection{Cross-check: the exactly-solvable single-phonon polaron shift}
 
 For the concrete model \eqref{eq:holstein}, the phonon coordinate can be integrated
@@ -272,17 +391,26 @@ input $\mu$ is supplied), the input one must actually pass is
   \mu_i^{\rm input} \;=\; \mu_i^{\rm half} - \tfrac12 K'(0)_{ii},
   \label{eq:mucorr}
 \end{equation}
-so that the two shifts compose to the correct target. This is exactly what
-\texttt{kanamori\_dyn.py}'s ``mu correction'' block computes, using a one-cycle probe
-solve to read off \texttt{S.lang\_firsov\_U\_renorm} (which already
-\emph{is} $U^{\rm renorm}$, since \texttt{apply\_lang\_firsov\_shift} is
-deterministic) and \texttt{S.lang\_firsov\_mu\_renorm}
-($=\mu^{\rm bare}_i+\tfrac12K'(0)_{ii}$, the probe's own effective $\mu$):
-\begin{equation*}
-  \texttt{mu[i]} = \texttt{mu\_bare} + \big(\underbrace{\tfrac12\textstyle\sum_{j\neq i}U^{\rm renorm}_{ij}}_{\mu_i^{\rm half}} - \underbrace{(\mu^{\rm bare}+\tfrac12K'(0)_{ii})}_{\texttt{mu\_renorm[i]}}\big)
-  = \mu_i^{\rm half}-\tfrac12K'(0)_{ii},
-\end{equation*}
-i.e.\ $\mu^{\rm bare}$ cancels and Eq.~\eqref{eq:mucorr} is recovered exactly.
+so that the two shifts compose to the correct target.
+
+\paragraph{Who computes it.} Four pure functions in
+\texttt{python/triqs\_cthyb/dynamical\_interactions.py} --- \texttt{kprime\_0},
+\texttt{kprime\_0\_boson}, \texttt{static\_shift} and \texttt{half\_filling\_mu} ---
+evaluate Eqs.~\eqref{eq:kprime0} and \eqref{eq:mucorr} from the \emph{input} vertex list,
+before any solve, and the caller adds the result to $\mu$ explicitly. The input coupling
+is the right starting point because $K'(0)$ is a property of the Hamiltonian, not of the
+route that samples it: a non-uniform coupling has part of its static shift inside vertices
+that go stochastic, so any quantity reported by the analytic path alone under-counts it,
+and a $\mu$ taken from such a quantity would give \texttt{lang\_firsov=True} and
+\texttt{lang\_firsov=False} runs \emph{different Hamiltonians}, destroying the
+cross-check the two routes exist to provide. For the same reason a benchmark driver that
+reads the shift back from a probe solve must run that probe with
+\texttt{lang\_firsov=True} whatever the production setting, and save the resulting $\mu$
+so the analysis can confirm both runs used it. For the realized Hamiltonian itself,
+\texttt{h\_loc()} returns it exactly, including non-density terms that a $U/\mu$ pair
+cannot represent. \texttt{Py\_dyn\_static\_shift} pins the four functions against
+\texttt{ed\_reference}'s ED-validated $\mu$ and against \texttt{holstein.py}'s
+$U/2-g^2/\w_0^2$.
 
 \subsection{What it looks like when this is skipped}
 
@@ -294,7 +422,7 @@ spin-orbitals per site gives
   \mu^{\rm half} = 2.5 - \tfrac32(0.25) = 2.125, \qquad
   \mu^{\rm input} = 2.125 - \tfrac12(0.25) = 2.0,
 \end{equation}
-matching the actual solver output (\texttt{S.lang\_firsov\_mu\_renorm}-corrected run)
+matching the actual solver output of the corrected run
 to 5 significant figures. A production run that predates this correction (same
 physical parameters, run before the fix landed) used the uncorrected
 $\mu^{\rm bare}=2.5$ throughout, and shows exactly the expected symptom in the raw
@@ -360,17 +488,15 @@ coupling that is entirely of that form leaves no residual and goes analytic in f
 Because $N_\uparrow$ and $N_\downarrow$ have disjoint orbital support, same-spin and
 opposite-spin pairs land on non-overlapping matrix entries, so $U(\t)\neq U'(\t)$ (the
 physically standard Kanamori shape, not a degenerate special case) is of that form and
-is handled entirely analytically --- verified numerically
-(\texttt{test/python/kanamori\_dyn\_nonuniform.py}: 16/16 vertices analytic) as well as
-derived here.
+is handled entirely analytically
+(\texttt{test/python/kanamori\_dyn\_nonuniform.py}: 16/16 vertices analytic).
 
 \section{Splitting a density coupling into Lang--Firsov and stochastic parts}
 \label{sec:split}
 
-\emph{Status: implemented as \texttt{split\_density\_couplings}
+Implemented as \texttt{split\_density\_couplings}
 (\texttt{dynamical\_interactions.cpp}), with the sign-preserving choice of
-Sec.~\ref{sec:split-sign}, replacing the all-or-nothing fit of Sec.~\ref{sec:conserved}
-(\texttt{recover\_conserved\_density\_groups}).}
+Sec.~\ref{sec:split-sign}.
 
 \subsection{The coupling as a matrix, and the projector $P$}
 
@@ -434,9 +560,9 @@ A density coupling can be resummed only if it is of the form $\sum_{ij}\Gamma_{i
 i.e.\ lies in $\mathcal L=\{E:PEP=E\}$. $PDP$ is the orthogonal (Frobenius) projection of
 $D$ onto $\mathcal L$ ($PRP=0$ implies ${\rm tr}(R^TE)=0$ for every $E\in\mathcal L$), so
 $R$ is as small as it can be, and $R=0$ exactly when $D$ is representable
-($D=V^T\Gamma V\Leftrightarrow PDP=D$, with $V$ the matrix of rows $v_i$). That is the
-existing recovery criterion, so the split reproduces today's behavior whenever today's
-fit succeeds, and generalizes it otherwise. Smallest is not the same as best:
+($D=V^T\Gamma V\Leftrightarrow PDP=D$, with $V$ the matrix of rows $v_i$), which is
+exactly the condition under which the whole coupling is analytic. Smallest is not the
+same as best:
 Sec.~\ref{sec:split-sign} explains why the implementation uses a different, sign-preserving
 choice.
 
@@ -449,7 +575,7 @@ in the same vertex convention as $D$.
 
 \begin{itemize}
   \item \textbf{Density-only $\Hloc$.} Every $n_a$ is conserved, $\mathcal C=\mathbb R^M$,
-    $P=1$, $R=0$: everything goes to Lang--Firsov, as now.
+    $P=1$, $R=0$: the whole coupling is resummed analytically.
   \item \textbf{Only $N$ conserved.} $v=\mathbf 1/\sqrt M$, $P=\mathbf 1\mathbf 1^T/M$ and
     $PDP=\bar U(\t)\,\mathbf 1\mathbf 1^T$ with $\bar U=M^{-2}\sum_{ab}D_{ab}$: exactly the
     ``$U_{\rm tot}+\delta U$'' split, with $U_{\rm tot}$ the average of all entries and
@@ -468,13 +594,13 @@ in the same vertex convention as $D$.
     $\tfrac14NN$, the stochastic expansion the rest.
 \end{itemize}
 
-\paragraph{Bug in the previous fit.} \texttt{recover\_conserved\_density\_groups}
-restricted the $v_i$ to the orbitals touched by a vertex group before fitting. In the
-last example the restricted vectors are just $n_{0\uparrow}$ and $n_{0\downarrow}$, the
-fit is trivially exact, and all four orbital-0 vertices were routed to Lang--Firsov,
-treating the non-conserved $n_0$ as if it were conserved (confirmed by a zero-cycle
-probe: ``recovered 4 vertex(es)''). The projector uses the full $v_i$, so this cannot
-happen: $Pu\neq u$.
+\paragraph{$P$ uses the full $v_i$.} Conservation is a property of $\Hloc$ on the whole
+orbital space, not of the orbitals one vertex happens to touch, so the $v_i$ are never
+restricted to a vertex's own support before projecting. Restricting them in the last
+example would leave $n_{0\uparrow}$ and $n_{0\downarrow}$, making the coupling trivially
+representable and routing all four orbital-0 vertices to Lang--Firsov --- treating the
+non-conserved $n_0$ as conserved. With the full $v_i$, $Pu\neq u$ and the residual
+survives.
 
 \subsection{Which split: the sign}
 \label{sec:split-sign}
@@ -566,10 +692,6 @@ the time-ordered expansion of $Z=\mathrm{Tr}\,\TT\,e^{-S_{\rm samp}}$ with
   O_{1,t}(\t_1)\,O_{2,t}(\t_2).
   \label{eq:ssamp}
 \end{equation}
-\texttt{swap\_dyn} only exchanges the times of two bilinears of the same kind, so every
-operator stays where it is, and it accepts with the ratio of coupling products. It
-therefore samples the same weight.
-
 Relation to Eq.~\eqref{eq:sret}: split the square $[0,\beta]^2$ into $\t>\t'$ and
 $\t<\t'$. In the second region use bosonic periodicity, $D(s-\beta)=D(s)$, and rename
 $\t\leftrightarrow\t'$, $a\leftrightarrow b$ (densities commute under $\TT$):
@@ -580,6 +702,42 @@ $\t\leftrightarrow\t'$, $a\leftrightarrow b$ (densities commute under $\TT$):
 Under Eq.~\eqref{eq:dsym} the bracket is $D_{ab}(s)$. So every ordered pair $(a,b)$ is
 its own type with $f_{(a,b)}=D_{ab}$ at full weight, which is exactly how
 \texttt{expand\_D0\_into\_vertices} builds the catalogue.
+
+\subsection{Re-pairing the vertices: \texttt{swap\_dyn}}
+\label{sec:swap}
+
+\texttt{insert\_dyn} and \texttt{remove\_dyn} act on a whole vertex: its two bilinears
+enter or leave the trace together, at the two times drawn by that one move. For a
+spin-flip vertex $S^+(\t_1)S^-(\t_2)$, the vertex can only be removed when its own $S^+$
+and $S^-$ are adjacent in the flip sequence, so the reachable configurations are those
+that can be dismantled one adjacent or nested pair at a time. Pairings in which
+\emph{every} vertex crosses another are unreachable, and the smallest of these has three
+vertices --- so the two moves alone are not ergodic, and the omission is missing weight,
+i.e.\ a bias, not merely slow mixing.
+
+\texttt{swap\_dyn} (\texttt{moves/swap\_dyn.cpp}, after CT-SEG's
+\texttt{swap\_spin\_lines}) supplies the missing connectivity. It picks two distinct
+vertices and one bilinear in each, and exchanges their \emph{partners} --- which $S^+$ goes
+with which $S^-$ --- by swapping the two bilinears' times between the vertices and
+rebuilding each in catalog form ($O_1$ at the later time).
+
+The exchange is restricted to two bilinears \emph{of the same kind}, so every fermion
+operator stays at exactly the time it already occupied. The trace, the determinants, the
+permutation sign and the Lang--Firsov weight (Eq.~\eqref{eq:ratio}, which depends only on
+where the density kinks sit) are therefore all unchanged, only the coupling each pair is
+evaluated at changes, and the acceptance is the ratio of coupling products,
+\begin{equation}
+  \frac{f_{t_1}(\t_1'-\t_2')\,f_{t_2}(\t_1''-\t_2'')}{f_{t_1}(\t_1-\t_2)\,f_{t_2}(\t_1''-\t_2'')} .
+\end{equation}
+No trace evaluation is needed. Two guards keep detailed balance, both symmetric between
+the two directions: the ordered bilinear pair must match exactly one catalog entry (if it
+matches several the vertex's entry is ambiguous and the move rejects in \emph{both}
+directions), and the re-paired vertex must match an entry that exists.
+
+Since no operator position changes, the move samples the weight of
+Eq.~\eqref{eq:ssamp}: it adds connectivity, not a different measure. It is a prerequisite
+for the histogram estimator below, which reads only vertex separations and so cannot see
+an unreachable pairing at all.
 
 \subsection{Stochastic channels: the vertex histogram}
 \label{sec:histogram}
@@ -701,6 +859,110 @@ consequences:
 Supporting evidence for the all-densities-conserved case: $\chi_{S_zS_z}$ from this
 estimator agrees with CT-INT and CT-SEG for the spin--spin model. The ED reference with
 a phonon and a discrete bath (to be added) tests the multi-orbital case independently.
+
+\section{Tests, benchmarks, and open items}
+\label{sec:tests}
+
+\subsection{What is covered}
+
+Registered \texttt{ctest}s, in the order they exercise the pipeline:
+\begin{itemize}
+  \item \texttt{Py\_dyn\_static\_shift} --- the static shift of
+    Sec.~\ref{sec:kprime-practice} on its own, no Monte Carlo: pins
+    \texttt{kprime\_0}/\texttt{static\_shift}/\texttt{half\_filling\_mu} to
+    \texttt{ed\_reference}'s ED-validated $\mu$ and to \texttt{holstein.py}'s
+    $U/2-g^2/\w_0^2$, and asserts the two orbitals of the $g=(0.7,0.3)$ case differ (the
+    sign trap).
+  \item \texttt{spin\_spin} (C++) and \texttt{Py\_spin\_spin} --- single orbital, the
+    scalar \texttt{Jperp\_tau}/\texttt{D0\_tau} path.
+  \item \texttt{Py\_kanamori\_dyn} --- a Kanamori $\Hloc$ with spin-flip and pair-hopping,
+    so no individual orbital density commutes with it while $N_\uparrow,N_\downarrow$ do.
+    Deterministic, 5000 cycles, against a reference file; all 16 vertices route
+    analytically.
+  \item \texttt{Py\_kanamori\_dyn\_nonuniform} --- the same with $U(\t)\neq U'(\t)$,
+    confirming the claim at the end of Sec.~\ref{sec:conserved} that the standard Kanamori
+    shape is exactly representable (16/16 analytic).
+  \item \texttt{Py\_kanamori\_dyn\_selfconsistency} --- the physics check:
+    \texttt{lang\_firsov=True} against forced \texttt{lang\_firsov=False} on an identical
+    setup, compared through $G_l$. Agreement ${\sim}0.02$ at 200k/300k cycles, average
+    sign ${\sim}0.9998$ in both.
+\end{itemize}
+Against other solvers, for the single-orbital case CT-SEG can reach: with
+\texttt{lang\_firsov=True} and the same bath, both give average sign exactly $1.0$ and
+$\max|G_{\rm ctseg}-G_{\rm cthyb}|$ falls from $3.5$ at 2k cycles to $0.17$ at 100k, which
+validates the $D0$ sign convention and the Lang--Firsov path. $\chi_{S_zS_z}$ from the
+estimator of Sec.~\ref{sec:derivative} agrees with CT-INT and CT-SEG for the spin--spin
+model.
+
+Production benchmarks under \texttt{benchmark/dynamic\_int/} are not CI-gated:
+\texttt{kanamori\_dyn.py} (Bethe bath, with the $\mu$ correction applied from the input
+coupling), \texttt{kanamori\_dyn\_spinflip.py} (a retarded inter-orbital spin-flip channel
+on top of the density phonon --- mixed routing, 16 analytic and 4 stochastic for
+$n_{\rm orb}=2$), \texttt{multiorb/} (solid\_dmft $GW$+EDMFT input), and
+\texttt{dca\_spin\_spin/} (below). Each has its own launcher and plotting script.
+
+\subsection{The DCA benchmark}
+
+\texttt{benchmark/dynamic\_int/dca\_spin\_spin/} is a two-patch DCA calculation (VBDMFT
+patches, $|k_x|,|k_y|<\pi/\sqrt2$ and the rest) with a \emph{real-space} retarded full
+$\mathbf S\!\cdot\!\mathbf S$ interaction. The static $U$ and the retarded
+$\mathbf S\!\cdot\!\mathbf S$ are both local on the two \emph{rotated} cluster sites, so in
+the solver's working (patch) basis the dynamical vertices are off-diagonal bilinears
+$c\ndag_{Ks}c_{K's'}$ with $K\neq K'$. The per-vertex test of Sec.~\ref{sec:eligibility}
+rejects \emph{every} vertex here, since $n_{Ks}$ does not commute with $\Hloc$, so the
+whole coupling is handled by the ${\rm span}\{N_\uparrow,N_\downarrow\}$ split of
+Sec.~\ref{sec:split}. \texttt{check\_rotation.py} performs 22 symbolic checks with no
+solver, among them the SU(2) consistency relation between the longitudinal and transverse
+parts of a $\lambda(\t)\mathbf S\!\cdot\!\mathbf S$ coupling,
+\texttt{Jperp\_tau}${}=4D0_{\rm same-spin}$ (same sign), which follows because
+$\lambda S^zS^z$ gives $\lambda/4$ for a same-spin pair while
+\texttt{expand\_Jperp\_into\_vertices} consumes $\texttt{Jperp\_tau}/2$ per ordering of
+$\tfrac\lambda2(S^+S^-+S^-S^+)$. \texttt{expand\_retarded\_product} in \texttt{dca\_model.py}
+expands the rotated-basis spin operators into monomial pairs and merges duplicates: for
+$J_{\rm intra}=0,\ J_{\rm inter}=0.5$ that is 192 raw pairs down to 48 vertices (16
+density-density, 32 off-diagonal); for uniform $J$, 384 down to 24, because
+$\sum_{ij}\mathbf S_i\!\cdot\!\mathbf S_j=\mathbf S_{\rm tot}^2$ is basis independent and
+the rotation cancels.
+
+\subsection{Open items}
+
+\begin{itemize}
+  \item \textbf{An ED reference for the DCA benchmark} is not written yet, so that case is
+    currently checked only for internal consistency.
+  \item \textbf{A general sign-preserving split.} Eq.~\eqref{eq:signsplit} applies only
+    when the conserved combinations are indicator vectors of disjoint orbital sets. For
+    any other $\mathcal C$ the rejected density vertices stay fully stochastic; the general
+    case is a small linear program per $\t$, not implemented.
+  \item \textbf{The single-orbital pure-stochastic sign problem.} \texttt{spin\_spin.cpp}
+    with \texttt{lang\_firsov=False} has an average sign of ${\sim}0.009$, effectively
+    noise, against its reference file. Some sign problem is intrinsic here; this magnitude
+    is not. The $D0$ sign convention is validated against CT-SEG and the scalar
+    \texttt{Jperp\_tau} gives bit-identical results, so the open candidates are a stale
+    reference file and a bug in the \texttt{insert\_dyn}/\texttt{remove\_dyn} weight. Two
+    data points favour the former: \texttt{kanamori\_dyn\_selfconsistency} holds average
+    sign near $1.0$ at 300k cycles with the same moves forced on, and the multi-orbital
+    dynamical spin-flip channel degrades smoothly ($0.97/0.89/0.86/0.75$ at
+    $g_{\rm sf}=0.3/0.5/0.7/1.0$) rather than collapsing.
+  \item \textbf{\texttt{benchmark/dynamic\_int/CTHYB\_Benchmarking.ipynb}} parses, but its
+    content has not been reviewed against the merge-resolution policy for this branch
+    (default to \texttt{unstable}'s side unless there is a verified reason to prefer the
+    other).
+\end{itemize}
+
+\subsection{Conventions}
+
+\begin{itemize}
+  \item \textbf{Infer less; require the caller to specify more.} An interface whose
+    assumptions are not met raises an error instead of falling back quietly: this is why
+    \texttt{expand\_Jperp\_into\_vertices} refuses an ambiguous block layout,
+    \texttt{extract\_bilinear} refuses a non-unit coefficient, and a missing diagonal
+    self-term is never supplied on the caller's behalf.
+  \item \textbf{Nothing silent is approximate.} A coupling is resummed analytically only
+    where that is provably exact; the remainder is separated by an identity, never by a
+    heuristic that could quietly change the physics being asked for.
+  \item \textbf{No unicode or mathematical symbols in identifiers} --- plain English names,
+    however verbose.
+\end{itemize}
 
 \begin{thebibliography}{9}
 \bibitem{LangFirsov1962} I.~G.~Lang and Yu.~A.~Firsov, \emph{Zh. Eksp. Teor. Fiz.}

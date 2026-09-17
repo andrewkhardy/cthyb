@@ -84,10 +84,9 @@ def build_and_solve(lang_firsov, n_cycles, seed_offset):
 
 
 # Lang-Firsov run: fast (analytic), forced-stochastic run: needs more statistics to
-# converge to the same precision (empirically confirmed this session -- average sign
-# stays close to 1 in both, no severe sign problem for this particular setup, unlike the
-# unresolved pure-stochastic sign problem documented for the single-orbital spin_spin
-# case; see MULTIORBITAL_IMPLEMENTATION.md).
+# converge to the same precision. Average sign stays close to 1 in both, i.e. no severe
+# sign problem for this setup, unlike the unresolved pure-stochastic one for the
+# single-orbital spin_spin case (doc/notes/dynamical_interactions.tex, "Open items").
 S_lf = build_and_solve(lang_firsov=True, n_cycles=200000, seed_offset=0)
 S_stoch = build_and_solve(lang_firsov=False, n_cycles=300000, seed_offset=1000)
 
