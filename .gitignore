@@ -16,3 +16,9 @@ build/
 __pycache__/
 *.pyc
 *.egg-info/
+
+# clangd index
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/
