@@ -12,6 +12,23 @@ set(PYTHON_LIB_DEST ${TRIQS_PYTHON_LIB_DEST_ROOT}/${PROJECT_NAME})
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/version.py DESTINATION ${PYTHON_LIB_DEST})
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} DESTINATION ${TRIQS_PYTHON_LIB_DEST_ROOT} FILES_MATCHING PATTERN "*.py")
 
+# The Python bindings (*.wrap.cxx / *.wrap.hxx) are GENERATED from the C++ headers by
+# clair-c2py. Never edit them by hand: a hand-patched wrapper silently drifts from
+# solver_core.hpp and then fails to compile against it (e.g. it kept binding
+# lang_firsov_U_renorm / lang_firsov_mu_renorm after those members were removed).
+# So regenerate by default wherever the generator exists, which makes the headers the
+# single source of truth and the post-build git diff the record of what changed.
+# Where clair-c2py is absent (CI, downstream builds) fall back to the committed wrappers.
+find_program(CLAIR_C2PY_EXECUTABLE clair-c2py)
+if(CLAIR_C2PY_EXECUTABLE)
+  # FORCE, so a stale cache from an earlier OFF configure cannot silently reintroduce drift.
+  set(Update_Python_Bindings ON CACHE BOOL "Regenerate the C++ Python bindings via clair-c2py" FORCE)
+else()
+  set(Update_Python_Bindings OFF CACHE BOOL "Regenerate the C++ Python bindings via clair-c2py" FORCE)
+  message(STATUS "clair-c2py not found: building against the committed *.wrap.cxx. "
+                 "Do not edit those by hand -- install clair-c2py to regenerate them.")
+endif()
+
 # Fetch c2py (provides c2py_add_module)
 include(FetchContent)
 FetchContent_Declare(
