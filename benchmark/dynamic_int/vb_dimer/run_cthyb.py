@@ -1,9 +1,9 @@
-# CTHYB run of the two-patch DCA model in dca_model.py: two orbitals = two patch-averaged
+# CTHYB run of the two-patch DCA model in model.py: two orbitals = two patch-averaged
 # Fermi-surface points, a static Hubbard U that is local on the two *rotated* cluster
 # sites, and a retarded full S.S interaction (longitudinal and transverse) that is also
 # written in the site basis.
 #
-#   mpirun -n <N> python cthyb_dca_spin_spin.py --J_inter 0.5 --n_cycles 1000000
+#   mpirun -n <N> python run_cthyb.py --J_inter 0.5 --n_cycles 1000000
 #
 # Run check_rotation.py first -- it validates the rotation, the expansion and the sign
 # conventions symbolically in about a second, with no core hours.
@@ -33,7 +33,7 @@
 #   dyn_vertex_corr_tau   the coupling-derivative estimator, <op1(tau) op2(0)> for every
 #                         stochastic vertex. Contracting these with the expansion
 #                         coefficients rebuilds the site-resolved <S_i(tau).S_j(0)>, which
-#                         O_tau cannot reach -- see plot_dca_spin_spin.py. Only the
+#                         O_tau cannot reach -- see plot_vb_dimer.py. Only the
 #                         stochastic vertices are measured, so the site-resolved
 #                         reconstruction needs --lang_firsov False to be complete.
 
@@ -45,8 +45,12 @@ from triqs.gfs import Fourier
 from triqs.operators import c, c_dag
 from h5 import HDFArchive
 from triqs_cthyb import Solver
-import dca_model as model_def
-from dca_model import key_to_string, N_PATCH
+
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from common import selfenergy  # noqa: E402
+import model as model_def
+from model import key_to_string, N_PATCH
 
 str_to_bool = lambda x: str(x).lower() in ['true', '1', 'yes']
 parser = argparse.ArgumentParser(description='CTHYB: two-patch DCA with a real-space retarded S.S interaction.')
@@ -54,6 +58,9 @@ model_def.add_model_args(parser)
 parser.add_argument('--n_cycles', type=int, default=1000000)
 parser.add_argument('--n_warmup_cycles', type=int, default=50000)
 parser.add_argument('--length_cycle', type=int, default=100)
+parser.add_argument('--max_time', type=int, default=2700,
+                    help='Hard wall-clock cap in seconds for the MC, -1 to disable')
+parser.add_argument('--n_l', type=int, default=50, help='Legendre coefficients for G_l (Sigma route)')
 parser.add_argument('--dyn_n_l', type=int, default=50, help='Legendre coefficients for the dynamical interaction')
 parser.add_argument('--lang_firsov', type=str_to_bool, default=True,
                     help='False forces every vertex through the stochastic expansion, including the part of the '
@@ -75,14 +82,17 @@ args = parser.parse_args()
 M = model_def.Model(args)
 
 n_iw, n_tau, n_tau_bosonic = 1025, 4096, 2001
-S = Solver(beta=M.beta, gf_struct=M.gf_struct, n_iw=n_iw, n_tau=n_tau,
+S = Solver(beta=M.beta, gf_struct=M.gf_struct, n_iw=n_iw, n_tau=n_tau, n_l=args.n_l,
            n_tau_bosonic=n_tau_bosonic, delta_interface=True)
-for bl, delta in M.delta_iw(n_iw):
+# Kept, rather than rebuilt after the solve: this is the *input* hybridization, and it is
+# what Sigma must be constructed from (see the Sigma block below).
+delta_iw = M.delta_iw(n_iw)
+for bl, delta in delta_iw:
     S.Delta_tau[bl] << Fourier(delta)
 
 # Expand the site-basis S.S into single-bilinear monomial pairs and register each one.
 # add_dyn_vertex ignores any coefficient on its operator arguments, so every numeric
-# factor rides in the coupling -- dca_model.register_vertices does that by construction.
+# factor rides in the coupling -- model.register_vertices does that by construction.
 registered = M.register_vertices(S, n_tau_bosonic, basis='site')
 if mpi.is_master_node():
     print(f"Registered {len(registered)} dynamical vertices from the site-basis S.S "
@@ -105,8 +115,10 @@ solve_params = dict(
     n_cycles=args.n_cycles,
     n_warmup_cycles=args.n_warmup_cycles,
     length_cycle=args.length_cycle,
+    max_time=args.max_time,
     lang_firsov=args.lang_firsov,
     dyn_n_l=args.dyn_n_l,
+    measure_G_l=True,
     measure_pert_order=True,
     measure_D0_corr=True,
     measure_O_tau=(M.Sz_total, M.Sz_total),
@@ -148,6 +160,27 @@ if mpi.is_master_node():
     print(f"patch fillings {dict((k, np.round(v, 5).tolist()) for k, v in fillings.items())}, "
           f"total <N> = {total_filling:.5f} (2.0 is half filling)")
 
+    # Sigma, from the *inputs* -- G0^-1 = iw + mu - eps_patch - Delta(iw) -- never from the
+    # solver's h_loc. solve() mutates h_loc by the Lang-Firsov K'(0) shift, so a mu read back
+    # afterwards is route dependent and would hand the lang_firsov True and False runs
+    # different Hamiltonians, destroying the cross-check that is the reason to run the pair.
+    # delta_iw already has the patch level removed (it belongs in h_loc0), so eps carries it.
+    # Preferred route is the Legendre G_l; the G(tau) Dyson inversion is the cross-check, and
+    # the two bracket the systematic (the Legendre one stays causal much further up the axis).
+    eps_patch = np.diag(M.eps_patch)
+    sigma_l = selfenergy.sigma_from_G_l(S.G_l, n_iw, M.mu, delta_iw, eps_patch)
+    sigma_tau = selfenergy.sigma_from_G_tau(S.G_tau, n_iw, M.mu, delta_iw, eps_patch)
+
+    # One curve per spin-orbital, in M.labels order, so it lines up with the ED output.
+    w_n = selfenergy.matsubara_frequencies(sigma_l[M.gf_struct[0][0]].mesh)
+    sigma_orb = np.array([selfenergy.positive_frequency_part(sigma_l[s], (K, K))[1]
+                          for s, K in M.labels])
+    sigma_orb_alt = np.array([selfenergy.positive_frequency_part(sigma_tau[s], (K, K))[1]
+                              for s, K in M.labels])
+    density = selfenergy.density_from_G_iw(selfenergy.G_iw_from_G_l(S.G_l, n_iw))
+    print("  " + selfenergy.diagnose(sigma_orb[0], w_n)["text"])
+    print(f"  <n> = {np.round(density, 5)}")
+
     # Label every measured vertex correlator by its monomial pair, so the analysis script
     # can contract them into site-resolved <S_i(tau).S_j(0)> without relying on ordering.
     def operator_key(op):
@@ -165,9 +198,26 @@ if mpi.is_master_node():
     os.makedirs(args.out_dir, exist_ok=True)
     seed_tag = '' if args.random_seed is None else f"_seed-{args.random_seed}"
     filename = os.path.join(args.out_dir,
-                            f"cthyb_dca_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}{seed_tag}.h5")
+                            f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}{seed_tag}.h5")
     with HDFArchive(filename, 'w') as A:
+        # Same key names as run_ed.py, so plot_vb_dimer.py reads both sides the same way.
+        A['tau'] = np.array([float(t) for t in S.G_tau[M.gf_struct[0][0]].mesh])
+        A['G'] = np.array([S.G_tau[s].data[:, K, K].real for s, K in M.labels])
+        A['w_n'] = w_n
+        A['Sigma'] = sigma_orb
+        A['Sigma_alt'] = sigma_orb_alt
+        A['density'] = density
+        A['labels'] = [f"{s},{K}" for s, K in M.labels]
+        # <S^z_tot(tau) S^z_tot(0)>, which is sum_ij of run_ed.py's chi_zz. O_tau is an
+        # insertion measurement, so it needs no equal-time or coupling correction, and the
+        # sum over sites is basis independent (check_rotation.py proves sum_i S_i^z =
+        # sum_K S_K^z). The per-vertex correlators cannot do this job at beta = 100:
+        # dyn_vertex_corr divides by the coupling and zeroes the points where it vanishes,
+        # which at omega_0 = 1 blanks tau in [18.4, 81.6] -- 63% of the interval.
+        A['tau_corr'] = np.array([float(t) for t in S.O_tau.mesh])
+        A['corr'] = np.asarray(S.O_tau.data).real.flatten()
         A['G_tau'] = S.G_tau
+        A['G_l'] = S.G_l
         A['O_tau'] = S.O_tau
         A['Q_conserved_tau'] = S.Q_conserved_tau
         A['conserved_operators'] = [str(op) for op in S.conserved_density_operators]
@@ -187,7 +237,7 @@ if mpi.is_master_node():
             A['perturbation_order_dyn'] = S.perturbation_order_dyn
         A['perturbation_order'] = S.perturbation_order
         A['params'] = M.params()
-        A['mu_orbital'] = mu_orbital
+        A['mu'] = M.mu
         A['lang_firsov'] = args.lang_firsov
         A['n_cycles'] = args.n_cycles
         A['random_seed'] = -1 if args.random_seed is None else args.random_seed

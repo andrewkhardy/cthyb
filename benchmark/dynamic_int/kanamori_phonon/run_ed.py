@@ -3,7 +3,7 @@
 # phonon truncation,
 #   chi_ab(tau) = <n_a(tau) n_b(0)>   for every pair of impurity spin-orbitals,
 #   G_a(tau)    = -<c_a(tau) c_a^dag(0)>,
-# to test CTHYB's estimators against (plot_ed_vs_cthyb.py). Nothing here uses Lang-Firsov,
+# to test CTHYB's estimators against (plot_kanamori_phonon.py). Nothing here uses Lang-Firsov,
 # the kink estimator or any CTHYB code; only the Kanamori operator is taken from TRIQS, so both
 # sides solve the same Hamiltonian.
 #
@@ -27,6 +27,9 @@ model_def.add_model_args(parser)
 parser.add_argument('--n_ph', type=int, default=24, help='Phonon levels kept')
 parser.add_argument('--n_ph_check', type=int, default=6, help='Also solve with n_ph + this many levels and report the difference')
 parser.add_argument('--n_tau', type=int, default=401, help='Imaginary-time points on [0, beta]')
+parser.add_argument('--n_iw', type=int, default=1025, help='Positive Matsubara frequencies for G(iw) and Sigma(iw)')
+# No --target_n here: the mu bisection lives in calibrate_mu.py, which drives this script
+# as a subprocess and reads the <n_a> line below. One implementation, not two.
 parser.add_argument('--out_dir', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))
 args = parser.parse_args()
 M = model_def.Model(args)
@@ -80,6 +83,9 @@ N_up = occ[:, [j for j in range(n_modes) if spin_of_mode[j] == 'up']].sum(axis=1
 N_dn = occ[:, [j for j in range(n_modes) if spin_of_mode[j] == 'down']].sum(axis=1)
 block_keys = sorted(set(zip(N_up, N_dn)))
 tau = np.linspace(0, M.beta, args.n_tau)
+# Positive fermionic Matsubara frequencies; Sigma is reported on these.
+w_n = (2 * np.arange(args.n_iw) + 1) * np.pi / M.beta
+iw = 1j * w_n
 
 
 def correlators(blocks):
@@ -87,6 +93,7 @@ def correlators(blocks):
     E0 = min(E.min() for _, E, _, _ in blocks.values())
     Z  = sum(np.exp(-M.beta * (E - E0)).sum() for _, E, _, _ in blocks.values())
     chi, G = np.zeros((n_so, n_so, len(tau))), np.zeros((n_so, len(tau)))
+    G_iw = np.zeros((n_so, len(iw)), dtype=complex)
     mean_phonons, top_level = 0.0, 0.0
     for key, (idx, E, U, n_ph) in blocks.items():
         weight_left  = np.exp(-np.outer(M.beta - tau, E - E0))  # e^{-(beta - tau) E_m}
@@ -107,10 +114,20 @@ def correlators(blocks):
             C = U_m.T @ np.kron(c[a][np.ix_(idx_m, idx)], np.eye(n_ph)) @ U
             G[a] -= ((np.exp(-np.outer(M.beta - tau, E_m - E0)) @ C**2) * weight_right).sum(axis=1)
 
+            # Same Lehmann sum directly on the Matsubara axis:
+            #   G_a(iw) = (1/Z) sum_{m,n} |<m|c_a|n>|^2 (e^{-beta E_m} + e^{-beta E_n})
+            #                             / (iw + E_m - E_n)
+            # Doing this instead of Fourier-transforming G(tau) avoids any discretisation
+            # error, so the resulting Sigma is exact up to the phonon truncation -- which is
+            # the whole point of having an ED reference to compare Sigma against.
+            dE = E_m[:, None] - E[None, :]                       # E_m - E_n
+            w8 = np.exp(-M.beta * (E_m - E0))[:, None] + np.exp(-M.beta * (E - E0))[None, :]
+            G_iw[a] += ((C**2 * w8)[None, :, :] / (iw[:, None, None] + dE[None, :, :])).sum(axis=(1, 2))
+
         phonon_number = np.tile(np.arange(n_ph), len(idx))
         mean_phonons += boltzmann @ (phonon_number @ U**2)
         top_level    += boltzmann @ ((phonon_number == n_ph - 1) @ U**2)
-    return chi / Z, G / Z, mean_phonons / Z, top_level / Z
+    return chi / Z, G / Z, G_iw / Z, mean_phonons / Z, top_level / Z
 
 
 def solve(n_ph):
@@ -128,8 +145,8 @@ def solve(n_ph):
 
 
 start = time.time()
-chi, G, mean_phonons, top_level = solve(args.n_ph)
-chi_check, G_check, _, _ = solve(args.n_ph + args.n_ph_check)
+chi, G, G_iw, mean_phonons, top_level = solve(args.n_ph)
+chi_check, G_check, _, _, _ = solve(args.n_ph + args.n_ph_check)
 truncation_chi = np.abs(chi - chi_check).max()
 truncation_G   = np.abs(G - G_check).max()
 print(f"ED done in {time.time() - start:.1f} s, largest block {max(len(np.where((N_up == k[0]) & (N_dn == k[1]))[0]) for k in block_keys) * args.n_ph}")
@@ -153,18 +170,46 @@ if M.V == 0 and M.g_orb[0] == M.g_orb[1]:
     lang_firsov_check = np.abs(chi - chi_shifted).max()
     print(f"V = 0 Lang-Firsov check: max |chi_ED - chi_shifted_fermions| = {lang_firsov_check:.2e}")
 
+# --------------------------------------------------------------------------- self-energy
+#
+# Sigma_a(iw) = G0_a(iw)^-1 - G_a(iw)^-1,   G0_a(iw)^-1 = iw + mu_a - Delta_a(iw)
+#
+# with Delta_a(iw) = V^2/(iw - eps_bath) -- the *same* hybridization the CTHYB side is
+# handed, since the whole point of this model is that both sides solve one Hamiltonian.
+# Everything here is diagonal in the spin-orbital index, so Sigma is a scalar per orbital.
+#
+# G_iw came from the Lehmann sum rather than from Fourier-transforming G(tau), so this
+# Sigma carries no discretisation error: it is exact up to the phonon truncation, which is
+# quoted above. That makes it a genuine reference curve for the QMC Sigma rather than
+# another approximation to argue with.
+delta_iw = M.V**2 / (iw - M.eps_bath)
+Sigma_iw = np.zeros_like(G_iw)
+for a in range(n_so):
+    Sigma_iw[a] = (iw + M.mu[a] - delta_iw) - 1.0 / G_iw[a]
+
+print(f"Sigma: Im<0 on the first 50 w_n for every orbital: "
+      f"{bool(np.all(Sigma_iw[:, :50].imag < 0))}")
+window = (w_n > 1.0) & (w_n < 8.0)
+print("  Re Sigma(1<w<8) per orbital =", np.round(Sigma_iw[:, window].real.mean(axis=1), 4))
+
 os.makedirs(args.out_dir, exist_ok=True)
 filename = os.path.join(args.out_dir, f"ed_{M.tag()}_nph-{args.n_ph}.h5")
 with HDFArchive(filename, 'w') as A:
+    A['solver'] = 'ed'
     A['tau'] = tau
     A['chi'] = chi
     A['G'] = G
+    A['w_n'] = w_n
+    A['G_iw'] = G_iw
+    A['Sigma'] = Sigma_iw
     A['labels'] = [f"{s},{o}" for s, o in M.labels]
     A['mu'] = M.mu
+    A['density'] = occupations
     A['params'] = M.params()
     A['n_ph'] = args.n_ph
     A['truncation_chi'] = truncation_chi
     A['truncation_G'] = truncation_G
+    A['ed_truncation'] = max(truncation_chi, truncation_G)
     A['mean_phonons'] = mean_phonons
     if lang_firsov_check is not None: A['lang_firsov_check'] = lang_firsov_check
 print(f"Saved {filename}")

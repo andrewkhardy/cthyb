@@ -1,4 +1,4 @@
-# Internal consistency checks for the two-patch DCA / real-space S.S setup in dca_model.py.
+# Internal consistency checks for the two-patch DCA / real-space S.S setup in model.py.
 # Everything here is symbolic or linear algebra -- no Monte Carlo, no solver, runs in a
 # second -- so it can be run before committing any core hours.
 #
@@ -41,8 +41,8 @@
 import argparse
 import numpy as np
 from triqs.operators import c, c_dag, Operator, dagger
-import dca_model as model_def
-from dca_model import SPIN_NAMES, N_PATCH, expand_retarded_product, key_to_operator, prune
+import model as model_def
+from model import SPIN_NAMES, N_PATCH, expand_retarded_product, key_to_operator, prune
 
 parser = argparse.ArgumentParser(description='Symbolic checks for the DCA real-space S.S setup.')
 model_def.add_model_args(parser)
