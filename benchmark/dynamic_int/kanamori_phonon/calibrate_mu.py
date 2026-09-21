@@ -89,9 +89,7 @@ print(f"  half filling is mu = {mu_half:.6f} (particle-hole symmetric, phonon sh
 mu, n_achieved, samples = calibrate.bisect_mu(
     density, target_n=args.target_n, mu_guess=mu_half, tol=args.tol, step=0.5, verbose=True)
 
-mu_fit = calibrate.interpolate_from_samples(samples, args.target_n)
 variable = f"MU_B{args.beta:g}_N{str(args.target_n).replace('.', '')}"
-print(calibrate.report(mu_fit, n_achieved, args.target_n,
+print(calibrate.report(mu, n_achieved, args.target_n,
                        label=f"kanamori_phonon, beta = {args.beta:g}, g = {args.g}",
                        variable=variable))
-print(f"  (bisection endpoint {mu:.6f}, linear fit over {len(samples)} exact probes {mu_fit:.6f})")

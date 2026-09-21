@@ -21,7 +21,6 @@ cannot converge below the noise, so `tol` should be set near the statistical err
 probe and `n_probe_cycles` kept small -- there is no point resolving mu to 1e-4 when the
 density is only known to 1e-3.
 """
-import numpy as np
 
 
 def bracket_mu(density, mu_guess, target_n, step=0.5, max_expand=8, verbose=True):
@@ -105,22 +104,10 @@ def report(mu, n_achieved, target_n, label, variable):
     return "\n".join(lines)
 
 
-def interpolate_from_samples(samples, target_n):
-    """Best linear estimate of mu at `target_n` from all `(mu, n)` pairs collected.
-
-    Useful with a noisy probe: a straight-line fit through the bracketing points uses every
-    evaluation rather than only the last bisection step.
-    """
-    mus = np.array(sorted(samples))
-    ns = np.array([samples[mu] for mu in mus])
-    if len(mus) < 2:
-        return float(mus[0])
-    # Restrict to the two points straddling the target where possible.
-    below = np.where(ns <= target_n)[0]
-    above = np.where(ns >= target_n)[0]
-    if len(below) and len(above):
-        i, j = below[-1], above[0]
-        if i != j and ns[j] != ns[i]:
-            return float(mus[i] + (target_n - ns[i]) * (mus[j] - mus[i]) / (ns[j] - ns[i]))
-    slope, intercept = np.polyfit(ns, mus, 1)
-    return float(slope * target_n + intercept)
+# There used to be an `interpolate_from_samples` here that re-estimated mu by fitting all
+# the (mu, n) probes. It was deleted: `bisect_mu` already stops when |n - target| < tol, so
+# its endpoint is the answer, and the fit could only disagree with it by being wrong. It
+# was -- when a probe landed exactly on the target, the straddling-pair branch collapsed
+# (i == j) and it fell back to a straight-line fit over the whole bracket, where mu(n) is
+# distinctly nonlinear. On an exact ED probe that turned mu = 3.624982 (n = 0.750000) into
+# 3.670359, which is n = 0.7561. Report the bisection endpoint.

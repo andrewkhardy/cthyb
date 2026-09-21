@@ -9,7 +9,7 @@ Uses CTSEG as the probe: sign-free for this model and ~14x faster than CTHYB, so
 scan costs less than one production point. Any accurate solver would give the same n(mu) --
 the point of calibrating once is that all three then run the *same* Hamiltonian.
 
-    module load modules/2.5-beta1 && module load triqs/unstable
+    module load modules/2.5-beta1 && module load triqs/multiorbital
     python calibrate_mu.py --beta 10  --target_n 0.75
     mpirun -n 16 python calibrate_mu.py --beta 100 --target_n 0.75
 
@@ -88,9 +88,7 @@ mu, n_achieved, samples = calibrate.bisect_mu(
 
 if mpi.is_master_node():
     # Use every probe, not just the final bisection step -- the probe is stochastic.
-    mu_fit = calibrate.interpolate_from_samples(samples, args.target_n)
     variable = f"MU_B{args.beta:g}_N{str(args.target_n).replace('.', '')}"
-    print(calibrate.report(mu_fit, n_achieved, args.target_n,
+    print(calibrate.report(mu, n_achieved, args.target_n,
                            label=f"spin_spin, beta = {args.beta:g}, bath = {args.bath}",
                            variable=variable))
-    print(f"  (bisection endpoint {mu:.6f}, linear fit through all {len(samples)} probes {mu_fit:.6f})")

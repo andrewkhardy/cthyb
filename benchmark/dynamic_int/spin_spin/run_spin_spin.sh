@@ -15,8 +15,9 @@
 #           sbatch run_spin_spin.sh ctseg
 #           sbatch run_spin_spin.sh ctint
 #
-# One job per solver, because the three need mutually incompatible module stacks -- that is
-# why this takes the solver as an argument rather than running all three in one job.
+# One job per solver, so each gets its own wall-clock budget and a failure in one does not
+# take the others down. (It used to be forced: the three needed incompatible module stacks.
+# triqs/multiorbital now carries all three, so running them in one job would also work.)
 #
 # Grid: beta in {10, 100} x n in {0.5, 0.75}. The three coupling cases (full S.S, Jperp
 # only, Sz.Sz only) are run at the reference point (beta = 10, half filling) only, since
@@ -27,23 +28,13 @@
 set -euo pipefail
 SOLVER="${1:-}"
 case "$SOLVER" in
-  cthyb)
-    module load modules/2.5-beta1
-    module load triqs/multiorbital
-    ;;
-  ctseg)
-    module load modules/2.5-beta1
-    module load triqs/unstable
-    ;;
-  ctint)
-    module purge
-    module load modules/2.4 gcc flexiblas openmpi cmake ccache gmp fftw nfft hdf5/mpi \
-                boost python/3.12 python-mpi/3.12 intel-oneapi-mkl llvm/19 eigen mpfr
-    module load triqs/3_unst_nix2.4_llvm
-    ;;
-  *)
-    echo "usage: sbatch $0 cthyb|ctseg|ctint" >&2; exit 2 ;;
+  cthyb|ctseg|ctint) ;;
+  *) echo "usage: sbatch $0 cthyb|ctseg|ctint" >&2; exit 2 ;;
 esac
+
+# One stack for all three solvers: triqs/multiorbital now carries cthyb, ctseg and ctint.
+module load modules/2.5-beta1
+module load triqs/multiorbital
 
 NRANKS=96
 OUT=/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin

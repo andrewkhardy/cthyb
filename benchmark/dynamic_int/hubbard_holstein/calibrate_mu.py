@@ -8,7 +8,7 @@ run_hubbard_holstein.sh so every solver runs the identical Hamiltonian.
 CTSEG is the probe: sign-free for a retarded density-density interaction and much faster
 than CTHYB, so the whole scan costs less than one production point.
 
-    module load modules/2.5-beta1 && module load triqs/unstable
+    module load modules/2.5-beta1 && module load triqs/multiorbital
     python calibrate_mu.py --beta 10  --target_n 0.75
     python calibrate_mu.py --beta 100 --target_n 0.75
 """
@@ -73,10 +73,8 @@ mu, n_achieved, samples = calibrate.bisect_mu(
     density, target_n=args.target_n, mu_guess=mu_half, tol=args.tol, verbose=mpi.is_master_node())
 
 if mpi.is_master_node():
-    mu_fit = calibrate.interpolate_from_samples(samples, args.target_n)
     variable = f"MU_B{args.beta:g}_N{str(args.target_n).replace('.', '')}"
-    print(calibrate.report(mu_fit, n_achieved, args.target_n,
+    print(calibrate.report(mu, n_achieved, args.target_n,
                            label=f"hubbard_holstein, beta = {args.beta:g}, g = {args.g:g}, "
                                  f"omega_0 = {args.omega_0:g}, bath = {args.bath}",
                            variable=variable))
-    print(f"  (bisection endpoint {mu:.6f}, linear fit over {len(samples)} probes {mu_fit:.6f})")

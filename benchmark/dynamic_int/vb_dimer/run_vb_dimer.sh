@@ -46,6 +46,13 @@
 
 set -euo pipefail
 SOLVER="${1:-}"
+case "$SOLVER" in
+  cthyb|ed) ;;
+  *) echo "usage: sbatch $0 cthyb|ed" >&2; exit 2 ;;
+esac
+
+module load modules/2.5-beta1
+module load triqs/multiorbital
 
 NRANKS=96
 OUT=/mnt/home/ahardy/ceph/CTHYB_Data/vb_dimer
@@ -78,12 +85,6 @@ MU_DCA_B100_N05=""
 # ED references -- serial, but memory and CPU heavy: submit it (see the header)
 # ---------------------------------------------------------------------------------------
 if [ "$SOLVER" = ed ]; then
-  # Needed when this is submitted (the branch below exits before the cthyb module block).
-  # Skipped when there is no module system, so a small local probe still works.
-  if command -v module >/dev/null 2>&1; then
-    module load modules/2.5-beta1
-    module load triqs/multiorbital
-  fi
   for BETA in 10.0 100.0; do
     python run_ed.py $COMMON $J_ED --beta $BETA --n_ph 3 --n_ph_check 1 --out_dir "$OUT"
   done
@@ -91,10 +92,6 @@ if [ "$SOLVER" = ed ]; then
   echo "NOTE: no ED for the J_DCA point -- see the header for why."
   exit 0
 fi
-
-[ "$SOLVER" = cthyb ] || { echo "usage: $0 cthyb|ed" >&2; exit 2; }
-module load modules/2.5-beta1
-module load triqs/multiorbital
 
 # ---------------------------------------------------------------------------------------
 # Statistics and wall-clock

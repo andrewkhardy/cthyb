@@ -15,7 +15,8 @@
 #           sbatch run_hubbard_holstein.sh ctseg
 #           sbatch run_hubbard_holstein.sh ctint
 #
-# One job per solver: the three need mutually incompatible module stacks.
+# One job per solver, so each gets its own wall-clock budget. (Formerly forced by
+# incompatible module stacks; triqs/multiorbital now carries all three.)
 #
 # Grid: beta in {10, 100} x n in {0.5, 0.75}, plus the lang_firsov True/False pair for
 # CTHYB at the reference point, which is the internal cross-check (uniform g routes every
@@ -26,14 +27,13 @@
 set -euo pipefail
 SOLVER="${1:-}"
 case "$SOLVER" in
-  cthyb) module load modules/2.5-beta1; module load triqs/multiorbital ;;
-  ctseg) module load modules/2.5-beta1; module load triqs/unstable ;;
-  ctint) module purge
-         module load modules/2.4 gcc flexiblas openmpi cmake ccache gmp fftw nfft hdf5/mpi \
-                     boost python/3.12 python-mpi/3.12 intel-oneapi-mkl llvm/19 eigen mpfr
-         module load triqs/3_unst_nix2.4_llvm ;;
+  cthyb|ctseg|ctint) ;;
   *) echo "usage: sbatch $0 cthyb|ctseg|ctint" >&2; exit 2 ;;
 esac
+
+# One stack for all three solvers: triqs/multiorbital now carries cthyb, ctseg and ctint.
+module load modules/2.5-beta1
+module load triqs/multiorbital
 
 NRANKS=96
 OUT=/mnt/home/ahardy/ceph/CTHYB_Data/hubbard_holstein

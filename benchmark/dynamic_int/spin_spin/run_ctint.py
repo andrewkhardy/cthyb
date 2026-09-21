@@ -11,8 +11,7 @@ CTINT takes `G0_iw` rather than `Delta_tau`, and it is handed exactly the
 `G0^-1 = iw + mu - Delta` that `common/selfenergy.py` uses, so the chemical-potential
 convention is shared by construction rather than by coincidence.
 
-Run with the CTINT module stack (`modules/2.4 ... triqs/3_unst_nix2.4_llvm`), which is
-incompatible with the CTHYB and CTSEG ones.
+Run under `triqs/multiorbital`, which now carries cthyb, ctseg and ctint together.
 """
 import os
 import sys
