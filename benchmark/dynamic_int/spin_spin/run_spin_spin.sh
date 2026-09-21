@@ -77,16 +77,24 @@ esac
 # that every solver uses the identical mu -- without that, differences in Sigma would mix
 # solver disagreement with a different model.
 #
-# Calibrated 2026-09-18 with `calibrate_mu.py` (CTSEG probe, 20k cycles/point, U = 4, J = 1,
-# full S.S, bath = dmft). Achieved n per spin-orbital is quoted; the whole scan takes ~15 s.
+# Recalibrated 2026-09-21 with `calibrate_mu.py` (CTSEG probe, 20k cycles/point, U = 4,
+# J = 1, full S.S, bath = dmft). The whole scan takes ~15 s.
 #   python calibrate_mu.py --beta 10  --target_n 0.75
-#   python calibrate_mu.py --beta 100 --target_n 0.75
+#   mpirun -n 16 python calibrate_mu.py --beta 100 --target_n 0.75
+#
+# The 2026-09-18 values (4.343276 / 4.078482) were produced before a bug was fixed in
+# calibrate_mu.py: it reported an interpolated mu while quoting the *bisection's* achieved
+# n, so the mu and the n in the comment came from different estimators and the quoted n
+# never validated the pinned value. Both are now the bisection endpoint, with the n that
+# endpoint actually achieved. beta = 10 moved by 0.007, beta = 100 by 0.010.
 #
 # Pinning these precisely matters more at beta = 100 than it looks: n(mu) is steep there
 # (n went 0.726 -> 0.873 for a mu change of only 0.06, the low-temperature approach to a
 # plateau edge), so a solver that found its own mu would land on a visibly different model.
-MU_B10_N075=4.343276    # -> n = 0.75033
-MU_B100_N075=4.078482   # -> n = 0.74921
+# That steepness is also why the beta = 100 probe lands so much tighter than beta = 10 for
+# the same tolerance -- a given density window corresponds to a narrower window in mu.
+MU_B10_N075=4.335938    # -> n = 0.748761  (deviation -1.2e-3)
+MU_B100_N075=4.068123   # -> n = 0.749973  (deviation -2.7e-5)
 
 run () {  # run <beta> <n_cycles> [extra args...]
   local beta="$1"; local ncyc="$2"; shift 2

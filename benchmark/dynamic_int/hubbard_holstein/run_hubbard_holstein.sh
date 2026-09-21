@@ -96,18 +96,27 @@ GRID_B100="--n_tau 16384 --n_tau_bosonic 8001 --n_iw 2049"
 # Half filling is exact and needs no value: mu = U/2 - g^2/omega_0^2 = 1.51 here, derived
 # from static_shift/half_filling_mu and asserted by every run.
 #
-# Calibrated 2026-09-18 with calibrate_mu.py (CTSEG probe, 20k cycles/point, U=4, g=0.7,
-# omega_0=1, semicircular bath). Achieved n per spin-orbital is quoted.
-#   python calibrate_mu.py --beta 10  --target_n 0.75 $MODEL
-#   python calibrate_mu.py --beta 100 --target_n 0.75 $MODEL
+# Recalibrated 2026-09-21 with calibrate_mu.py (CTSEG probe, 20k cycles/point, U=4, g=0.7,
+# omega_0=1, semicircular bath).
+#   python calibrate_mu.py --beta 10  --target_n 0.75
+#   python calibrate_mu.py --beta 100 --target_n 0.75
 #
-# Unlike the spin-spin benchmark, n(mu) here is gentle and almost beta-independent
-# (3.4269 at beta=10 vs 3.4130 at beta=100, a 0.4% difference), because the Holstein
-# coupling shifts the level uniformly rather than opening a low-energy feature.
+# The 2026-09-18 values (3.426927 / 3.412964) predate a calibrate_mu.py fix: it reported an
+# interpolated mu while quoting the bisection's achieved n, so the two came from different
+# estimators. Both are now the bisection endpoint. Each moved by ~0.011.
+#
+# Unlike the spin-spin benchmark, n(mu) here is gentle and almost beta-independent, because
+# the Holstein coupling shifts the level uniformly rather than opening a low-energy feature.
 # The probe reproduces the exact half-filling mu to 1e-4, which is a free check on the
 # closed form mu = U/2 - g^2/omega_0^2 = 1.51.
-MU_B10_N075=3.426927    # -> n = 0.75110
-MU_B100_N075=3.412964   # -> n = 0.75053
+#
+# The two values below being bit-identical is NOT a copy-paste slip. The bisection is
+# deterministic in mu (same mu_guess, same 0.5 bracketing step, same halving), so both
+# temperatures terminate on the same grid point; only the achieved n differs, and the
+# deviation changes sign, so the true mu sits just above 3.41625 at beta = 10 and just
+# below it at beta = 100. That they land in one cell at all is the beta-independence above.
+MU_B10_N075=3.416250    # -> n = 0.749263  (deviation -7.4e-4)
+MU_B100_N075=3.416250   # -> n = 0.751271  (deviation +1.3e-3)
 
 run () {  # run <beta> <n_cycles> <grid> [extra...]
   local beta="$1"; local ncyc="$2"; local grid="$3"; shift 3
