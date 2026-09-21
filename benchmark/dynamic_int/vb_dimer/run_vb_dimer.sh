@@ -76,8 +76,21 @@ J_DCA="--J_intra 0.0 --J_inter 0.5 --bath dca"
 #              at half filling too because mu = U/2 is not exact there:
 #                mpirun -n 16 python calibrate_mu.py --target_n 0.5  $J_DCA
 #                mpirun -n 16 python calibrate_mu.py --target_n 0.75 $J_DCA
-MU_B10_N075=""          # $J_ED,  n = 0.75
-MU_B100_N075=""
+#
+# Calibrated 2026-09-21, ED probe at the default --n_ph 2; beta = 10 only so far.
+#   python calibrate_mu.py --beta 10 --target_n 0.75 $J_ED
+#
+# The probe reports deviation 0, but that is zero to its own resolution, not to machine
+# precision: run_ed.py prints <n_a> rounded to 5 decimals and calibrate_mu.py bisects on
+# that printed line, so n cannot be resolved below ~1e-5 however tight --tol is set. Still
+# two orders tighter than the stochastic CTSEG probes the single-orbital benchmarks use.
+#
+# The probe also truncates at n_ph = 2 while the reference runs use n_ph = 3, so the filling
+# actually realized at this mu may differ in the last digits. That is harmless here, because
+# both ED and CTHYB take the pinned mu and therefore solve the identical Hamiltonian -- only
+# the "n = 0.75" label is nominal, never the comparison.
+MU_B10_N075=2.404877    # $J_ED,  n = 0.75  -> n = 0.750000
+MU_B100_N075=""         # $J_ED,  n = 0.75  -- beta = 100 ED probe not yet run
 MU_DCA_B10_N05=""       # $J_DCA, n = 0.50 (not U/2: the DCA bath breaks ph symmetry)
 MU_DCA_B100_N05=""
 
