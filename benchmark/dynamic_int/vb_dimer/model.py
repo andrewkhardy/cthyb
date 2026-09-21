@@ -1,6 +1,6 @@
 # Shared model definition for the two-patch DCA benchmark with a *real-space* retarded
 # spin-spin interaction. Used by check_rotation.py (symbolic checks, no MC),
-# cthyb_dca_spin_spin.py (the QMC run) and, later, the ED reference -- so every driver
+# run_cthyb.py (the QMC run) and run_ed.py (the ED reference) -- so every driver
 # solves exactly the same problem.
 #
 # ---------------------------------------------------------------------------------------
@@ -338,7 +338,7 @@ class Model:
 
             K'(0) = coeff / (2 omega_0^2).
 
-        Cross-check against ed_reference/model.py, whose phonon has D_ab = g_a g_b Q: the
+        Cross-check against kanamori_phonon/model.py, whose phonon has D_ab = g_a g_b Q: the
         unordered-pair static shift -2K'(0) = -g_a g_b/omega_0^2 and the level shift
         -K'(0) = -g_a^2/(2 omega_0^2) are exactly the instantaneous part documented there.
         """

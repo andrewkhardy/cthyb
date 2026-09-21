@@ -10,10 +10,7 @@
 // Tests that the dynamical interaction machinery (Jperp spin-flip +
 // D0 density-density retarded interactions) produces reproducible results.
 //
-// To regenerate spin_spin.ref.h5:
-//   1. Run this test (produces spin_spin.out.h5)
-//   2. Verify the results are physically reasonable
-//   3. cp spin_spin.out.h5 -> spin_spin.ref.h5 (in both source and build dirs)
+// Regeneration procedure and how to read a failure: see the block above TEST() below.
 
 #include <cmath>
 #include <triqs/test_tools/gfs.hpp>
@@ -28,10 +25,31 @@ using namespace triqs_cthyb;
 // This tests that the dynamical interaction machinery (Jperp spin-flip +
 // D0 density-density retarded interactions) produces correct results.
 //
+// This is a BIT-REPRODUCIBILITY test, not a statistical one. EXPECT_GF_NEAR compares a
+// stochastic G(tau) against a stored reference at a tight tolerance, which only passes
+// because the seed is fixed (23488) and the test runs serially. It is sensitive by design,
+// but it also fails on any *intended* change to the random-number consumption pattern --
+// adding a Monte Carlo move, for instance -- which is not a physics regression.
+//
+// Note how little statistics there is: 10000 cycles spread over n_tau = 10001 bins is
+// about one sample per bin, so individual bins are dominated by noise. Measured
+// 2026-09-18 when regenerating, new vs old reference differed by max |dG| ~ 3.0 with an
+// rms of only 0.073 -- the maximum is a nearly-empty bin, not a physics shift. Judge this
+// test by the identities below, never by the max deviation.
+//
 // To regenerate the reference file spin_spin.ref.h5:
 //   1. Build and run this test once (produces spin_spin.out.h5)
-//   2. Verify the results are physically reasonable
-//   3. Copy spin_spin.out.h5 -> spin_spin.ref.h5
+//   2. Verify the results are physically reasonable. At this statistics level G(tau) is
+//      visibly noisy either way, so check identities rather than the curve:
+//        - G(0) + G(beta) == -1 exactly, per spin
+//        - -G(beta) ~ 0.5 per spin (half filling)
+//      The Python test (test/python/spin_spin.py) runs the same model with 20x the
+//      statistics and additionally checks Sigma; prefer it for judging correctness, and
+//      see its header for how to tell noise from a real change.
+//   3. Copy spin_spin.out.h5 -> spin_spin.ref.h5 (in both source and build dirs)
+//
+// Last regenerated 2026-09-18, after the Bug A/C fixes added the swap_dyn move, which
+// changed the random stream.
 
 TEST(CTHYB, Spin_Spin) {
 

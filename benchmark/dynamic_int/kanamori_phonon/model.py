@@ -1,5 +1,5 @@
-# Shared model definition for the exact-diagonalization reference (ed_kanamori_phonon.py) and
-# the matching CTHYB run (cthyb_kanamori_phonon.py), so both solve exactly the same problem:
+# Shared model definition for the exact-diagonalization reference (run_ed.py) and
+# the matching CTHYB run (run_cthyb.py), so both solve exactly the same problem:
 #
 #   H = H_kanamori - sum_a mu_a n_a                               two orbitals x two spins, with
 #                                                                 spin-flip and pair-hopping

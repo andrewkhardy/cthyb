@@ -9,10 +9,38 @@
 #
 # This mirrors the C++ spin_spin test but exercises the Python interface.
 #
+# This is a BIT-REPRODUCIBILITY test, not a statistical one. It compares a stochastic
+# G_tau against a stored reference at the default precision of 1e-6, which only passes
+# because the seed is fixed and the test runs serially (mpi.rank == 0, so the seed is
+# exactly 567). It is sensitive by design -- it catches any unintended change to the
+# solver -- but it also fails on every *intended* change to the random-number consumption
+# pattern, such as adding a Monte Carlo move. That is not a physics regression, and the
+# check below tells the two apart.
+#
+# For scale: n_tau = 10001 bins over 200000 cycles is ~20 samples per bin, so the per-bin
+# noise is large and the max over 10001 bins is larger still. Measured 2026-09-18, two runs
+# of identical code differing only by seed disagreed by max|dG| = 0.36, which is *more*
+# than either disagreed with the stored reference. So a failure of order 0.1-0.4 here is
+# consistent with pure Monte Carlo noise and says nothing about correctness on its own.
+#
 # To regenerate spin_spin.ref.h5:
 #   1. Run this script once (produces spin_spin.out.h5)
-#   2. Verify the results are physically reasonable
+#   2. Verify the results are physically reasonable. Do NOT just eyeball G(tau) -- at this
+#      statistics level it is visibly noisy either way. Check instead:
+#        - G(0) + G(beta) == -1 exactly, per spin (an identity, not a statistical statement)
+#        - -G(beta) ~ 0.5 per spin, i.e. half filling
+#        - Im Sigma(iw_n) < 0 at low frequency (causality)
+#        - Re Sigma(iw_n) ~ mu = U/2 = 1.0 away from the lowest frequencies. This is exact
+#          at half filling: G0 is built with the bare mu while the solver shifts internally
+#          to mu_eff = U_eff/2, and the two offsets cancel. It is independent of the
+#          reference, so it is the most informative single check here.
+#      To decide whether a failure is noise or a real change, re-run with a different seed:
+#      if seed-to-seed scatter is comparable to the disagreement with the reference, it is
+#      noise.
 #   3. Copy spin_spin.out.h5 -> spin_spin.ref.h5
+#
+# Last regenerated 2026-09-18, after the Bug A/C fixes added the swap_dyn move, which
+# changed the random stream. Verified noise-only by the seed comparison described above.
 
 import triqs.utility.mpi as mpi
 from triqs.gf import *

@@ -200,7 +200,7 @@ def density_from_G_iw(G_iw):
     return np.array(out)
 
 
-def diagnose(sigma_values, w_n, mu=None, w_lo=1.0, w_hi=8.0):
+def diagnose(sigma_values, w_n, mu=None, w_lo=1.0, w_hi=8.0, w_max=20.0):
     r"""Cheap physical checks on a computed `Sigma(iw_n)`, as a one-line report.
 
     `causal` counts frequencies with `Im Sigma >= 0`. Some violation at the top of the mesh
@@ -221,6 +221,15 @@ def diagnose(sigma_values, w_n, mu=None, w_lo=1.0, w_hi=8.0):
     """
     sigma_values = np.asarray(sigma_values)
     w_n = np.asarray(w_n)
+
+    # Only judge causality where Sigma is meaningful. A Legendre-derived Sigma is limited
+    # by the number of coefficients: with n_l = 30 the series has no support much beyond
+    # w ~ 5, so every frequency above that is truncation noise and flagging it says nothing
+    # about the solver. The plots use w <= 15, so w_max = 20 covers the range that matters
+    # with room to spare. Pass w_max=inf to inspect the whole mesh deliberately.
+    keep = w_n <= w_max
+    sigma_values, w_n = sigma_values[keep], w_n[keep]
+
     n_bad = int(np.sum(sigma_values.imag >= 0))
     first_bad = float(w_n[sigma_values.imag >= 0][0]) if n_bad else float("inf")
 
@@ -228,7 +237,7 @@ def diagnose(sigma_values, w_n, mu=None, w_lo=1.0, w_hi=8.0):
     re_mean = float(sigma_values[window].real.mean()) if window.any() else float("nan")
     re_std = float(sigma_values[window].real.std()) if window.any() else float("nan")
 
-    text = (f"Sigma: Im>=0 at {n_bad}/{len(w_n)} freqs"
+    text = (f"Sigma(w<={w_max:g}): Im>=0 at {n_bad}/{len(w_n)} freqs"
             + (f" (first w={first_bad:.1f} of {w_n[-1]:.0f})" if n_bad else " -- causal")
             + f"; Re Sigma({w_lo:g}<w<{w_hi:g}) = {re_mean:.4f} +- {re_std:.4f}")
     if mu is not None and np.isscalar(mu):
