@@ -15,7 +15,7 @@ Two self-energies are saved:
               genuine check on the chemical-potential bookkeeping rather than a tautology.
   Sigma_alt   the Dyson inversion, through the same shared code path every other solver uses.
 
-Run with the CTSEG module stack (`module load triqs/unstable`), not the CTHYB one.
+Run under `triqs/multiorbital`, which now carries cthyb, ctseg and ctint together.
 """
 import os
 import sys

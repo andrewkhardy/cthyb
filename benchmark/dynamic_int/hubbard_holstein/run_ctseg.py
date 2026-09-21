@@ -9,7 +9,7 @@ between the two is solver physics. Sigma comes from the improved estimator F(iw)
 which uses no G0, mu or Delta at all and is therefore an independent check on the
 chemical-potential bookkeeping; the Dyson inversion is saved alongside it.
 
-Run with the CTSEG module stack (`module load triqs/unstable`).
+Run under `triqs/multiorbital`, which now carries cthyb, ctseg and ctint together.
 """
 import os
 import sys

@@ -140,12 +140,10 @@ mu, n_achieved, samples = calibrate.bisect_mu(
     verbose=mpi.is_master_node())
 
 if mpi.is_master_node():
-    mu_fit = calibrate.interpolate_from_samples(samples, args.target_n)
     variable = (f"MU_DCA_B{args.beta:g}" if args.bath == 'dca' else f"MU_B{args.beta:g}") \
         + f"_N{str(args.target_n).replace('.', '')}"
-    print(calibrate.report(mu_fit, n_achieved, args.target_n,
+    print(calibrate.report(mu, n_achieved, args.target_n,
                            label=f"vb_dimer, beta = {args.beta:g}, J_intra = {args.J_intra:g}, "
                                  f"J_inter = {args.J_inter:g}, bath = {args.bath}, "
                                  f"probe = {probe_name}",
                            variable=variable))
-    print(f"  (bisection endpoint {mu:.6f}, linear fit over {len(samples)} probes {mu_fit:.6f})")

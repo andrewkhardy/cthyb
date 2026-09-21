@@ -12,7 +12,9 @@
 # Model (shared by both sides, so they solve one Hamiltonian): model.py
 #
 #   usage:  sbatch run_kanamori_phonon.sh cthyb     # the QMC grid
-#           bash   run_kanamori_phonon.sh ed        # the ED references (seconds, run locally)
+#           sbatch run_kanamori_phonon.sh ed        # the ED references (seconds, but this
+#                                                   # script module-loads, so in an env that
+#                                                   # already has triqs just call run_ed.py
 #
 # CTSEG and CTINT do not appear here, and not for want of trying: neither supports the
 # off-diagonal Kanamori terms (spin-flip and pair-hopping), so ED is the only reference.
@@ -25,6 +27,13 @@
 
 set -euo pipefail
 SOLVER="${1:-}"
+case "$SOLVER" in
+  cthyb|ed) ;;
+  *) echo "usage: sbatch $0 cthyb|ed" >&2; exit 2 ;;
+esac
+
+module load modules/2.5-beta1
+module load triqs/multiorbital
 
 NRANKS=96
 OUT=/mnt/home/ahardy/ceph/CTHYB_Data/kanamori_phonon
@@ -48,11 +57,16 @@ MODEL_UNIFORM="--U 2.0 --J 0.3 --V 0.7 --eps_bath 0.0 --omega_0 1.0 --g 0.5 0.5"
 # statistics, no tolerance, no risk of a non-monotonic scan:
 #   python calibrate_mu.py --beta 10  --target_n 0.75 --g 0.7 0.3
 #   python calibrate_mu.py --beta 100 --target_n 0.75 --g 0.7 0.3
-MU_B10_N075=""
-MU_B100_N075=""
+#
+# Calibrated 2026-09-21, exact ED probe, both hitting n = 0.750000 with zero deviation.
+# beta = 100 needs a slightly larger mu than beta = 10 (3.6468 vs 3.6250): the same mu
+# gives a marginally lower density at low T, since the thermal smearing that was helping
+# fill the level at beta = 10 is gone.
+MU_B10_N075=3.624982    # -> n = 0.750000 (exact)
+MU_B100_N075=3.646802   # -> n = 0.750000 (exact)
 
 # ---------------------------------------------------------------------------------------
-# ED references -- fast, exact, run these first (and locally; they need no cluster)
+# ED references -- fast and exact (seconds), so run these first
 # ---------------------------------------------------------------------------------------
 if [ "$SOLVER" = ed ]; then
   for BETA in 10.0 100.0; do
@@ -66,10 +80,6 @@ if [ "$SOLVER" = ed ]; then
   echo "ED references written to $ED_OUT"
   exit 0
 fi
-
-[ "$SOLVER" = cthyb ] || { echo "usage: $0 cthyb|ed" >&2; exit 2; }
-module load modules/2.5-beta1
-module load triqs/multiorbital
 
 # ---------------------------------------------------------------------------------------
 # Statistics and wall-clock

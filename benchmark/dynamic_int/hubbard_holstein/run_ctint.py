@@ -20,7 +20,7 @@ both of which already had everything needed:
 CTINT takes `G0_iw` rather than `Delta_tau`, and gets exactly the
 `G0^-1 = iw + mu - Delta` that `common/selfenergy.py` uses.
 
-Run with the CTINT module stack, which is incompatible with the CTHYB and CTSEG ones.
+Run under `triqs/multiorbital`, which now carries cthyb, ctseg and ctint together.
 """
 import os
 import sys
