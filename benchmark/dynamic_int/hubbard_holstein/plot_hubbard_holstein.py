@@ -81,8 +81,14 @@ for col, beta in enumerate(betas):
         if "corr" in run:
             axes[3][col].plot(run["tau_corr"] / beta, run["corr"], label=label, **style)
             if run.get("corr_alt") is not None:
-                tau_alt = run.get("raw", {}).get("tau_corr_alt", run["tau_corr"])
-                axes[3][col].plot(np.asarray(tau_alt) / beta, run["corr_alt"],
+                # corr_alt is on the BOSONIC tau mesh (Q_tau, n_tau_bosonic points), corr on
+                # O_tau's fermionic one, so it needs its own x -- the `raw` lookup this
+                # replaced could never supply one, since io.load omits `raw` by default and
+                # deliberately (BlockGfs there need the writing solver's triqs build), and the
+                # fallback silently handed it the wrong-length fermionic grid. The bosonic mesh
+                # is uniform on [0, beta] and linspace reproduces it to 2e-15.
+                alt = np.asarray(run["corr_alt"])
+                axes[3][col].plot(np.linspace(0.0, beta, len(alt)) / beta, alt,
                                   color=style["color"], **ALT_STYLE)
             if ref is not None and label != "CTINT":
                 grid = np.linspace(0.0, beta, RESIDUAL_POINTS)
