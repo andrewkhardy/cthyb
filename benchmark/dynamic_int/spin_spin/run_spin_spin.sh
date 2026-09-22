@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=96
 #SBATCH --cpus-per-task=1
-#SBATCH --time=02:00:00
+#SBATCH --time=03:00:00
 #
 # Single-orbital retarded spin-spin benchmark: CTHYB and CTSEG against CTINT.
 # Model, conventions and the factors of 2: model.py
@@ -59,11 +59,22 @@ MODEL="--U 4.0 --J 1.0 --bath dmft --out_dir $OUT"
 # are a first estimate -- MAX_TIME is the hard guarantee, and each run reports its achieved
 # cycle count and error bars so these can be retuned. See the note in the plan about the
 # budget being a target rather than a constraint.
+# WALL-CLOCK BUDGET -- check this whenever a run is added or MAX_TIME changes.
+# MAX_TIME caps each solve individually, so the job's worst case is
+# (number of `run` calls) x MAX_TIME, plus module load, MPI startup and the final h5 write.
+# This script makes 6 calls once both MU_B*_N075 are set, so 6 x 1200 s = 120 min. That is
+# exactly the old --time=02:00:00, i.e. zero margin -- which is why runs were dying before
+# the last one finished. At --time=03:00:00 the same 6 runs leave an hour spare.
 MAX_TIME=1200          # 20 min hard cap inside the solver, per the agreed budget
+# beta = 100 halved on 2026-09-22: at beta = 100 the dynamical order is ~7x the beta = 10
+# value (measured <k_dyn> 11.9 vs 1.75 for cthyb at half filling) and cost per cycle scales
+# with it, so these were the calls that actually ran into MAX_TIME. Halving trades ~sqrt(2)
+# on the error bars for runs that finish; each run reports its achieved count, so retune
+# from that rather than from this estimate.
 case "$SOLVER" in
-  cthyb) NC_B10=500000;  NC_B100=50000  ;;
-  ctseg) NC_B10=2000000; NC_B100=200000 ;;
-  ctint) NC_B10=3000000; NC_B100=300000 ;;
+  cthyb) NC_B10=500000;  NC_B100=25000  ;;
+  ctseg) NC_B10=2000000; NC_B100=100000 ;;
+  ctint) NC_B10=3000000; NC_B100=150000 ;;
 esac
 
 # ---------------------------------------------------------------------------------------

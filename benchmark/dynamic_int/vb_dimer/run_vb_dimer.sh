@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=96
 #SBATCH --cpus-per-task=1
-#SBATCH --time=03:00:00
+#SBATCH --time=04:00:00
 #
 # Two-patch valence-bond dimer with a retarded real-space spin-spin interaction.
 # Model shared by every driver: model.py
@@ -114,9 +114,26 @@ fi
 # whole coupling is sampled stochastically. Earlier runs of this model recorded 48 vertices
 # for J_intra=0/J_inter=0.5. Budget accordingly and read the reported sign before trusting
 # any curve.
-MAX_TIME=2700
+# WALL-CLOCK BUDGET -- worst case is (number of `run` calls) x MAX_TIME plus startup and
+# the final h5 write. Count the calls below, not the lines: four are live right now (both
+# $J_ED half-filling betas, the beta = 10 n = 0.75 point, and the lf=False DCA pair member),
+# and the other three switch on as the MU_DCA_* and MU_B100_N075 values get filled in.
+#
+#   4 live calls x 1800 s = 120 min  -> comfortable today.
+#   all 7 calls  x 1800 s = 210 min  -> fits --time=04:00:00 with 30 min spare.
+#
+# --time is already 04:00:00 so that filling in MU_DCA_B10_N05, MU_DCA_B100_N05 and
+# MU_B100_N075 needs no further change here: the allocation is sized for the full seven.
+# MAX_TIME was 2700, which put the four live calls at exactly 180 min against what was
+# then a 180 min allocation -- zero margin, and the reason runs were dying before the last
+# one finished. If more calls are added, redo this arithmetic before submitting.
+MAX_TIME=1800
 NC_B10=500000
-NC_B100=50000
+# Halved on 2026-09-22. beta = 100 is where this model is most expensive: measured
+# <k_dyn> = 19.9 there against 2.2 at beta = 10, a 9x order increase, and cost per cycle
+# grows with the order. These were the calls running into MAX_TIME. Read the achieved
+# count each run reports and retune from that.
+NC_B100=25000
 
 run () {  # run <beta> <n_cycles> <model args...>
   local beta="$1"; local ncyc="$2"; shift 2

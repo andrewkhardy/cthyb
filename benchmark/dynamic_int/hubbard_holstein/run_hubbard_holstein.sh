@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=96
 #SBATCH --cpus-per-task=1
-#SBATCH --time=02:00:00
+#SBATCH --time=03:00:00
 #
 # Single-orbital Hubbard-Holstein benchmark: CTHYB and CTSEG against CTINT.
 # Model and conventions: model.py
@@ -75,6 +75,14 @@ MODEL="$MODEL_BASE --g $G_MAIN"
 # That order is ~2.7x the spin-spin benchmark's 2.36, and the determinant cost grows with
 # it, so this benchmark is meaningfully slower per cycle than spin_spin at the same beta.
 # MAX_TIME is the hard guarantee; each run reports its achieved statistics.
+#
+# WALL-CLOCK BUDGET -- worst case is (number of `run` calls) x MAX_TIME plus startup and
+# the final h5 write. The cthyb path makes 6 calls, so 6 x 1200 s = 120 min: exactly the
+# old --time=02:00:00, i.e. no margin at all. Raised to 03:00:00 for the same reason as
+# spin_spin. NC_B100 is deliberately NOT reduced here: the overruns were reported for
+# spin_spin and vb_dimer, and this benchmark does not save perturbation_order_dyn, so
+# there is no measured order to justify a cut. If a beta = 100 call here does run into
+# MAX_TIME, halve NC_B100 as the other two scripts now do.
 MAX_TIME=1200
 case "$SOLVER" in
   cthyb) NC_B10=500000;  NC_B100=50000  ;;
