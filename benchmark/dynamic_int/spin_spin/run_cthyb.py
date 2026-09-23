@@ -75,7 +75,7 @@ S.solve(h_int=model.h_int(), h_loc0=model.h_loc0(),
         measure_O_tau=(M.SZ, M.SZ), measure_O_tau_min_ins=args.measure_O_tau_min_ins,
         measure_D0_corr=True,
         measure_density_matrix=args.density_matrix, use_norm_as_weight=args.density_matrix,
-        lang_firsov=args.lang_firsov, dyn_n_l=args.dyn_n_l)
+        lang_firsov=args.lang_firsov, dyn_n_l=args.dyn_n_l, **model.seed_kwargs())
 
 if mpi.is_master_node():
     mu, delta_block = model.sigma_inputs()

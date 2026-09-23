@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=96
 #SBATCH --cpus-per-task=1
-#SBATCH --time=03:00:00
+#SBATCH --time=04:00:00
 #
 # Two-orbital Hubbard-Kanamori + Holstein phonon: CTHYB against exact diagonalization.
 # Model (shared by both sides, so they solve one Hamiltonian): model.py
@@ -88,9 +88,26 @@ fi
 # Measured single-core at beta = 10, uniform g: sign 1.0, 16 analytic / 0 stochastic
 # vertices. Unequal g pushes part of the coupling into the stochastic residual, so expect
 # a worse sign there -- that is the point of the run, and why it gets more cycles.
-MAX_TIME=2700
+#
+# WALL-CLOCK BUDGET -- worst case is (number of `run` calls) x MAX_TIME plus startup and
+# the final h5 write. Six calls are live (both betas at half filling, both at n = 0.75
+# since MU_B*_N075 are set, and the two $MODEL_UNIFORM runs):
+#
+#   6 calls x 1800 s = 180 min  -> fits --time=04:00:00 with an hour spare.
+#
+# This script was the worst offender of the set: 6 x 2700 s = 270 min against a 180 min
+# allocation, i.e. 90 min over, not merely tight. The symptom was that the two
+# $MODEL_UNIFORM runs at the bottom -- the last calls made -- had no cthyb output on disk
+# at all while the four above them did. If more calls are added, redo this arithmetic.
+MAX_TIME=1800
 NC_B10=500000
-NC_B100=50000
+# Halved on 2026-09-22. This is the most expensive cell in the whole benchmark set:
+# measured <k_dyn> is 31.5 at beta = 100 half filling and 82.7 at beta = 100, n = 0.75,
+# against 3.4 and 8.3 at beta = 10 -- a 10x order increase, with cost per cycle growing
+# with the order. The sign stays 1.000 throughout, so this is pure cost, not variance.
+# If the n = 0.75 call still caps out at MAX_TIME, quarter this rather than halve it;
+# each run reports its achieved count, so retune from that.
+NC_B100=25000
 
 run () {  # run <beta> <n_cycles> [extra...]
   local beta="$1"; local ncyc="$2"; shift 2
