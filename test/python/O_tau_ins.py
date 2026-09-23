@@ -2,7 +2,12 @@
 Sampling of the density density correlator by operator insertion
 regression test derived from the benchmark ./benchmark/O_tau_ins/
 
-Author: Hugo U.R. Strand (2018) hugo.strand@gmail.com """
+Author: Hugo U.R. Strand (2018) hugo.strand@gmail.com
+
+Bit-reproducibility test (default seed, h5diff). The insertion count per measurement went from
+(perturbation order)^2 to the order itself, which changes the random stream, so
+O_tau_ins.ref.h5 was regenerated: run once, check O_tau against the old reference within its
+noise, then copy O_tau_ins.out.h5 -> O_tau_ins.ref.h5. """
 
 # ----------------------------------------------------------------------    
 

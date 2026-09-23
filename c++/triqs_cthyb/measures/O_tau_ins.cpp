@@ -44,9 +44,14 @@ namespace triqs_cthyb {
     s *= data.atomic_reweighting;
     average_sign += s;
 
+    // Insertions per measurement: linear in the perturbation order, with min_ins as a floor. Each
+    // insertion is an unbiased sample for this configuration, so the count only sets how finely
+    // one configuration is probed; consecutive configurations are strongly correlated, so beyond
+    // a few dozen insertions the error hardly moves. The former pto * pto was ~1600 insertions
+    // (~4 ms, as much as ~1200 moves) per measurement at beta = 100 and half the run time.
     int pto = 0;
     for (const auto &det : data.dets) pto += det.size();
-    int nsamples = pto * pto;
+    int nsamples = pto;
     if( nsamples < min_ins ) nsamples = min_ins;
 
     mc_weight_t atomic_weight, atomic_reweighting;
