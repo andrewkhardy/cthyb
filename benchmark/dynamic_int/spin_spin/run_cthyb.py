@@ -23,6 +23,7 @@ import sys
 
 import numpy as np
 import triqs.utility.mpi as mpi
+from h5 import HDFArchive
 from triqs.gfs import Fourier
 from triqs_cthyb import Solver
 
@@ -30,7 +31,7 @@ from triqs_cthyb import Solver
 # been imported first, so reordering these imports cannot break the run.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import model as M  # noqa: E402
-from common import io, kernels, selfenergy  # noqa: E402
+from common import kernels, selfenergy  # noqa: E402
 
 
 def add_cthyb_args(parser):
@@ -103,9 +104,13 @@ if mpi.is_master_node():
 
     G_up = S.G_tau["up"]
     tau_G = np.array([float(t) for t in G_up.mesh])
-    # From the Legendre G(iw): uses the whole function and its tail rather than the
-    # single noisiest tau point (see common/selfenergy.density_from_G_iw).
-    density = selfenergy.density_from_G_iw(selfenergy.G_iw_from_G_l(S.G_l, model.n_iw))
+    # With the density matrix measured, <c^dag c> from it directly: an equal-time average
+    # rather than a tail extrapolation of G_l, so far lower variance. Otherwise from the
+    # Legendre G(iw) (see common/selfenergy.density_from_G_iw).
+    if args.density_matrix:
+        density = np.array([S.orbital_occupations[bl][i, i].real for bl, size in M.GF_STRUCT for i in range(size)])
+    else:
+        density = selfenergy.density_from_G_iw(selfenergy.G_iw_from_G_l(S.G_l, model.n_iw))
 
     # Legendre kink estimator. With measure_density_matrix=True the Python Solver has
     # already added the equal-time <n_a n_b> to Q_tau, so Q_tau is the full
@@ -113,11 +118,10 @@ if mpi.is_master_node():
     # it, Q_tau is only the connected part, which is not the same observable as O_tau, so
     # it is left out rather than saved under a label that would invite comparison.
     Q = S.Q_tau
-    szsz_kink, tau_kink = None, None
+    szsz_kink = None
     if args.density_matrix and Q is not None:
         szsz_kink = 0.25 * (Q["up", "up"].data[:, 0, 0] + Q["down", "down"].data[:, 0, 0]
                             - Q["up", "down"].data[:, 0, 0] - Q["down", "up"].data[:, 0, 0]).real
-        tau_kink = np.array([float(t) for t in Q["up", "up"].mesh])
     else:
         print("  NOTE: --density_matrix False, so Q_tau lacks its equal-time offset; "
               "the Legendre kink estimator is not saved.")
@@ -126,16 +130,16 @@ if mpi.is_master_node():
     print("  " + diag["text"])
     print(f"  average sign = {S.average_sign:.4f}   <n> = {np.round(density, 5)}")
 
-    io.save(model.output_file("cthyb", tag=f"lf-{args.lang_firsov}"),
-            solver="cthyb", params=vars(args), beta=model.beta, mu=mu,
-            tau_G=tau_G, G=G_up.data[:, 0, 0].real,
-            w_n=w_n, Sigma=sigma_up, Sigma_alt=sigma_up_alt,
-            tau_corr=np.array([float(t) for t in S.O_tau.mesh]), corr=S.O_tau.data.real,
-            corr_label=r"$\langle S_z(\tau)S_z(0)\rangle$ (O_tau)",
-            corr_alt=szsz_kink,
-            corr_alt_label=r"$\langle S_z(\tau)S_z(0)\rangle$ (Legendre kink)" if szsz_kink is not None else None,
-            density=density, average_sign=S.average_sign,
-            pert_order=S.perturbation_order_total, pert_order_dyn=S.perturbation_order_dyn,
-            raw={"G_tau": S.G_tau, "G_l": S.G_l, "O_tau": S.O_tau, "Q_tau": Q, "Q_l": S.Q_l,
-                 "K_n": S.K_n, "Sigma_iw_legendre": sigma_l, "Sigma_iw_from_tau": sigma_tau,
-                 "tau_corr_alt": tau_kink})
+    path = model.output_file("cthyb", tag=f"lf-{args.lang_firsov}")
+    with HDFArchive(path, "w") as A:
+        A["params"] = {k: v for k, v in vars(args).items() if v is not None}
+        A["beta"], A["mu"] = model.beta, mu
+        A["tau_G"], A["G"] = tau_G, G_up.data[:, 0, 0].real
+        A["w_n"], A["Sigma"], A["Sigma_alt"] = w_n, sigma_up, sigma_up_alt
+        A["tau_corr"], A["corr"] = np.array([float(t) for t in S.O_tau.mesh]), S.O_tau.data.real
+        if szsz_kink is not None:
+            A["corr_alt"] = szsz_kink
+        A["density"], A["average_sign"] = density, S.average_sign
+        A["pert_order"], A["pert_order_dyn"] = S.perturbation_order_total.data, S.perturbation_order_dyn.data
+        A["G_tau_gf"], A["G_l_gf"] = S.G_tau, S.G_l
+    print(f"Saved {path}")

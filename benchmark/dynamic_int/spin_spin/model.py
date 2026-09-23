@@ -57,7 +57,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common import baths, io, kernels, selfenergy  # noqa: E402
+from common import baths, kernels, selfenergy  # noqa: E402
 
 from triqs.operators import n  # noqa: E402
 from triqs_cthyb.dynamical_interactions import half_filling_mu, static_shift  # noqa: E402
@@ -213,10 +213,12 @@ class Model:
                     n_iw=self.n_iw, n_tau=self.n_tau, n_tau_bosonic=self.n_tau_bosonic)
 
     def output_file(self, solver, tag=""):
-        return io.output_file(self.args.out_dir, BENCHMARK, solver, self.beta, self.args.filling,
-                              tag=f"J-{self.J:g}_jperp-{self.jperp:g}_szsz-{self.szsz:g}"
-                                  + (f"_{tag}" if tag else "")
-                                  + (f"_seed-{self.args.seed}" if self.args.seed is not None else ""))
+        os.makedirs(self.args.out_dir, exist_ok=True)
+        name = (f"{BENCHMARK}_{solver}_b-{self.beta:g}_n-{self.args.filling:g}"
+                f"_J-{self.J:g}_jperp-{self.jperp:g}_szsz-{self.szsz:g}"
+                + (f"_{tag}" if tag else "")
+                + (f"_seed-{self.args.seed}" if self.args.seed is not None else ""))
+        return os.path.join(self.args.out_dir, name + ".h5")
 
     def seed_kwargs(self):
         """`random_seed` for solve(), only when --seed was given (else the solver's default)."""

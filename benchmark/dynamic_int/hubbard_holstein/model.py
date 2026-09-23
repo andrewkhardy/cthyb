@@ -58,7 +58,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common import baths, io, kernels  # noqa: E402
+from common import baths, kernels  # noqa: E402
 
 from triqs.operators import n  # noqa: E402
 from triqs_cthyb.dynamical_interactions import half_filling_mu, kprime_0_boson, static_shift  # noqa: E402
@@ -204,8 +204,10 @@ class Model:
                     n_tau=self.n_tau, n_tau_bosonic=self.n_tau_bosonic)
 
     def output_file(self, solver, tag=""):
-        return io.output_file(self.args.out_dir, BENCHMARK, solver, self.beta, self.args.filling,
-                              tag=f"g-{self.g:g}_w0-{self.omega_0:g}" + (f"_{tag}" if tag else ""))
+        os.makedirs(self.args.out_dir, exist_ok=True)
+        name = (f"{BENCHMARK}_{solver}_b-{self.beta:g}_n-{self.args.filling:g}_g-{self.g:g}_w0-{self.omega_0:g}"
+                + (f"_{tag}" if tag else ""))
+        return os.path.join(self.args.out_dir, name + ".h5")
 
     def report(self):
         label = "half filling" if abs(self.args.filling - 0.5) < 1e-12 else f"n = {self.args.filling}"

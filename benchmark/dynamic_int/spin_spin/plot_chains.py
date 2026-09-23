@@ -3,89 +3,73 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
 #
-# Independent-chain ergodicity diagnostic, output of run_chains.sh.
+# Independent-chain diagnostics, output of run_chains.sh. One row per cell.
 #
-# Left: density of every chain, one column per solver, with the 96-rank production value
-# as a line. Right: each chain's density against its weight in the no-moment mode,
-# P(k_dyn < K_SPLIT). If the chains mix, the points form one tight cluster per solver. If
-# they do not, they spread along a line -- the density is set by which mode a chain sat in
-# -- and the two solvers' clusters sitting at different points on that same line means
-# they sample the same distribution with different mixing, not different Hamiltonians.
+# Left: <n> of every chain, one column per series. Right: <n> against <k_dyn>, the chain's
+# mean number of stochastic vertices. Series that sample the same distribution fall on one
+# cluster; a solver or move set that samples a different one shows up as its own cluster,
+# in either panel. The printout gives each series' mean and its standard error over chains.
 #
 # Knobs hardcoded below so this pastes straight into a notebook.
 import os
-import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common import io
+from h5 import HDFArchive
 
 # ---------------------------------------------------------------------------------- knobs
-CHAIN_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/spin_spin/chains2"
-PROD_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/spin_spin"
-# (beta, filling, [(series label, first seed, number of chains), ...]) -- as in run_chains.sh.
-# Round 1 (CHAIN_DIR .../chains, SEED_STEP 1): CTSEG and CTHYB at seeds 1000 x 24
-# (beta = 100, n = 0.75), 2000 x 12 (n = 0.5), 3000 x 12 (beta = 10) -- but seeds 2k, 2k+1
-# there are the same chain (RandMT forces odd).
-CELLS = [(100.0, 0.75, [("CTSEG", 1000, 32), ("CTHYB old moves", 1000, 16), ("CTHYB new moves", 1100, 24)]),
-         (100.0, 0.5, [("CTSEG", 2000, 16), ("CTHYB new moves", 2100, 8)])]
+CHAIN_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/spin_spin/chains3"
 SEED_STEP = 2
-K_SPLIT = 4            # k_dyn below this counts as the no-moment mode
-TAG = "J-1_jperp-1_szsz-1"
+# (title, filling, jperp, szsz, [(series label, solver, first seed, number of chains), ...])
+# -- as in run_chains.sh
+CELLS = [
+    ("A: full S.S, n = 0.5", 0.5, 1, 1,
+     [("CTSEG", "ctseg", 1000, 8), ("CTHYB old", "cthyb", 1000, 12),
+      ("CTHYB local", "cthyb", 1100, 12), ("CTHYB flip", "cthyb", 1200, 12)]),
+    ("B: Sz.Sz only, mu(n = 0.75)", 0.75, 0, 1,
+     [("CTSEG", "ctseg", 2000, 8), ("CTHYB old", "cthyb", 2000, 16)]),
+    ("C: Jperp only, mu(n = 0.75)", 0.75, 1, 0,
+     [("CTSEG", "ctseg", 3000, 8), ("CTHYB old", "cthyb", 3000, 12), ("CTHYB local", "cthyb", 3100, 8)]),
+]
+BETA, J = 100.0, 1.0
 # -----------------------------------------------------------------------------------------
 
-# series label -> (solver, filename suffix)
-SERIES = {"CTSEG": ("ctseg", ""), "CTHYB old moves": ("cthyb", "_lf-True"), "CTHYB new moves": ("cthyb", "_lf-True")}
-COLOR = {"CTSEG": "#1f6feb", "CTHYB old moves": "#e8710a", "CTHYB new moves": "#2a9d3f"}
-
-
-def low_mode_weight(run):
-    h = np.asarray(run["pert_order_dyn"], dtype=float).ravel()
-    return h[:K_SPLIT].sum() / h.sum()
-
+COLOR = {"CTSEG": "#1f6feb", "CTHYB old": "#e8710a", "CTHYB local": "#2a9d3f", "CTHYB flip": "#9b5de5"}
 
 fig, axes = plt.subplots(len(CELLS), 2, figsize=(11, 3.6 * len(CELLS)), squeeze=False)
-for row, (beta, filling, series) in enumerate(CELLS):
-    ax_n, ax_w = axes[row]
-    for col, (label, seed0, count) in enumerate(series):
-        solver, suffix = SERIES[label]
-        dens, weight = [], []
+for row, (title, filling, jperp, szsz, series) in enumerate(CELLS):
+    ax_n, ax_k = axes[row]
+    for col, (label, solver, seed0, count) in enumerate(series):
+        dens, order = [], []
         for seed in range(seed0, seed0 + SEED_STEP * count, SEED_STEP):
-            run = io.load(io.output_file(CHAIN_DIR, "spin_spin", solver, beta, filling,
-                                         tag=f"{TAG}{suffix}_seed-{seed}"))
-            if run is None:
+            name = (f"spin_spin_{solver}_b-{BETA:g}_n-{filling:g}_J-{J:g}_jperp-{jperp:g}_szsz-{szsz:g}"
+                    + ("_lf-True" if solver == "cthyb" else "") + f"_seed-{seed}.h5")
+            path = os.path.join(CHAIN_DIR, name)
+            if not os.path.exists(path):
                 continue
-            dens.append(np.mean(run["density"]))
-            weight.append(low_mode_weight(run))
-        dens, weight = np.array(dens), np.array(weight)
-        if dens.size == 0:
-            print(f"[beta={beta:g} n={filling:g}] {label}: no chain files")
+            with HDFArchive(path, "r") as A:
+                dens.append(np.mean(A["density"]))
+                h = np.asarray(A["pert_order_dyn"], dtype=float) if "pert_order_dyn" in A else np.array([1.0])
+            order.append((np.arange(len(h)) * h).sum() / h.sum())
+        if not dens:
+            print(f"[{title}] {label}: no chain files")
             continue
+        dens, order = np.array(dens), np.array(order)
 
         jitter = col + 0.08 * np.random.default_rng(0).standard_normal(dens.size)
         ax_n.plot(jitter, dens, "o", color=COLOR[label], alpha=0.7, label=label)
-        prod = io.load(io.output_file(PROD_DIR, "spin_spin", solver, beta, filling, tag=f"{TAG}{suffix}"))
-        if prod is not None:
-            ax_n.hlines(np.mean(prod["density"]), col - 0.3, col + 0.3, color=COLOR[label],
-                        linewidth=2, label=f"{label} production (96 ranks)")
-        ax_w.plot(weight, dens, "o", color=COLOR[label], alpha=0.7, label=label)
+        ax_k.plot(order, dens, "o", color=COLOR[label], alpha=0.7, label=label)
+        sem = lambda x: x.std(ddof=1) / np.sqrt(x.size) if x.size > 1 else float("nan")
+        print(f"[{title}] {label:12s} {dens.size:2d} chains  <n> = {dens.mean():.4f} +- {sem(dens):.4f}  "
+              f"(chain spread {dens.std(ddof=1):.4f})   <k_dyn> = {order.mean():6.3f} +- {sem(order):.3f}")
 
-        print(f"[beta={beta:g} n={filling:g}] {label}: {dens.size} chains  "
-              f"<n> = {dens.mean():.4f}  chain spread (std) = {dens.std(ddof=1):.4f}  "
-              f"std of mean = {dens.std(ddof=1) / np.sqrt(dens.size):.4f}  "
-              f"range = [{dens.min():.4f}, {dens.max():.4f}]  "
-              f"P(k_dyn<{K_SPLIT}) = {weight.mean():.3f} +- {weight.std(ddof=1):.3f}")
-
-    ax_n.set_xticks(range(len(series)), [label for label, _, _ in series], fontsize=8)
-    ax_n.set_ylabel(r"$\langle n\rangle$ per spin-orbital, one point per chain")
-    ax_n.set_title(r"$\beta$" + f"={beta:g}, n={filling:g}")
-    ax_n.legend(fontsize=7)
-    ax_w.set_xlabel(f"P(k_dyn < {K_SPLIT})  (no-moment mode weight)")
-    ax_w.set_ylabel(r"$\langle n\rangle$")
-    ax_w.set_title(r"$\beta$" + f"={beta:g}, n={filling:g}")
-    ax_w.legend(fontsize=7)
+    ax_n.set_xticks(range(len(series)), [s[0] for s in series], fontsize=8)
+    ax_n.set_ylabel(r"$\langle n\rangle$ per spin-orbital")
+    ax_k.set_xlabel(r"$\langle k_\mathrm{dyn}\rangle$ of the chain")
+    ax_k.set_ylabel(r"$\langle n\rangle$")
+    for ax in (ax_n, ax_k):
+        ax.set_title(title)
+        ax.legend(fontsize=7)
 
 fig.tight_layout()
 plt.show()
