@@ -45,8 +45,8 @@ def add_cthyb_args(parser):
                         help="Four-operator insert/remove moves. At beta = 100 they accept 0.05%% of "
                              "proposals and take 40%% of move time; not needed for ergodicity here")
     parser.add_argument("--move_dyn_local", type=lambda x: str(x).lower() in ("true", "1", "yes"), default=True,
-                        help="Local insert/remove of spin-flip vertices (both ends in one operator-free "
-                             "stretch), alongside the global pair")
+                        help="Let insert_dyn place both ends of a spin-flip vertex in one operator-free "
+                             "stretch for part of its proposals (False: all uniform on [0, beta))")
     parser.add_argument("--spin_flip_move", type=lambda x: str(x).lower() in ("true", "1", "yes"), default=False,
                         help="Global up <-> down swap of every operator, Jperp vertices included. A symmetry "
                              "of this model, so it mixes the two moment orientations at no cost")
@@ -72,8 +72,11 @@ jperp_tau, d0 = model.spin_couplings(half_prefactor_action=True)
 
 spin_flip = {}
 if args.spin_flip_move:
+    # Accepted every time here (an exact symmetry), but each proposal costs ~0.5 ms: its
+    # Lang-Firsov ratio runs over all pairs of the ~90 relabelled operators. At 0.05 that was
+    # 28% of the run for 680k flips per chain; 0.002 still gives ~25k, far more than needed.
     spin_flip = dict(move_global={"spin_flip": {("up", 0): ("down", 0), ("down", 0): ("up", 0)}},
-                     move_global_full=True)
+                     move_global_full=True, move_global_prob=0.002)
 
 S = Solver(beta=model.beta, gf_struct=M.GF_STRUCT, n_iw=model.n_iw, n_tau=model.n_tau,
            n_l=args.n_l, n_tau_bosonic=model.n_tau_bosonic, delta_interface=True)

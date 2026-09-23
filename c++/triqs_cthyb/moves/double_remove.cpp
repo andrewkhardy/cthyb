@@ -116,10 +116,11 @@ namespace triqs_cthyb {
       t_ratio = std::pow(block_size1 * config.beta() / double(det1_size), 2) * std::pow(block_size2 * config.beta() / double(det2_size), 2);
     }
 
-      op_desc op1 = {.block_index = block_index1, .inner_index = det1.get_y(num_c1).second, .dagger = false, .linear_index = 0};
-      op_desc op2 = {.block_index = block_index1, .inner_index = det1.get_x(num_c_dag1).second, .dagger = true, .linear_index = 0};
-      op_desc op3 = {.block_index = block_index2, .inner_index = det2.get_y(num_c2).second, .dagger = false, .linear_index = 0};
-      op_desc op4 = {.block_index = block_index2, .inner_index = det2.get_x(num_c_dag2).second, .dagger = true, .linear_index = 0};
+      // The removed operators exactly as stored in the configuration (see remove.cpp)
+      auto const &op1 = config.find(tau1)->second;
+      auto const &op2 = config.find(tau2)->second;
+      auto const &op3 = config.find(tau3)->second;
+      auto const &op4 = config.find(tau4)->second;
       double lang_firsov_ratio = data.compute_lang_firsov_ratio({}, {{tau1, op1}, {tau2, op2}, {tau3, op3}, {tau4, op4}});
 
       // For quick abandon

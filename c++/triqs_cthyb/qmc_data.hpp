@@ -222,10 +222,9 @@ namespace triqs_cthyb {
     };
 
     /// The operator-free arc of the trace containing tau, bounded by the nearest trace operators
-    /// below and above it (cyclically). The operators of dyn_oplist[skip] are left out, and those
-    /// of `extra` -- a vertex not (yet) in dyn_oplist -- are included. This is what the local
-    /// dynamical-vertex moves propose into; see insert_dyn_local.cpp.
-    trace_gap_t trace_gap(time_pt const &tau, long skip = -1, configuration::dyn_bosonic_pair_t const *extra = nullptr) const {
+    /// below and above it (cyclically), with the operators of dyn_oplist[skip] left out. This is
+    /// what move_insert_dyn's local proposal draws into; see moves/insert_dyn.cpp.
+    trace_gap_t trace_gap(time_pt const &tau, long skip = -1) const {
       bool found = false;
       time_pt up, down; // distance to the nearest operator above / below tau
       auto visit = [&](time_pt const &t) {
@@ -245,7 +244,6 @@ namespace triqs_cthyb {
       for (auto const &[t, op] : config) visit(t);
       for (long k = 0; k < long(config.dyn_oplist.size()); ++k)
         if (k != skip) visit_vertex(config.dyn_oplist[k]);
-      if (extra) visit_vertex(*extra);
 
       if (!found) return {tau, tau_seg.get_upper_pt(), true};
       // One operator time only (cannot happen for a valid trace, which has operators in pairs):
@@ -255,13 +253,19 @@ namespace triqs_cthyb {
       return {tau - down, length, false};
     }
 
-    /// Is dyn_oplist[k] a local vertex -- both of its bilinears inside one operator-free arc of
-    /// the rest of the trace (with `extra` included, see trace_gap)? Returns that arc's length,
-    /// or 0 if the vertex is not local.
-    double local_vertex_gap(long k, configuration::dyn_bosonic_pair_t const *extra = nullptr) const {
-      auto const &v  = config.dyn_oplist[k];
-      auto const gap = trace_gap(v.tau1, k, extra);
-      return gap.contains(v.tau2) ? double(gap.length) : 0.0;
+    /// Probability density with which move_insert_dyn proposes a vertex at (tau1 > tau2) of a
+    /// given catalog entry, into the trace with dyn_oplist[skip] left out (skip = -1: as is).
+    /// A mixture: with probability p_local both ends in one operator-free arc of length l
+    /// (density 2 / (beta l), zero if the pair does not share an arc), otherwise both uniform on
+    /// [0, beta) (density 2 / beta^2). move_remove_dyn uses the same function for the reverse.
+    double dyn_insertion_density(time_pt const &tau1, time_pt const &tau2, double p_local, long skip = -1) const {
+      double const beta = config.beta();
+      double density    = (1.0 - p_local) * (2.0 / (beta * beta));
+      if (p_local > 0.0) {
+        auto const gap = trace_gap(tau1, skip);
+        if (gap.contains(tau2)) density += p_local * 2.0 / (beta * double(gap.length));
+      }
+      return density * (1.0 / dyn_op_list.size());
     }
 
     // ---------------------------------------------------------------------------------
@@ -345,6 +349,15 @@ double compute_lang_firsov_ratio(
     std::vector<std::pair<time_pt, op_desc>> const& removed) const {
 
   if (!use_lang_firsov || K_n_size == 0) return 1.0;
+
+#ifdef CTHYB_DEBUG
+  // eval_K indexes the table by op.linear_index, so an op_desc rebuilt by a move with that field
+  // left at a default silently reads another orbital's kernel (remove.cpp once did exactly this)
+  for (auto const *ops : {&inserted, &removed})
+    for (auto const &[t, op] : *ops)
+      if (op.linear_index != linindex.at({op.block_index, op.inner_index}))
+        TRIQS_RUNTIME_ERROR << "compute_lang_firsov_ratio: " << op << " carries linear_index " << op.linear_index;
+#endif
 
   double delta_W = 0.0;
 
