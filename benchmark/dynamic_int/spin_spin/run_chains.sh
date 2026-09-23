@@ -17,11 +17,13 @@
 #
 #   1. does insert_dyn's local proposal help?   CTHYB p_local = 0     (move_dyn_local False)
 #                                               CTHYB p_local = 0.75  (move_dyn_local True)
-#   2. does measuring less often help?          CTHYB p_local = 0.75, length_cycle 2000. The
-#                                               O_tau measurement was 47% of the run: it makes
-#                                               (hybridisation order)^2 ~ 1600 insertions per
-#                                               call at beta = 100 (O_tau_ins.cpp; min_ins is only
-#                                               a floor), ~4 ms, i.e. as much as ~1200 moves
+#   2. does measuring less often help?          CTHYB p_local = 0.75, length_cycle 2000
+#
+# Needs the build where O_tau_ins.cpp inserts (perturbation order) times per measurement
+# instead of order^2: that was ~1600 insertions, ~4 ms and 47% of the run at beta = 100. Check
+# it with plot_chains.py's right-hand column: CTHYB's O_tau (solid) must match its kink
+# estimator (dashed) and CTSEG. With the old count (chains4) <SzSz>(beta/2) was O_tau
+# 0.02152(62), kink 0.02144(60), CTSEG 0.02135(99).
 #
 # Spin flip on in all three. 24 chains each, plus 24 CTSEG chains as the reference.
 # Compare the chain spread of <n> and <k_dyn> between variants: at equal wall time a smaller
