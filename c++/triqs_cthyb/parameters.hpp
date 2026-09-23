@@ -149,7 +149,8 @@ namespace triqs_cthyb {
     /// Measure \f$ O(\tau) \f$ by insertion.
     std::optional<std::pair<many_body_op_t, many_body_op_t>> measure_O_tau = {};
 
-    /// Minimum number of operator insertions in the \f$ O(\tau) \f$ insertion measure.
+    /// Minimum number of operator insertions in the \f$ O(\tau) \f$ insertion measure. Each
+    /// measurement makes as many insertions as the perturbation order, or this many if more.
     int measure_O_tau_min_ins = 10;
 
     /// Measure density-density correlators from the occupation kinks (dyn_n_l Legendre
