@@ -133,11 +133,11 @@ namespace triqs_cthyb {
     /// Number of Legendre coefficients for Lang-Firsov trace and static shift
     int dyn_n_l = 50;
 
-    /// Add the local insert/remove moves for stochastic dynamical vertices, which place both
-    /// bilinears of a vertex in one operator-free stretch of the trace? They run alongside the
-    /// global insert/remove pair (which stays on), and raise the acceptance of spin-flip
-    /// vertices by an order of magnitude at low temperature. Only used when there are
-    /// stochastic vertices.
+    /// Let the stochastic dynamical-vertex insertion place both bilinears of a vertex in one
+    /// operator-free stretch of the trace, for a fixed fraction of its proposals (the rest stay
+    /// uniform on [0, beta), which keeps it ergodic)? This raises the acceptance of spin-flip
+    /// vertices by an order of magnitude at low temperature and never changes the sampled
+    /// distribution; false is exactly the uniform proposal. See moves/insert_dyn.cpp.
     bool move_dyn_local = true;
 
     /// Measure \f$ G(\tau) \f$? Hermiticity \f$ G_{ij}(\tau) = G_{ji}^*(\tau) \f$ is enforced.

@@ -6,8 +6,9 @@
 # Statistical check of the moves that change only the *proposal* for stochastic dynamical
 # vertices, never the weight:
 #
-#   move_dyn_local     local insert/remove of a vertex with both bilinears in one
-#                      operator-free stretch of the trace (moves/insert_dyn_local.cpp)
+#   move_dyn_local     insert_dyn's mixture proposal: a fixed fraction of insertions put both
+#                      bilinears of a vertex in one operator-free stretch of the trace, and
+#                      remove_dyn's ratio accounts for it (moves/insert_dyn.cpp)
 #   move_global_full   a global move applied to every operator at once, here the up <-> down
 #                      swap, which must also carry the stochastic Jperp vertices over
 #                      (S+S- <-> S-S+) -- moves/global.cpp

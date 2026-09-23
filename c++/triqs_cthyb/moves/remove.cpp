@@ -78,8 +78,10 @@ namespace triqs_cthyb {
     // proposition probability
     auto t_ratio = std::pow(block_size * config.beta() / double(det_size), 2); // Size of the det before the try_delete!
 
-    op_desc op1 = {.block_index = block_index, .inner_index = det.get_y(num_c).second, .dagger = false, .linear_index = 0};
-    op_desc op2 = {.block_index = block_index, .inner_index = det.get_x(num_c_dag).second, .dagger = true, .linear_index = 0};
+    // The removed operators exactly as stored in the configuration: the Lang-Firsov kernel is
+    // indexed by their linear_index, so a rebuilt op_desc must not leave it at a default
+    auto const &op1          = config.find(tau1)->second;
+    auto const &op2          = config.find(tau2)->second;
     double lang_firsov_ratio = data.compute_lang_firsov_ratio({}, {{tau1, op1}, {tau2, op2}});
 
     // For quick abandon

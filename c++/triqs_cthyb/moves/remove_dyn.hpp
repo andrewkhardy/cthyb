@@ -30,13 +30,14 @@ namespace triqs_cthyb {
     qmc_data &data;
     configuration &config;
     mc_tools::random_generator &rng;
+    double p_local; // must match move_insert_dyn's: it enters the reverse proposal probability
     bosonic_op_pair_t dyn_pair;
     h_scalar_t new_atomic_weight, new_atomic_reweighting;
     time_pt tau1, tau2;
     int dyn_op_index;
 
     public:
-    move_remove_dyn(qmc_data &data, mc_tools::random_generator &rng, histo_map_t *histos);
+    move_remove_dyn(qmc_data &data, mc_tools::random_generator &rng, histo_map_t *histos, double p_local = 0.0);
 
     mc_weight_t attempt();
     mc_weight_t accept();
