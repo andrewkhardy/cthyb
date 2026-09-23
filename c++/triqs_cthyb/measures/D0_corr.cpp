@@ -67,17 +67,15 @@ namespace triqs_cthyb {
 
     double beta = data.config.beta();
 
+    // Each unordered pair once: the (j, i) term is the (i, j) term at beta - dt, i.e. at -x,
+    // and P_n(-x) = (-1)^n P_n(x), so one Legendre recursion serves both orderings.
     for (size_t i = 0; i < ops.size(); ++i) {
-      for (size_t j = 0; j < ops.size(); ++j) {
-        if (i == j) continue; // do I need this line
-        int const a = data.linindex.at({ops[i].second.block_index, ops[i].second.inner_index});
-        int const b = data.linindex.at({ops[j].second.block_index, ops[j].second.inner_index});
-        double const s1 = ops[i].second.dagger ? +1.0 : -1.0;
-        double const s2 = ops[j].second.dagger ? +1.0 : -1.0;
+      for (size_t j = i + 1; j < ops.size(); ++j) {
+        long const a      = ops[i].second.linear_index;
+        long const b      = ops[j].second.linear_index;
+        double const s1s2 = (ops[i].second.dagger == ops[j].second.dagger) ? 1.0 : -1.0;
 
         double dt = double(ops[i].first - ops[j].first);
-        if (dt < 0.0) dt += beta;
-        if (dt > beta) dt -= beta;
         // The two operators of one stochastic dynamical vertex sit one tick (tau_seg epsilon) apart:
         // a single event, i.e. a contact term at tau = 0 like i == j, not two kinks at separation dt.
         if (dt < 1e-10 * beta || dt > beta * (1.0 - 1e-10)) continue;
@@ -85,8 +83,11 @@ namespace triqs_cthyb {
         triqs::utility::legendre_generator leg;
         leg.reset(2.0 * dt / beta - 1.0);
 
+        mc_weight_t const w = s * s1s2;
         for (int n = 0; n < n_leg; ++n) {
-          alpha_n(a, b, n) += s * s1 * s2 * leg.next();
+          double const p = leg.next();
+          alpha_n(a, b, n) += w * p;
+          alpha_n(b, a, n) += (n % 2 == 0 ? w : -w) * p;
         }
       }
     }

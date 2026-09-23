@@ -133,6 +133,13 @@ namespace triqs_cthyb {
     /// Number of Legendre coefficients for Lang-Firsov trace and static shift
     int dyn_n_l = 50;
 
+    /// Add the local insert/remove moves for stochastic dynamical vertices, which place both
+    /// bilinears of a vertex in one operator-free stretch of the trace? They run alongside the
+    /// global insert/remove pair (which stays on), and raise the acceptance of spin-flip
+    /// vertices by an order of magnitude at low temperature. Only used when there are
+    /// stochastic vertices.
+    bool move_dyn_local = true;
+
     /// Measure \f$ G(\tau) \f$? Hermiticity \f$ G_{ij}(\tau) = G_{ji}^*(\tau) \f$ is enforced.
     bool measure_G_tau = true;
 
@@ -228,6 +235,12 @@ namespace triqs_cthyb {
 
     /// Overall probability of the global moves.
     double move_global_prob = 0.05;
+
+    /// Apply a global move to every operator it maps at once? By default a random subset of
+    /// them is substituted. For a symmetry such as a spin flip only the full substitution has a
+    /// sizable weight at large perturbation order (a subset is chosen as the full one with
+    /// probability ~ 1/order). Stochastic dynamical vertices are always substituted whole.
+    bool move_global_full = false;
 
     /// Threshold below which imaginary components of \f$ \Delta \f$ and \f$ h_{loc} \f$ are set to zero.
     double imag_threshold = 1.e-13;

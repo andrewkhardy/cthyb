@@ -41,6 +41,8 @@
 #include "./moves/insert_dyn.hpp"
 #include "./moves/remove_dyn.hpp"
 #include "./moves/swap_dyn.hpp"
+#include "./moves/insert_dyn_local.hpp"
+#include "./moves/remove_dyn_local.hpp"
 #include "./measures/G_tau.hpp"
 #include "./measures/G_l.hpp"
 #include "./measures/O_tau_ins.hpp"
@@ -432,7 +434,7 @@ namespace triqs_cthyb {
       for (auto const &mv : params.move_global) {
         auto const &name          = mv.first;
         auto const &substitutions = mv.second;
-        global.add(move_global(name, substitutions, data, qmc.get_rng()), name, 1.0);
+        global.add(move_global(name, substitutions, data, qmc.get_rng(), params.move_global_full), name, 1.0);
       }
       qmc.add_move(std::move(global), "Global moves", params.move_global_prob);
     }
@@ -443,6 +445,11 @@ namespace triqs_cthyb {
       qmc.add_move(move_remove_dyn(data, qmc.get_rng(), histo_map), "Remove dynamical interaction", 1.0);
       // Re-pairs vertices that insert/remove cannot reach on their own (crossing spin-flip pairings)
       qmc.add_move(move_swap_dyn(data, qmc.get_rng()), "Swap dynamical vertex partners", 1.0);
+      // Both bilinears in one operator-free stretch of the trace; see moves/insert_dyn_local.cpp
+      if (params.move_dyn_local) {
+        qmc.add_move(move_insert_dyn_local(data, qmc.get_rng()), "Insert dynamical interaction (local)", 1.0);
+        qmc.add_move(move_remove_dyn_local(data, qmc.get_rng()), "Remove dynamical interaction (local)", 1.0);
+      }
       if (params.verbosity >= 2) {
         std::cout << "Dynamical interaction moves enabled due to non-zero Jperp_tau or D0_tau" << std::endl;
       }

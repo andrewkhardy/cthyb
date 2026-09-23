@@ -40,6 +40,15 @@ def add_cthyb_args(parser):
     parser.add_argument("--n_l", type=int, default=50, help="Legendre coefficients for G_l")
     parser.add_argument("--measure_O_tau_min_ins", type=int, default=50,
                         help="Minimum insertions for the O_tau measurement")
+    parser.add_argument("--move_double", type=lambda x: str(x).lower() in ("true", "1", "yes"), default=True,
+                        help="Four-operator insert/remove moves. At beta = 100 they accept 0.05%% of "
+                             "proposals and take 40%% of move time; not needed for ergodicity here")
+    parser.add_argument("--move_dyn_local", type=lambda x: str(x).lower() in ("true", "1", "yes"), default=True,
+                        help="Local insert/remove of spin-flip vertices (both ends in one operator-free "
+                             "stretch), alongside the global pair")
+    parser.add_argument("--spin_flip_move", type=lambda x: str(x).lower() in ("true", "1", "yes"), default=False,
+                        help="Global up <-> down swap of every operator, Jperp vertices included. A symmetry "
+                             "of this model, so it mixes the two moment orientations at no cost")
     parser.add_argument("--density_matrix", type=lambda x: str(x).lower() in ("true", "1", "yes"), default=True,
                         help="Measure the density matrix (implies use_norm_as_weight). Needed for the "
                              "equal-time offset that turns Q_tau into the full <n_a(tau)n_b(0)>, so the "
@@ -60,6 +69,11 @@ if mpi.is_master_node():
 
 jperp_tau, d0 = model.spin_couplings(half_prefactor_action=True)
 
+spin_flip = {}
+if args.spin_flip_move:
+    spin_flip = dict(move_global={"spin_flip": {("up", 0): ("down", 0), ("down", 0): ("up", 0)}},
+                     move_global_full=True)
+
 S = Solver(beta=model.beta, gf_struct=M.GF_STRUCT, n_iw=model.n_iw, n_tau=model.n_tau,
            n_l=args.n_l, n_tau_bosonic=model.n_tau_bosonic, delta_interface=True)
 S.Delta_tau << Fourier(model.delta_iw())
@@ -68,7 +82,8 @@ for (s1, s2), d in d0.items():
     S.D0_tau[s1, s2] << kernels.as_gf(d, model.beta, target_shape=(1, 1))
 
 S.solve(h_int=model.h_int(), h_loc0=model.h_loc0(),
-        length_cycle=args.length_cycle, n_warmup_cycles=args.n_warmup_cycles,
+        length_cycle=args.length_cycle, n_warmup_cycles=args.n_warmup_cycles, move_double=args.move_double,
+        move_dyn_local=args.move_dyn_local, **spin_flip,
         n_cycles=args.n_cycles, max_time=args.max_time,
         measure_G_tau=True, measure_G_l=True,
         measure_pert_order=True,

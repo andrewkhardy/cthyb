@@ -24,6 +24,9 @@
 #include <triqs/mesh.hpp>
 #include <triqs/det_manip.hpp>
 #include <triqs/utility/legendre.hpp>
+#include <algorithm>
+#include <cmath>
+#include <iostream>
 
 namespace triqs_cthyb {
   using namespace triqs::gfs;
@@ -100,6 +103,7 @@ namespace triqs_cthyb {
       use_lang_firsov = p.lang_firsov;
       if (!K_n.empty() && !K_n[0].empty()) {
         K_n_size = K_n[0][0].size();
+        build_K_table(p.verbosity);
       }
 
       std::vector<std::vector<std::pair<time_pt, int>>> X(delta.size()), Y(delta.size());
@@ -181,17 +185,157 @@ namespace triqs_cthyb {
       return {{tau1, ops.op1.opL}, {tau1 - eps, ops.op1.opR}, {tau2, ops.op2.opL}, {tau2 - eps, ops.op2.opR}};
     }
 
-    /// Every fermion operator in the trace: the hybridization operators in config, plus the
-    /// operators of the stochastic dynamical vertices (config.dyn_oplist), which are not in
-    /// config's oplist but change orbital occupations all the same. These are the density
-    /// kinks the Lang-Firsov weight is built from.
-    std::vector<std::pair<time_pt, op_desc>> trace_ops() const {
-      std::vector<std::pair<time_pt, op_desc>> ops(config.begin(), config.end());
-      for (auto const &vertex : config.dyn_oplist) {
-        auto vertex_ops = dyn_vertex_ops(vertex.ops, vertex.tau1, vertex.tau2);
-        ops.insert(ops.end(), vertex_ops.begin(), vertex_ops.end());
+    /// Call f(tau, op) for every fermion operator in the trace: the hybridization operators in
+    /// config, plus the operators of the stochastic dynamical vertices (config.dyn_oplist),
+    /// which are not in config's oplist but change orbital occupations all the same. These are
+    /// the density kinks the Lang-Firsov weight is built from. Visits in place rather than
+    /// returning a vector: compute_lang_firsov_ratio runs on every proposal.
+    template <typename F> void for_each_trace_op(F &&f) const {
+      for (auto const &[tau, op] : config) f(tau, op);
+      auto eps = tau_seg.get_epsilon();
+      for (auto const &v : config.dyn_oplist) {
+        f(v.tau1, v.ops.op1.opL);
+        f(v.tau1 - eps, v.ops.op1.opR);
+        f(v.tau2, v.ops.op2.opL);
+        f(v.tau2 - eps, v.ops.op2.opR);
       }
+    }
+
+    /// The same operators as for_each_trace_op, collected into a vector
+    std::vector<std::pair<time_pt, op_desc>> trace_ops() const {
+      std::vector<std::pair<time_pt, op_desc>> ops;
+      ops.reserve(config.size() + 4 * config.dyn_oplist.size());
+      for_each_trace_op([&ops](time_pt const &tau, op_desc const &op) { ops.emplace_back(tau, op); });
       return ops;
+    }
+
+    /// An operator-free arc of the imaginary-time circle: (lo, lo + length), exclusive
+    struct trace_gap_t {
+      time_pt lo, length;
+      bool full = false; // no operators at all: the whole circle
+
+      bool contains(time_pt const &t) const {
+        if (full) return true;
+        auto const offset = t - lo;
+        return offset > time_pt{} && offset < length; // time_pt compares grid positions only
+      }
+    };
+
+    /// The operator-free arc of the trace containing tau, bounded by the nearest trace operators
+    /// below and above it (cyclically). The operators of dyn_oplist[skip] are left out, and those
+    /// of `extra` -- a vertex not (yet) in dyn_oplist -- are included. This is what the local
+    /// dynamical-vertex moves propose into; see insert_dyn_local.cpp.
+    trace_gap_t trace_gap(time_pt const &tau, long skip = -1, configuration::dyn_bosonic_pair_t const *extra = nullptr) const {
+      bool found = false;
+      time_pt up, down; // distance to the nearest operator above / below tau
+      auto visit = [&](time_pt const &t) {
+        if (t == tau) return;
+        auto const d_up = t - tau, d_down = tau - t;
+        if (!found || d_up < up) up = d_up;
+        if (!found || d_down < down) down = d_down;
+        found = true;
+      };
+      auto const eps     = tau_seg.get_epsilon();
+      auto visit_vertex  = [&](configuration::dyn_bosonic_pair_t const &v) {
+        visit(v.tau1);
+        visit(v.tau1 - eps);
+        visit(v.tau2);
+        visit(v.tau2 - eps);
+      };
+      for (auto const &[t, op] : config) visit(t);
+      for (long k = 0; k < long(config.dyn_oplist.size()); ++k)
+        if (k != skip) visit_vertex(config.dyn_oplist[k]);
+      if (extra) visit_vertex(*extra);
+
+      if (!found) return {tau, tau_seg.get_upper_pt(), true};
+      // One operator time only (cannot happen for a valid trace, which has operators in pairs):
+      // up + down is the whole circle, which time_pt's cyclic addition would wrap to zero
+      auto length = up + down;
+      if (length == tau_seg.get_lower_pt()) length = tau_seg.get_upper_pt();
+      return {tau - down, length, false};
+    }
+
+    /// Is dyn_oplist[k] a local vertex -- both of its bilinears inside one operator-free arc of
+    /// the rest of the trace (with `extra` included, see trace_gap)? Returns that arc's length,
+    /// or 0 if the vertex is not local.
+    double local_vertex_gap(long k, configuration::dyn_bosonic_pair_t const *extra = nullptr) const {
+      auto const &v  = config.dyn_oplist[k];
+      auto const gap = trace_gap(v.tau1, k, extra);
+      return gap.contains(v.tau2) ? double(gap.length) : 0.0;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Tabulated Lang-Firsov kernel
+    //
+    // K_{ab}(tau) is needed for every (proposed operator, trace operator) pair of every
+    // proposal -- ~4 x 100 evaluations per move at beta = 100 -- so summing the dyn_n_l
+    // Legendre terms each time dominated the move cost. It is instead tabulated once on a
+    // uniform grid over [0, beta/2] (K(tau) = K(beta - tau)) and linearly interpolated. The
+    // grid is doubled until interpolation reproduces the Legendre series to
+    // K_TABLE_RTOL * max(1, max|K|) at every midpoint, so the table is a faithful stand-in for
+    // the series rather than a further approximation of the model: the series itself differs
+    // from the exact double integral of D(tau) by ~1e-5 at dyn_n_l = 50. The MC stays exact
+    // for the tabulated K -- every weight is computed from the same table.
+    // ---------------------------------------------------------------------------------
+    static constexpr double K_TABLE_RTOL  = 1e-9;
+    static constexpr long K_TABLE_N_START = 4096;
+    static constexpr long K_TABLE_N_MAX   = 1L << 20;
+
+    long n_K_lin = 0;          // K_tab is indexed by (linear index a, linear index b, grid point)
+    long n_K_tab = 0;          // number of grid intervals over [0, beta/2]
+    double K_tab_inv_h = 0.0;  // 1 / grid spacing
+    std::vector<double> K_tab; // (n_K_lin * n_K_lin) rows of n_K_tab + 1 points
+
+    /// K_{ab}(t) summed from its Legendre coefficients -- the reference the table is built from
+    double K_legendre(long a, long b, double t) const {
+      double const beta = config.beta();
+      triqs::utility::legendre_generator leg;
+      leg.reset(2.0 * t / beta - 1.0);
+      double val = 0.0;
+      for (int n = 0; n < K_n_size; ++n) val += K_n[a][b][n] * leg.next();
+      return val;
+    }
+
+    void build_K_table(int verbosity) {
+      n_K_lin           = long(K_n.size());
+      double const half = config.beta() / 2.0;
+      double max_err = 0.0, max_K = 0.0;
+      for (n_K_tab = K_TABLE_N_START;; n_K_tab *= 2) {
+        double const h = half / double(n_K_tab);
+        K_tab.assign(n_K_lin * n_K_lin * (n_K_tab + 1), 0.0);
+        max_err = max_K = 0.0;
+        for (long a = 0; a < n_K_lin; ++a)
+          for (long b = 0; b < n_K_lin; ++b) {
+            if (std::all_of(K_n[a][b].begin(), K_n[a][b].end(), [](double k) { return k == 0.0; })) continue;
+            double *row = &K_tab[(a * n_K_lin + b) * (n_K_tab + 1)];
+            for (long i = 0; i <= n_K_tab; ++i) {
+              row[i] = K_legendre(a, b, double(i) * h);
+              max_K  = std::max(max_K, std::abs(row[i]));
+            }
+            for (long i = 0; i < n_K_tab; ++i)
+              max_err = std::max(max_err, std::abs(0.5 * (row[i] + row[i + 1]) - K_legendre(a, b, (double(i) + 0.5) * h)));
+          }
+        if (max_err <= K_TABLE_RTOL * std::max(1.0, max_K) || n_K_tab >= K_TABLE_N_MAX) break;
+      }
+      K_tab_inv_h = double(n_K_tab) / half;
+      if (max_err > K_TABLE_RTOL * std::max(1.0, max_K))
+        std::cerr << "WARNING: Lang-Firsov K(tau) table did not reach its tolerance: max interpolation error " << max_err
+                  << " at " << n_K_tab << " intervals (max|K| = " << max_K << ")\n";
+      else if (verbosity >= 3)
+        std::cout << "Lang-Firsov K(tau) tabulated on " << n_K_tab << " intervals over [0, beta/2], max interpolation error "
+                  << max_err << " (max|K| = " << max_K << ")" << std::endl;
+    }
+
+    /// s_1 s_2 K_{a(op1) b(op2)}(tau1 - tau2) from the table, s = +1 for c^dagger, -1 for c
+    double eval_K(op_desc const &op1, op_desc const &op2, time_pt const &tau1, time_pt const &tau2) const {
+      double const beta = config.beta();
+      double t          = double(tau1 - tau2); // cyclic difference, in [0, beta)
+      if (t > beta / 2.0) t = beta - t;
+      double const x    = t * K_tab_inv_h;
+      long const i      = std::min(long(x), n_K_tab - 1);
+      double const *row = &K_tab[(op1.linear_index * n_K_lin + op2.linear_index) * (n_K_tab + 1)];
+      double const val  = row[i] + (x - double(i)) * (row[i + 1] - row[i]);
+      return (op1.dagger == op2.dagger) ? val : -val;
     }
 
 /// Ratio of dynamical MC weights w^dyn_loc for a proposed operator update:
@@ -202,39 +346,18 @@ double compute_lang_firsov_ratio(
 
   if (!use_lang_firsov || K_n_size == 0) return 1.0;
 
-  double const beta = config.beta();
-  double delta_W    = 0.0;
-
-  // s_α s_β K_{i(α)j(β)}(τ_α - τ_β) reconstructed from Legendre coefficients.
-  // Time difference is folded into [0, β/2] to enforce K(τ) = K(β - τ).
-  auto eval_K = [&](op_desc const& op1, op_desc const& op2,
-                    time_pt const& tau1, time_pt const& tau2) -> double {
-    int const a = linindex.at({op1.block_index, op1.inner_index});
-    int const b = linindex.at({op2.block_index, op2.inner_index});
-    double t = double(tau1 - tau2);
-    if (t < 0.0) t += beta;
-    if (t > beta) t -= beta;
-    if (t > beta / 2.0) t = beta - t;
-    triqs::utility::legendre_generator leg;
-    leg.reset(2.0 * t / beta - 1.0);
-    double val = 0.0;
-    for (int n = 0; n < K_n_size; ++n) val += K_n[a][b][n] * leg.next();
-    double const s1 = op1.dagger ? +1.0 : -1.0;
-    double const s2 = op2.dagger ? +1.0 : -1.0;
-    return s1 * s2 * val;
-  };
+  double delta_W = 0.0;
 
   // 1. Interactions with the persistent background: every trace operator not being removed,
   //    hybridization and stochastic dynamical-vertex operators alike
-  auto const background = trace_ops();
   auto background_interaction = [&](op_desc const& op, time_pt const& t, double sign) {
-    for (auto const& [t_bg, op_bg] : background) {
+    for_each_trace_op([&](time_pt const& t_bg, op_desc const& op_bg) {
       bool is_removed = std::any_of(removed.begin(), removed.end(), [&](auto const& r) {
         return r.first == t_bg && r.second.block_index == op_bg.block_index && r.second.inner_index == op_bg.inner_index
            && r.second.dagger == op_bg.dagger;
       });
       if (!is_removed) delta_W += sign * eval_K(op, op_bg, t, t_bg);
-    }
+    });
   };
   for (auto const& [t, op] : inserted) background_interaction(op, t, +1.0);
   for (auto const& [t, op] : removed)  background_interaction(op, t, -1.0);
