@@ -110,6 +110,10 @@ solve_params = {
     "length_cycle":      75,
     "random_seed":       123 * mpi.rank + 567,
     "random_name":       "",
+    # The local dynamical-vertex moves (on by default) change the random stream; kept off so
+    # this reference keeps checking the original move set bit for bit. They are validated
+    # statistically by kanamori_dyn_selfconsistency.py instead.
+    "move_dyn_local":    False,
     "measure_pert_order": True,
     "perform_tail_fit": True,
     "fit_max_moment": 3,

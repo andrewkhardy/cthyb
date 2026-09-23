@@ -124,6 +124,7 @@ TEST(CTHYB, Spin_Spin) {
   sparams.length_cycle      = length_cycle;
   sparams.random_seed       = random_seed;
   sparams.random_name       = "";
+  sparams.move_dyn_local    = false; // keeps the reference's random stream; see test/python/spin_spin.py
   sparams.measure_G_tau     = true;
   sparams.measure_pert_order = true;
 

@@ -23,16 +23,22 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common import io
 
 # ---------------------------------------------------------------------------------- knobs
-CHAIN_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/spin_spin/chains"
+CHAIN_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/spin_spin/chains2"
 PROD_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/spin_spin"
-# (beta, filling, first seed, number of chains) -- as in run_chains.sh
-CELLS = [(100.0, 0.75, 1000, 24), (100.0, 0.5, 2000, 12), (10.0, 0.75, 3000, 12)]
+# (beta, filling, [(series label, first seed, number of chains), ...]) -- as in run_chains.sh.
+# Round 1 (CHAIN_DIR .../chains, SEED_STEP 1): CTSEG and CTHYB at seeds 1000 x 24
+# (beta = 100, n = 0.75), 2000 x 12 (n = 0.5), 3000 x 12 (beta = 10) -- but seeds 2k, 2k+1
+# there are the same chain (RandMT forces odd).
+CELLS = [(100.0, 0.75, [("CTSEG", 1000, 32), ("CTHYB old moves", 1000, 16), ("CTHYB new moves", 1100, 24)]),
+         (100.0, 0.5, [("CTSEG", 2000, 16), ("CTHYB new moves", 2100, 8)])]
+SEED_STEP = 2
 K_SPLIT = 4            # k_dyn below this counts as the no-moment mode
 TAG = "J-1_jperp-1_szsz-1"
 # -----------------------------------------------------------------------------------------
 
-SOLVERS = {"CTSEG": ("ctseg", ""), "CTHYB": ("cthyb", "_lf-True")}
-COLOR = {"CTSEG": "#1f6feb", "CTHYB": "#e8710a"}
+# series label -> (solver, filename suffix)
+SERIES = {"CTSEG": ("ctseg", ""), "CTHYB old moves": ("cthyb", "_lf-True"), "CTHYB new moves": ("cthyb", "_lf-True")}
+COLOR = {"CTSEG": "#1f6feb", "CTHYB old moves": "#e8710a", "CTHYB new moves": "#2a9d3f"}
 
 
 def low_mode_weight(run):
@@ -41,11 +47,12 @@ def low_mode_weight(run):
 
 
 fig, axes = plt.subplots(len(CELLS), 2, figsize=(11, 3.6 * len(CELLS)), squeeze=False)
-for row, (beta, filling, seed0, count) in enumerate(CELLS):
+for row, (beta, filling, series) in enumerate(CELLS):
     ax_n, ax_w = axes[row]
-    for col, (label, (solver, suffix)) in enumerate(SOLVERS.items()):
+    for col, (label, seed0, count) in enumerate(series):
+        solver, suffix = SERIES[label]
         dens, weight = [], []
-        for seed in range(seed0, seed0 + count):
+        for seed in range(seed0, seed0 + SEED_STEP * count, SEED_STEP):
             run = io.load(io.output_file(CHAIN_DIR, "spin_spin", solver, beta, filling,
                                          tag=f"{TAG}{suffix}_seed-{seed}"))
             if run is None:
@@ -71,7 +78,7 @@ for row, (beta, filling, seed0, count) in enumerate(CELLS):
               f"range = [{dens.min():.4f}, {dens.max():.4f}]  "
               f"P(k_dyn<{K_SPLIT}) = {weight.mean():.3f} +- {weight.std(ddof=1):.3f}")
 
-    ax_n.set_xticks(range(len(SOLVERS)), list(SOLVERS))
+    ax_n.set_xticks(range(len(series)), [label for label, _, _ in series], fontsize=8)
     ax_n.set_ylabel(r"$\langle n\rangle$ per spin-orbital, one point per chain")
     ax_n.set_title(r"$\beta$" + f"={beta:g}, n={filling:g}")
     ax_n.legend(fontsize=7)
