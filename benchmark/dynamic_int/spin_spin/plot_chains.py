@@ -28,18 +28,19 @@ SEED_STEP = 2
 CELLS = [
     ("Sz.Sz only, beta = 100", 100.0, 0.75, 0, 1,
      [("CTSEG", "ctseg", None, 1000, 8), ("CTHYB ref", "cthyb", True, 1000, 12),
-      ("CTHYB dyn_n_l 150", "cthyb", True, 1100, 12), ("CTHYB lc 100 + double", "cthyb", True, 1200, 12),
-      ("CTHYB lf=False", "cthyb", False, 1300, 28)]),
+      ("CTHYB dyn_n_l 150", "cthyb", True, 1100, 12), ("CTHYB lc 100 + double", "cthyb", True, 1200, 12)]),
     ("Sz.Sz only, beta = 30", 30.0, 0.75, 0, 1,
      [("CTSEG", "ctseg", None, 2000, 6), ("CTHYB ref", "cthyb", True, 2000, 6)]),
     ("Sz.Sz only, beta = 10", 10.0, 0.75, 0, 1,
      [("CTSEG", "ctseg", None, 3000, 6), ("CTHYB ref", "cthyb", True, 3000, 6)]),
+    ("full S.S, beta = 100, mu(n = 0.75)", 100.0, 0.75, 1, 1,
+     [("CTSEG", "ctseg", None, 4000, 8), ("CTHYB new moves", "cthyb", True, 4000, 20)]),
 ]
 J = 1.0
 # -----------------------------------------------------------------------------------------
 
 COLOR = {"CTSEG": "#1f6feb", "CTHYB ref": "#e8710a", "CTHYB dyn_n_l 150": "#2a9d3f",
-         "CTHYB lc 100 + double": "#9b5de5", "CTHYB lf=False": "#c1121f"}
+         "CTHYB lc 100 + double": "#9b5de5", "CTHYB new moves": "#c1121f"}
 
 fig, axes = plt.subplots(len(CELLS), 2, figsize=(11, 3.6 * len(CELLS)), squeeze=False)
 for row, (title, beta, filling, jperp, szsz, series) in enumerate(CELLS):
