@@ -47,7 +47,7 @@ S.solve(h_int=model.h_int(), h_loc0=model.h_loc0(),
         length_cycle=args.length_cycle, n_warmup_cycles=args.n_warmup_cycles,
         n_cycles=args.n_cycles, max_time=args.max_time,
         measure_nn_tau=True, measure_F_tau=True, measure_pert_order=True,
-        measure_densities=True)
+        measure_densities=True, **model.seed_kwargs())
 
 if mpi.is_master_node():
     r = S.results

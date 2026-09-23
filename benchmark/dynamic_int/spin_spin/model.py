@@ -101,6 +101,10 @@ def add_model_args(parser):
     parser.add_argument("--max_time", type=int, default=1200,
                         help="Hard wall-clock cap in seconds for the MC, -1 to disable")
     parser.add_argument("--out_dir", default=DEFAULT_OUT_DIR, help="Output directory")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="MC random seed, also appended to the filename. For independent serial "
+                             "chains (run_chains.sh): the solvers' default seed depends only on the MPI "
+                             "rank, so every serial run would otherwise be the same chain")
 
 
 class Model:
@@ -211,7 +215,12 @@ class Model:
     def output_file(self, solver, tag=""):
         return io.output_file(self.args.out_dir, BENCHMARK, solver, self.beta, self.args.filling,
                               tag=f"J-{self.J:g}_jperp-{self.jperp:g}_szsz-{self.szsz:g}"
-                                  + (f"_{tag}" if tag else ""))
+                                  + (f"_{tag}" if tag else "")
+                                  + (f"_seed-{self.args.seed}" if self.args.seed is not None else ""))
+
+    def seed_kwargs(self):
+        """`random_seed` for solve(), only when --seed was given (else the solver's default)."""
+        return {} if self.args.seed is None else {"random_seed": self.args.seed}
 
     def report(self):
         """One-line summary every run prints, so a log says which model was solved."""
