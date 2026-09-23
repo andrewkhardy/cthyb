@@ -11,22 +11,20 @@
 # Independent-chain diagnostics for the beta = 100 CTHYB/CTSEG disagreement. Not a
 # production run. One chain per core, each with its own seed.
 #
-# Round 3 (chains3) located it: with Sz.Sz only -- Lang-Firsov, no stochastic vertices at
-# all -- CTHYB gives <n> = 0.8509(6) against CTSEG's 0.8597(5) at the same mu, beta = 100.
-# Jperp only (stochastic vertices, no Lang-Firsov) agrees with CTSEG. So the Lang-Firsov
-# path, or something only it is sensitive to, is wrong at beta = 100. K(tau) grows like beta
-# (max|K| = 4.3 against 0.43 at beta = 10), so anything harmless at beta = 10 may not be.
+# Rounds 2-4 (chains2-4) had CTHYB off CTSEG whenever Lang-Firsov was on -- Sz.Sz only at
+# the same mu: 0.8499 vs 0.8600 at beta = 100, 0.7021 vs 0.7042 at beta = 10. The cause was
+# a bug introduced with the tabulated K(tau): remove.cpp and double_remove.cpp rebuilt the
+# removed operators with linear_index = 0, which the table indexes by, so every up-spin
+# removal used the down-spin kernel (K_ud = -K_dd for Sz.Sz). Fixed; this round checks the
+# fix on the same cells (needs the rebuilt solver). Output overwrites chains4.
 #
-# This round, all Sz.Sz only, compared with CTSEG at the same mu:
-#
-#   beta = 100  CTSEG 8
-#               CTHYB reference (dyn_n_l 50, length_cycle 500, no double moves) 12
-#               CTHYB dyn_n_l 150                        -> Legendre truncation of K
-#               CTHYB length_cycle 100 + double moves    -> the round-1 production settings
-#               CTHYB lang_firsov False                  -> the same D0 sampled stochastically,
-#                                                           no K(tau) at all (sign may be poor)
-#   beta = 30   CTSEG 6 | CTHYB 6                        -> how the gap grows with beta
-#   beta = 10   CTSEG 6 | CTHYB 6                        -> the baseline, away from half filling
+#   Sz.Sz only, same mu (4.068123):
+#     beta = 100  CTSEG 8 | CTHYB reference (dyn_n_l 50, length_cycle 500, no double) 12
+#                         | CTHYB dyn_n_l 150 12 | CTHYB length_cycle 100 + double moves 12
+#     beta = 30   CTSEG 6 | CTHYB 6
+#     beta = 10   CTSEG 6 | CTHYB 6
+#   Full S.S, beta = 100, mu(n = 0.75) -- the original disagreement, with the new moves:
+#                 CTSEG 8 | CTHYB 20
 #
 # Seeds are spaced by 2: TRIQS's default RNG (RandMT) forces the seed odd, so 2k and 2k+1
 # are the same chain.
@@ -64,11 +62,13 @@ chain ctseg  8 1000 --beta 100
 chain cthyb 12 1000 --beta 100 $REF
 chain cthyb 12 1100 --beta 100 $REF --dyn_n_l 150
 chain cthyb 12 1200 --beta 100 --length_cycle 100 --move_double True --n_warmup_cycles 25000
-chain cthyb 28 1300 --beta 100 $REF --lang_firsov False
 # beta = 30 and 10, same mu
 chain ctseg  6 2000 --beta 30
 chain cthyb  6 2000 --beta 30 $REF
 chain ctseg  6 3000 --beta 10
 chain cthyb  6 3000 --beta 10 $REF
+# full S.S at beta = 100 (later arguments override MODEL's --jperp 0 and CTHYB_ARGS' move flags)
+chain ctseg  8 4000 --beta 100 --jperp 1
+chain cthyb 20 4000 --beta 100 $REF --jperp 1 --move_dyn_local True --spin_flip_move True
 wait
 echo "done: $(ls "$OUT"/*.h5 | wc -l) chain files in $OUT"
