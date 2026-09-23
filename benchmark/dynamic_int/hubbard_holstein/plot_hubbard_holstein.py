@@ -9,13 +9,10 @@
 #
 # Knobs hardcoded below so this pastes into a notebook; missing files are skipped.
 import os
-import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common import io
+from h5 import HDFArchive
 
 # ---------------------------------------------------------------------------------- knobs
 DATA_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/hubbard_holstein"
@@ -45,10 +42,11 @@ ALT_STYLE = dict(linewidth=1.0, alpha=0.75, linestyle=(0, (1, 1)))
 def load_beta(beta):
     runs = {}
     for label, (solver, tag) in SERIES.items():
-        full_tag = f"g-{G:g}_w0-{OMEGA_0:g}" + (f"_{tag}" if tag else "")
-        run = io.load(io.output_file(DATA_DIR, "hubbard_holstein", solver, beta, FILLING, tag=full_tag))
-        if run is not None:
-            runs[label] = run
+        path = os.path.join(DATA_DIR, f"hubbard_holstein_{solver}_b-{beta:g}_n-{FILLING:g}_g-{G:g}_w0-{OMEGA_0:g}"
+                                      + (f"_{tag}" if tag else "") + ".h5")
+        if os.path.exists(path):
+            with HDFArchive(path, "r") as A:
+                runs[label] = {k: A[k] for k in A.keys()}
     return runs
 
 
@@ -82,11 +80,8 @@ for col, beta in enumerate(betas):
             axes[3][col].plot(run["tau_corr"] / beta, run["corr"], label=label, **style)
             if run.get("corr_alt") is not None:
                 # corr_alt is on the BOSONIC tau mesh (Q_tau, n_tau_bosonic points), corr on
-                # O_tau's fermionic one, so it needs its own x -- the `raw` lookup this
-                # replaced could never supply one, since io.load omits `raw` by default and
-                # deliberately (BlockGfs there need the writing solver's triqs build), and the
-                # fallback silently handed it the wrong-length fermionic grid. The bosonic mesh
-                # is uniform on [0, beta] and linspace reproduces it to 2e-15.
+                # O_tau's fermionic one, so it needs its own x. The bosonic mesh is uniform on
+                # [0, beta] and linspace reproduces it to 2e-15.
                 alt = np.asarray(run["corr_alt"])
                 axes[3][col].plot(np.linspace(0.0, beta, len(alt)) / beta, alt,
                                   color=style["color"], **ALT_STYLE)
@@ -98,8 +93,9 @@ for col, beta in enumerate(betas):
                                   marker="o", markersize=2.5, **style)
 
         n_mean = np.mean(run["density"]) if "density" in run else float("nan")
+        h = np.asarray(run.get("pert_order_dyn", [np.nan]), dtype=float)
         print(f"[beta={beta:g} n={FILLING:g}] {label:15s} sign={run.get('average_sign', float('nan')):.3f}  "
-              f"<k_dyn>={io.mean_order(run.get('pert_order_dyn')):6.3f}  <n>={n_mean:.4f}  "
+              f"<k_dyn>={(np.arange(len(h)) * h).sum() / h.sum():6.3f}  <n>={n_mean:.4f}  "
               f"<NN>(beta/2)={np.interp(beta / 2, run['tau_corr'], run['corr']):.5f}")
 
     # Exact at half filling: Re Sigma = mu at every frequency (common/selfenergy.diagnose).

@@ -20,12 +20,13 @@ import sys
 
 import numpy as np
 import triqs.utility.mpi as mpi
+from h5 import HDFArchive
 from triqs.gfs import Fourier
 from triqs_cthyb import Solver
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import model as M  # noqa: E402
-from common import io, kernels, selfenergy  # noqa: E402
+from common import kernels, selfenergy  # noqa: E402
 
 
 def add_cthyb_args(parser):
@@ -84,10 +85,9 @@ if mpi.is_master_node():
     # measure_density_matrix=True the Python Solver has already added the equal-time part,
     # so Q_tau is the full correlator -- do not add an offset again.
     Q = S.Q_tau
-    nn_kink, tau_kink = None, None
+    nn_kink = None
     if args.density_matrix and Q is not None:
         nn_kink = sum(Q[s1, s2].data[:, 0, 0].real for s1 in M.SPINS for s2 in M.SPINS)
-        tau_kink = np.array([float(t) for t in Q["up", "up"].mesh])
     else:
         print("  NOTE: --density_matrix False, so Q_tau lacks its equal-time offset; "
               "the Legendre kink estimator is not saved.")
@@ -96,16 +96,16 @@ if mpi.is_master_node():
     print("  " + diag["text"])
     print(f"  average sign = {S.average_sign:.4f}   <n> = {np.round(density, 5)}")
 
-    io.save(model.output_file("cthyb", tag=f"lf-{args.lang_firsov}"),
-            solver="cthyb", params=vars(args), beta=model.beta, mu=mu,
-            tau_G=np.array([float(t) for t in G_up.mesh]), G=G_up.data[:, 0, 0].real,
-            w_n=w_n, Sigma=sigma_up, Sigma_alt=sigma_up_alt,
-            tau_corr=np.array([float(t) for t in S.O_tau.mesh]), corr=S.O_tau.data.real,
-            corr_label=r"$\langle N(\tau)N(0)\rangle$ (O_tau)",
-            corr_alt=nn_kink,
-            corr_alt_label=r"$\langle N(\tau)N(0)\rangle$ (Legendre kink)" if nn_kink is not None else None,
-            density=density, average_sign=S.average_sign,
-            pert_order=S.perturbation_order_total, pert_order_dyn=S.perturbation_order_dyn,
-            raw={"G_tau": S.G_tau, "G_l": S.G_l, "O_tau": S.O_tau, "Q_tau": Q, "Q_l": S.Q_l,
-                 "K_n": S.K_n, "Sigma_iw_legendre": sigma_l, "Sigma_iw_from_tau": sigma_tau,
-                 "tau_corr_alt": tau_kink})
+    path = model.output_file("cthyb", tag=f"lf-{args.lang_firsov}")
+    with HDFArchive(path, "w") as A:
+        A["params"] = {k: v for k, v in vars(args).items() if v is not None}
+        A["beta"], A["mu"] = model.beta, mu
+        A["tau_G"], A["G"] = np.array([float(t) for t in G_up.mesh]), G_up.data[:, 0, 0].real
+        A["w_n"], A["Sigma"], A["Sigma_alt"] = w_n, sigma_up, sigma_up_alt
+        A["tau_corr"], A["corr"] = np.array([float(t) for t in S.O_tau.mesh]), S.O_tau.data.real
+        if nn_kink is not None:
+            A["corr_alt"] = nn_kink
+        A["density"], A["average_sign"] = density, S.average_sign
+        A["pert_order"], A["pert_order_dyn"] = S.perturbation_order_total.data, S.perturbation_order_dyn.data
+        A["G_tau_gf"], A["G_l_gf"] = S.G_tau, S.G_l
+    print(f"Saved {path}")

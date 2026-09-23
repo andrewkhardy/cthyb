@@ -27,13 +27,14 @@ import sys
 
 import numpy as np
 import triqs.utility.mpi as mpi
+from h5 import HDFArchive
 from triqs.gfs import (BlockGf, Gf, MeshDLRImFreq, MeshDLRImTime, fit_gf_dlr, inverse, make_gf_dlr,
                        make_gf_dlr_imfreq, make_gf_from_fourier, make_gf_imtime)
 from triqs_ctint import Solver
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import model as M  # noqa: E402
-from common import baths, io, kernels, selfenergy  # noqa: E402
+from common import baths, kernels, selfenergy  # noqa: E402
 
 
 def add_ctint_args(parser):
@@ -125,12 +126,15 @@ if mpi.is_master_node():
     print("  " + diag["text"])
     print(f"  average sign = {S.average_sign:.4f}   <n> = {np.round(density, 5)}")
 
-    io.save(model.output_file("ctint"),
-            solver="ctint", params=vars(args), beta=model.beta, mu=mu,
-            tau_G=np.array([float(t) for t in G_tau["up"].mesh]), G=G_tau["up"].data[:, 0, 0].real,
-            w_n=w_n, Sigma=sigma_up, Sigma_alt=sigma_up_alt,
-            tau_corr=np.array([float(t) for t in chi_tau.mesh]), corr=nn_tot,
-            corr_label=r"$\langle N(\tau)N(0)\rangle$ (chiAB)",
-            density=density, average_sign=S.average_sign,
-            raw={"G_iw": S.G_iw, "chiAB_tau": S.chiAB_tau, "G0_iw": S.G0_iw,
-                 "Sigma_iw_dyson": sigma_dyson})
+    path = model.output_file("ctint")
+    with HDFArchive(path, "w") as A:
+        A["params"] = {k: v for k, v in vars(args).items() if v is not None}
+        A["beta"], A["mu"] = model.beta, mu
+        A["tau_G"], A["G"] = np.array([float(t) for t in G_tau["up"].mesh]), G_tau["up"].data[:, 0, 0].real
+        A["w_n"], A["Sigma"] = w_n, sigma_up
+        if sigma_up_alt is not None:
+            A["Sigma_alt"] = sigma_up_alt
+        A["tau_corr"], A["corr"] = np.array([float(t) for t in chi_tau.mesh]), nn_tot
+        A["density"], A["average_sign"] = density, float(np.real(S.average_sign))
+        A["G_iw_gf"], A["chiAB_tau_gf"] = S.G_iw, S.chiAB_tau
+    print(f"Saved {path}")

@@ -22,12 +22,13 @@ import sys
 
 import numpy as np
 import triqs.utility.mpi as mpi
+from h5 import HDFArchive
 from triqs.gfs import Fourier
 from triqs_ctseg import Solver
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import model as M  # noqa: E402
-from common import io, kernels, selfenergy  # noqa: E402
+from common import kernels, selfenergy  # noqa: E402
 
 args = M.parse_args("CTSEG single-orbital spin-spin benchmark")
 model = M.Model(args)
@@ -75,14 +76,15 @@ if mpi.is_master_node():
     print("  " + diag["text"])
     print(f"  average sign = {r.average_sign:.4f}   <n> = {np.round(density, 5)}")
 
-    io.save(model.output_file("ctseg"),
-            solver="ctseg", params=vars(args), beta=model.beta, mu=mu,
-            tau_G=np.array([float(t) for t in G_up.mesh]), G=G_up.data[:, 0, 0].real,
-            w_n=w_n, Sigma=sigma_up, Sigma_alt=sigma_up_alt,
-            tau_corr=np.array([float(t) for t in nn["up", "up"].mesh]), corr=szsz,
-            corr_label=r"$\langle S_z(\tau)S_z(0)\rangle$ (nn_tau)",
-            density=density, average_sign=r.average_sign,
-            pert_order=getattr(r, "pert_order", None),
-            pert_order_dyn=getattr(r, "pert_order_Jperp", None),
-            raw={"G_tau": r.G_tau, "nn_tau": nn, "F_tau": r.F_tau,
-                 "Sigma_iw_improved": sigma_improved, "Sigma_iw_dyson": sigma_dyson})
+    path = model.output_file("ctseg")
+    with HDFArchive(path, "w") as A:
+        A["params"] = {k: v for k, v in vars(args).items() if v is not None}
+        A["beta"], A["mu"] = model.beta, mu
+        A["tau_G"], A["G"] = np.array([float(t) for t in G_up.mesh]), G_up.data[:, 0, 0].real
+        A["w_n"], A["Sigma"], A["Sigma_alt"] = w_n, sigma_up, sigma_up_alt
+        A["tau_corr"], A["corr"] = np.array([float(t) for t in nn["up", "up"].mesh]), szsz
+        A["density"], A["average_sign"] = density, r.average_sign
+        if getattr(r, "pert_order_Jperp", None) is not None:
+            A["pert_order_dyn"] = np.asarray(r.pert_order_Jperp)
+        A["G_tau_gf"], A["nn_tau_gf"] = r.G_tau, nn
+    print(f"Saved {path}")

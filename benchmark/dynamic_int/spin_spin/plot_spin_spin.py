@@ -20,13 +20,10 @@
 # Knobs are hardcoded below so this pastes straight into a notebook; missing files are
 # skipped, so a partially finished grid still plots.
 import os
-import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common import io
+from h5 import HDFArchive
 
 # ---------------------------------------------------------------------------------- knobs
 DATA_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/spin_spin"
@@ -62,11 +59,11 @@ ALT_STYLE = dict(linewidth=1.0, alpha=0.75, linestyle=(0, (1, 1)))
 def load_case(jperp, szsz, beta, filling):
     runs = {}
     for label, (solver, tag) in SERIES.items():
-        full_tag = f"J-{J:g}_jperp-{jperp:g}_szsz-{szsz:g}" + (f"_{tag}" if tag else "")
-        path = io.output_file(DATA_DIR, "spin_spin", solver, beta, filling, tag=full_tag)
-        run = io.load(path)
-        if run is not None:
-            runs[label] = run
+        path = os.path.join(DATA_DIR, f"spin_spin_{solver}_b-{beta:g}_n-{filling:g}_J-{J:g}_jperp-{jperp:g}_szsz-{szsz:g}"
+                                      + (f"_{tag}" if tag else "") + ".h5")
+        if os.path.exists(path):
+            with HDFArchive(path, "r") as A:
+                runs[label] = {k: A[k] for k in A.keys()}
     return runs
 
 
@@ -158,10 +155,8 @@ def make_figure(beta, filling):
                 if run.get("corr_alt") is not None:
                     # corr_alt lives on the BOSONIC tau mesh (Q_tau, n_tau_bosonic points) while
                     # corr lives on O_tau's fermionic one -- 2001 vs 4096 for these files -- so it
-                    # needs its own x. The writer's copy of that grid sits in `raw`, which io.load
-                    # omits by default and deliberately (it holds BlockGfs that need the writing
-                    # solver's triqs build), so reconstruct it instead: the mesh is uniform on
-                    # [0, beta], and linspace reproduces it to 2e-15.
+                    # needs its own x. The mesh is uniform on [0, beta], and linspace reproduces
+                    # it to 2e-15.
                     alt = np.asarray(run["corr_alt"])
                     axes[3][col].plot(np.linspace(0.0, run["beta"], len(alt)), alt,
                                       color=style["color"], **ALT_STYLE)
@@ -177,7 +172,8 @@ def make_figure(beta, filling):
                                 - np.interp(grid, ref["tau_corr"], ref["corr"]))
                     axes[4][col].plot(grid, residual, label=label, marker="o", markersize=2.5, **style)
 
-            order = io.mean_order(run.get("pert_order_dyn"))
+            h = np.asarray(run.get("pert_order_dyn", [np.nan]), dtype=float)
+            order = (np.arange(len(h)) * h).sum() / h.sum()
             n_mean = np.mean(run["density"]) if "density" in run else float("nan")
             flag = "" if ok else f"   <-- NOT TRUSTED ({why})"
             print(f"[beta={beta:g} n={filling:g} jperp={jperp} szsz={szsz}] {label:15s} "
