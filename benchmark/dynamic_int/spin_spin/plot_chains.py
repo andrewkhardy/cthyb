@@ -23,23 +23,22 @@ import numpy as np
 from h5 import HDFArchive
 
 # ---------------------------------------------------------------------------------- knobs
-CHAIN_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/spin_spin/chains5"
+CHAIN_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/spin_spin/chains6"
 SEED_STEP = 2
 # (title, beta, filling, jperp, szsz, [(series label, solver, lang_firsov, first seed, n chains)])
 # -- as in run_chains.sh. lang_firsov is None for CTSEG (no such tag in its file names).
 # Round 4 (chains4): Sz.Sz only at beta = 100 [CTSEG 1000x8, CTHYB ref 1000x12, dyn_n_l 150
 # 1100x12, lc 100 + double 1200x12], beta = 30 [2000x6 each], beta = 10 [3000x6 each]; full
-# S.S beta = 100 [CTSEG 4000x8, CTHYB new moves 4000x20].
+# S.S beta = 100 [CTSEG 4000x8, CTHYB new moves 4000x20]. Round 5 (chains5), full S.S
+# beta = 100: CTSEG 5000x24, CTHYB p=0 5000x24, p=0.75 5100x24, p=0.75 lc 2000 5200x24.
 CELLS = [
     ("full S.S, beta = 100, mu(n = 0.75)", 100.0, 0.75, 1, 1,
-     [("CTSEG", "ctseg", None, 5000, 24), ("CTHYB p=0", "cthyb", True, 5000, 24),
-      ("CTHYB p=0.75", "cthyb", True, 5100, 24), ("CTHYB p=0.75, lc 2000", "cthyb", True, 5200, 24)]),
+     [("CTSEG", "ctseg", None, 5000, 24), ("CTHYB lc 2000", "cthyb", True, 5200, 72)]),
 ]
 J = 1.0
 # -----------------------------------------------------------------------------------------
 
-COLOR = {"CTSEG": "#1f6feb", "CTHYB p=0": "#e8710a", "CTHYB p=0.75": "#2a9d3f",
-         "CTHYB p=0.75, lc 2000": "#c1121f"}
+COLOR = {"CTSEG": "#1f6feb", "CTHYB lc 2000": "#c1121f"}
 
 fig, axes = plt.subplots(len(CELLS), 3, figsize=(16.5, 3.6 * len(CELLS)), squeeze=False)
 for row, (title, beta, filling, jperp, szsz, series) in enumerate(CELLS):

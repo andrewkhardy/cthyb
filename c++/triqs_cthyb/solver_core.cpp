@@ -439,10 +439,8 @@ namespace triqs_cthyb {
 
     // Dynamical interaction moves - automatically enabled when dynamical interactions are present
     if (has_dyn_interactions) {
-      // Insert and remove share p_local: it enters both directions' proposal probability
-      double const p_local = params.move_dyn_local ? dyn_local_fraction : 0.0;
-      qmc.add_move(move_insert_dyn(data, qmc.get_rng(), histo_map, p_local), "Insert dynamical interaction", 1.0);
-      qmc.add_move(move_remove_dyn(data, qmc.get_rng(), histo_map, p_local), "Remove dynamical interaction", 1.0);
+      qmc.add_move(move_insert_dyn(data, qmc.get_rng(), histo_map), "Insert dynamical interaction", 1.0);
+      qmc.add_move(move_remove_dyn(data, qmc.get_rng(), histo_map), "Remove dynamical interaction", 1.0);
       // Re-pairs vertices that insert/remove cannot reach on their own (crossing spin-flip pairings)
       qmc.add_move(move_swap_dyn(data, qmc.get_rng()), "Swap dynamical vertex partners", 1.0);
       if (params.verbosity >= 2) {

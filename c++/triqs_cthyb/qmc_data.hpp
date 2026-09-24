@@ -209,65 +209,6 @@ namespace triqs_cthyb {
       return ops;
     }
 
-    /// An operator-free arc of the imaginary-time circle: (lo, lo + length), exclusive
-    struct trace_gap_t {
-      time_pt lo, length;
-      bool full = false; // no operators at all: the whole circle
-
-      bool contains(time_pt const &t) const {
-        if (full) return true;
-        auto const offset = t - lo;
-        return offset > time_pt{} && offset < length; // time_pt compares grid positions only
-      }
-    };
-
-    /// The operator-free arc of the trace containing tau, bounded by the nearest trace operators
-    /// below and above it (cyclically), with the operators of dyn_oplist[skip] left out. This is
-    /// what move_insert_dyn's local proposal draws into; see moves/insert_dyn.cpp.
-    trace_gap_t trace_gap(time_pt const &tau, long skip = -1) const {
-      bool found = false;
-      time_pt up, down; // distance to the nearest operator above / below tau
-      auto visit = [&](time_pt const &t) {
-        if (t == tau) return;
-        auto const d_up = t - tau, d_down = tau - t;
-        if (!found || d_up < up) up = d_up;
-        if (!found || d_down < down) down = d_down;
-        found = true;
-      };
-      auto const eps     = tau_seg.get_epsilon();
-      auto visit_vertex  = [&](configuration::dyn_bosonic_pair_t const &v) {
-        visit(v.tau1);
-        visit(v.tau1 - eps);
-        visit(v.tau2);
-        visit(v.tau2 - eps);
-      };
-      for (auto const &[t, op] : config) visit(t);
-      for (long k = 0; k < long(config.dyn_oplist.size()); ++k)
-        if (k != skip) visit_vertex(config.dyn_oplist[k]);
-
-      if (!found) return {tau, tau_seg.get_upper_pt(), true};
-      // One operator time only (cannot happen for a valid trace, which has operators in pairs):
-      // up + down is the whole circle, which time_pt's cyclic addition would wrap to zero
-      auto length = up + down;
-      if (length == tau_seg.get_lower_pt()) length = tau_seg.get_upper_pt();
-      return {tau - down, length, false};
-    }
-
-    /// Probability density with which move_insert_dyn proposes a vertex at (tau1 > tau2) of a
-    /// given catalog entry, into the trace with dyn_oplist[skip] left out (skip = -1: as is).
-    /// A mixture: with probability p_local both ends in one operator-free arc of length l
-    /// (density 2 / (beta l), zero if the pair does not share an arc), otherwise both uniform on
-    /// [0, beta) (density 2 / beta^2). move_remove_dyn uses the same function for the reverse.
-    double dyn_insertion_density(time_pt const &tau1, time_pt const &tau2, double p_local, long skip = -1) const {
-      double const beta = config.beta();
-      double density    = (1.0 - p_local) * (2.0 / (beta * beta));
-      if (p_local > 0.0) {
-        auto const gap = trace_gap(tau1, skip);
-        if (gap.contains(tau2)) density += p_local * 2.0 / (beta * double(gap.length));
-      }
-      return density * (1.0 / dyn_op_list.size());
-    }
-
     // ---------------------------------------------------------------------------------
     // Tabulated Lang-Firsov kernel
     //

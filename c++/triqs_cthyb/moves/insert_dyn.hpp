@@ -24,18 +24,12 @@
 
 namespace triqs_cthyb {
 
-  /// Fraction of move_insert_dyn proposals that place both ends of the vertex in one
-  /// operator-free stretch of the trace, when the solve parameter move_dyn_local is on (0
-  /// otherwise). Any value in [0, 1) samples the same distribution; see insert_dyn.cpp.
-  inline constexpr double dyn_local_fraction = 0.75;
-
   // Insertion of C, C^dagger operator (dynamic version)
   class move_insert_dyn {
 
     qmc_data &data;
     configuration &config;
     mc_tools::random_generator &rng;
-    double p_local; // probability of the local proposal (0: both ends uniform on [0, beta))
     //int block_index, block_size;
     //histogram *histo_proposed, *histo_accepted; // Analysis histograms
     // double dtau;
@@ -47,7 +41,7 @@ namespace triqs_cthyb {
     //histogram *add_histo(std::string const &name, histo_map_t *histos);
 
     public:
-    move_insert_dyn(qmc_data &data, mc_tools::random_generator &rng, histo_map_t *histos, double p_local = 0.0);
+    move_insert_dyn(qmc_data &data, mc_tools::random_generator &rng, histo_map_t *histos);
 
     mc_weight_t attempt();
     mc_weight_t accept();

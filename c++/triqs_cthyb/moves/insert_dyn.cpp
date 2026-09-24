@@ -19,45 +19,19 @@
  *
  ******************************************************************************/
 
-// Insertion of a stochastic dynamical vertex, with a mixture proposal for its two times.
-//
-// With probability 1 - p_local both ends are drawn uniformly on [0, beta). That alone is
-// ergodic, but at low temperature almost every such pair is rejected: a spin-flip vertex
-// S+(tau1) S-(tau2) has a non-zero trace only if nothing between the two times undoes the flip,
-// i.e. (single orbital) only if both land in one operator-free stretch where the impurity is
-// singly occupied. At beta = 100, with ~90 operators on the circle, the uniform proposal
-// accepted 0.23% of the time.
-//
-// With probability p_local the first end is drawn uniformly and the second uniformly in the
-// operator-free arc of the trace that contains the first, of length l. Taking either end first
-// gives the same arc, so the density of the unordered pair is 2 / (beta l) when the two ends
-// share an arc and 0 otherwise. The proposal density of the mixture, per catalog entry, is
-//     q(tau1, tau2) = [ p_local 2 / (beta l) [same arc] + (1 - p_local) 2 / beta^2 ] / N_types,
-// computed for *any* proposed pair whichever branch drew it (qmc_data::dyn_insertion_density).
-// move_remove_dyn picks uniformly among all vertices and uses the same q for the configuration
-// with that vertex left out, so detailed balance holds for every p_local in [0, 1), and
-// p_local = 0 is exactly the uniform proposal, random stream included. Only the efficiency
-// depends on p_local, never the result.
-
 #include "./insert_dyn.hpp"
 #include <triqs/utility/time_pt.hpp>
 
 namespace triqs_cthyb {
 
-  move_insert_dyn::move_insert_dyn(qmc_data &data, mc_tools::random_generator &rng, histo_map_t *histos, double p_local)
-     : data(data), config(data.config), rng(rng), p_local(p_local) {}
+  move_insert_dyn::move_insert_dyn(qmc_data &data, mc_tools::random_generator &rng, histo_map_t *histos)
+     : data(data), config(data.config), rng(rng) {}
 
   mc_weight_t move_insert_dyn::attempt() {
 
-    // Choose 2 times tau1, tau2 for insertion: the second either uniform, or (with probability
-    // p_local) uniform in the operator-free arc of the trace containing the first
+    // Choose 2 times tau1, tau2 for insertion
     tau1 = data.tau_seg.get_random_pt(rng);
-    if (p_local > 0.0 && rng() < p_local) {
-      auto const gap = data.trace_gap(tau1);
-      tau2           = gap.lo + data.tau_seg.get_random_pt(rng, gap.length);
-    } else
-      tau2 = data.tau_seg.get_random_pt(rng);
-    if (tau1 == tau2) return 0;
+    tau2 = data.tau_seg.get_random_pt(rng);
     if (tau1 < tau2) std::swap(tau1, tau2);
 
     // Pick up pair of operators to insert
@@ -81,8 +55,8 @@ namespace triqs_cthyb {
     // other operator in the trace (see qmc_data::trace_ops)
     double lang_firsov_ratio = data.compute_lang_firsov_ratio(vertex_ops, {});
 
-    // Proposal probability ratio (see the top of this file)
-    mc_weight_t direct_probability  = data.dyn_insertion_density(tau1, tau2, p_local);
+    // Proposal probability ratio
+    mc_weight_t direct_probability  = (2.0 / (config.beta() * config.beta())) * (1.0 / data.dyn_op_list.size());
     mc_weight_t reverse_probability = 1.0 / double(config.dyn_oplist.size() + 1);
     mc_weight_t t_ratio             = reverse_probability / direct_probability;
 
