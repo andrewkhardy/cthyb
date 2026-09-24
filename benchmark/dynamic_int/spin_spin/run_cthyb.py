@@ -44,9 +44,6 @@ def add_cthyb_args(parser):
     parser.add_argument("--move_double", type=lambda x: str(x).lower() in ("true", "1", "yes"), default=True,
                         help="Four-operator insert/remove moves. At beta = 100 they accept 0.05%% of "
                              "proposals and take 40%% of move time; not needed for ergodicity here")
-    parser.add_argument("--move_dyn_local", type=lambda x: str(x).lower() in ("true", "1", "yes"), default=True,
-                        help="Let insert_dyn place both ends of a spin-flip vertex in one operator-free "
-                             "stretch for part of its proposals (False: all uniform on [0, beta))")
     parser.add_argument("--spin_flip_move", type=lambda x: str(x).lower() in ("true", "1", "yes"), default=False,
                         help="Global up <-> down swap of every operator, Jperp vertices included. A symmetry "
                              "of this model, so it mixes the two moment orientations at no cost")
@@ -87,7 +84,7 @@ for (s1, s2), d in d0.items():
 
 S.solve(h_int=model.h_int(), h_loc0=model.h_loc0(),
         length_cycle=args.length_cycle, n_warmup_cycles=args.n_warmup_cycles, move_double=args.move_double,
-        move_dyn_local=args.move_dyn_local, **spin_flip,
+        **spin_flip,
         n_cycles=args.n_cycles, max_time=args.max_time,
         measure_G_tau=True, measure_G_l=True,
         measure_pert_order=True,

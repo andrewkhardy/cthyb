@@ -3,20 +3,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
 
-# Statistical check of the moves that change only the *proposal* for stochastic dynamical
-# vertices, never the weight:
+# Statistical check of the global up <-> down swap with stochastic dynamical vertices present
+# (move_global_full, moves/global.cpp): every operator is swapped at once, and the Jperp
+# vertices must be carried over whole (S+S- <-> S-S+).
 #
-#   move_dyn_local     insert_dyn's mixture proposal: a fixed fraction of insertions put both
-#                      bilinears of a vertex in one operator-free stretch of the trace, and
-#                      remove_dyn's ratio accounts for it (moves/insert_dyn.cpp)
-#   move_global_full   a global move applied to every operator at once, here the up <-> down
-#                      swap, which must also carry the stochastic Jperp vertices over
-#                      (S+S- <-> S-S+) -- moves/global.cpp
-#
-# A proposal change leaves the stationary distribution alone, so all three runs below sample
-# the same physics and must agree within statistics. A detailed-balance error in either move
-# (a wrong proposal ratio, a vertex left pointing at the old spin) shows up as a shift in G_l,
-# or as the up/down symmetry being broken.
+# The swap is a symmetry of this model, so it changes the proposal only, never the stationary
+# distribution: the two runs below must agree within statistics. A bookkeeping error (a vertex
+# left pointing at the old spin) shows up as a shift in G_l, or as up and down disagreeing.
 #
 # Model: the single-orbital spin_spin.py test (Jperp through the stochastic path, Sz.Sz
 # through Lang-Firsov, so the production combination), moved off half filling so that the
@@ -68,20 +61,18 @@ def solve(seed_offset, **moves):
 
 spin_flip = {"spin_flip": {("up", 0): ("down", 0), ("down", 0): ("up", 0)}}
 
-S_ref = solve(0, move_dyn_local=False)
-S_local = solve(1000, move_dyn_local=True)
-S_flip = solve(2000, move_dyn_local=True, move_global=spin_flip, move_global_full=True, move_global_prob=0.1)
+S_ref = solve(0)
+S_flip = solve(2000, move_global=spin_flip, move_global_full=True, move_global_prob=0.1)
 
 if mpi.is_master_node():
     def density(S):
         return {bl: -S.G_tau[bl].data[-1, 0, 0].real for bl in ("up", "down")}
 
-    for name, S in (("reference", S_ref), ("local", S_local), ("local + spin flip", S_flip)):
-        mpi.report(f"{name:18s} sign = {S.average_sign:.4f}  density = {density(S)}")
+    for name, S in (("reference", S_ref), ("spin flip", S_flip)):
+        mpi.report(f"{name:10s} sign = {S.average_sign:.4f}  density = {density(S)}")
 
-    assert_block_gfs_are_close(S_ref.G_l, S_local.G_l, precision=0.05)
     assert_block_gfs_are_close(S_ref.G_l, S_flip.G_l, precision=0.05)
-    # Paramagnetic model: up and down must agree in every run, and the spin flip enforces it
-    for S in (S_ref, S_local, S_flip):
+    # Paramagnetic model: up and down must agree in both runs, and the spin flip enforces it
+    for S in (S_ref, S_flip):
         assert_gfs_are_close(S.G_l["up"], S.G_l["down"], precision=0.05)
-    mpi.report("Local and spin-flip moves agree with the original move set within statistics")
+    mpi.report("The spin-flip move agrees with the original move set within statistics")

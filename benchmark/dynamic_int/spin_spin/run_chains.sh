@@ -11,23 +11,17 @@
 # Independent-chain diagnostics, full S.S at beta = 100, mu(n = 0.75). Not a production run.
 # One chain per core, each with its own seed.
 #
-# Round 4 (chains4, fixed build) brought CTHYB onto CTSEG everywhere: full S.S
-# <n> = 0.7425(44) vs 0.7457(52), Sz.Sz only agreeing at beta = 10, 30, 100. This round asks
-# two questions of the same cell, at equal wall time per chain:
+# Round 5 (chains5), 24 chains x 20 min each, all means agreeing with CTSEG's 0.7475(26):
+#   CTHYB, length_cycle 500, uniform vertex proposal      <n> spread 0.0175, 110k moves/s
+#   CTHYB, length_cycle 500, local vertex proposal (p=0.75) spread 0.0179, 106k moves/s --
+#          vertex acceptance 0.7% -> 10%, no gain in mixing, so the local proposal was removed
+#   CTHYB, length_cycle 2000                               spread 0.0118, 160k moves/s
+#   CTSEG (24 x ~2 min)                                     spread 0.0127
+# O_tau insertions linear in the order (was order^2): O_tau went from 47% of the run to 1-3%,
+# and <SzSz>(beta/2) agrees three ways (O_tau, kink estimator, CTSEG).
 #
-#   1. does insert_dyn's local proposal help?   CTHYB p_local = 0     (move_dyn_local False)
-#                                               CTHYB p_local = 0.75  (move_dyn_local True)
-#   2. does measuring less often help?          CTHYB p_local = 0.75, length_cycle 2000
-#
-# Needs the build where O_tau_ins.cpp inserts (perturbation order) times per measurement
-# instead of order^2: that was ~1600 insertions, ~4 ms and 47% of the run at beta = 100. Check
-# it with plot_chains.py's right-hand column: CTHYB's O_tau (solid) must match its kink
-# estimator (dashed) and CTSEG. With the old count (chains4) <SzSz>(beta/2) was O_tau
-# 0.02152(62), kink 0.02144(60), CTSEG 0.02135(99).
-#
-# Spin flip on in all three. 24 chains each, plus 24 CTSEG chains as the reference.
-# Compare the chain spread of <n> and <k_dyn> between variants: at equal wall time a smaller
-# spread is the improvement, and every mean must agree with CTSEG.
+# This round: the settings kept, with more chains -- CTSEG 24 | CTHYB length_cycle 2000 72.
+# Spin flip on.
 #
 # Seeds are spaced by 2: TRIQS's default RNG (RandMT) forces the seed odd, so 2k and 2k+1
 # are the same chain.
@@ -38,7 +32,7 @@ set -euo pipefail
 module load modules/2.5-beta1
 module load triqs/multiorbital
 
-OUT=/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin/chains5
+OUT=/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin/chains6
 rm -rf "$OUT"
 mkdir -p "$OUT/logs"
 MODEL="--U 4.0 --J 1.0 --bath dmft --out_dir $OUT --beta 100 --jperp 1 --szsz 1 --filling 0.75 --mu 4.068123"
@@ -46,7 +40,6 @@ MAX_TIME=1200
 
 # CTHYB: the cycle cap deliberately unreachable (MAX_TIME stops it); warmup 2.5M moves either way.
 CTHYB_ARGS="--n_cycles 1000000 --move_double False --spin_flip_move True"
-LC500="--length_cycle 500 --n_warmup_cycles 5000"
 LC2000="--length_cycle 2000 --n_warmup_cycles 1250"
 CTSEG_ARGS="--length_cycle 100 --n_cycles 500000 --n_warmup_cycles 25000"
 
@@ -61,10 +54,7 @@ chain () {  # chain <solver> <n_chains> <first_seed> [extra args...]
   done
 }
 
-# seed ranges keep the CTHYB variants apart on disk
 chain ctseg 24 5000
-chain cthyb 24 5000 $LC500 --move_dyn_local False
-chain cthyb 24 5100 $LC500 --move_dyn_local True
-chain cthyb 24 5200 $LC2000 --move_dyn_local True
+chain cthyb 72 5200 $LC2000
 wait
 echo "done: $(ls "$OUT"/*.h5 | wc -l) chain files in $OUT"

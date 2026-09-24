@@ -110,10 +110,6 @@ solve_params = {
     "length_cycle":      75,
     "random_seed":       123 * mpi.rank + 567,
     "random_name":       "",
-    # The local proposal of insert_dyn (on by default) changes the random stream; kept off so
-    # this reference keeps checking the uniform proposal bit for bit. The local one is
-    # validated statistically by dyn_local_moves.py and kanamori_dyn_selfconsistency.py.
-    "move_dyn_local":    False,
     "measure_pert_order": True,
     "perform_tail_fit": True,
     "fit_max_moment": 3,

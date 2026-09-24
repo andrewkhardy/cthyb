@@ -24,8 +24,8 @@
 
 namespace triqs_cthyb {
 
-  move_remove_dyn::move_remove_dyn(qmc_data &data, mc_tools::random_generator &rng, histo_map_t *histos, double p_local)
-     : data(data), config(data.config), rng(rng), p_local(p_local) {}
+  move_remove_dyn::move_remove_dyn(qmc_data &data, mc_tools::random_generator &rng, histo_map_t *histos)
+     : data(data), config(data.config), rng(rng) {}
 
   mc_weight_t move_remove_dyn::attempt() {
 
@@ -52,9 +52,9 @@ namespace triqs_cthyb {
     // Lang-Firsov dressing of the removed vertex's operators (inverse of insertion)
     double lang_firsov_ratio = data.compute_lang_firsov_ratio({}, vertex_ops);
 
-    // Proposal probability ratio (inverse of insertion): the reverse is move_insert_dyn's mixture
-    // density for this vertex, into the configuration without it (see insert_dyn.cpp)
-    mc_weight_t reverse_probability = data.dyn_insertion_density(tau1, tau2, p_local, dyn_op_index);
+    // Proposal probability ratio (inverse of insertion)
+    // Proposal probability ratio
+    mc_weight_t reverse_probability = (2.0 / (config.beta() * config.beta())) * (1.0 / data.dyn_op_list.size());
     mc_weight_t direct_probability  = 1.0 / double(config.dyn_oplist.size());
     mc_weight_t t_ratio             = reverse_probability / direct_probability;
 
