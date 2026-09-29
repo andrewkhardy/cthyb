@@ -46,11 +46,14 @@ H is complex Hermitian because S^y is imaginary; `eigh` handles that directly.
 """
 import argparse
 import os
+import sys
 import time
 
 import numpy as np
 from h5 import HDFArchive
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from common import grids  # noqa: E402
 import model as model_def
 
 parser = argparse.ArgumentParser(description='ED reference: two-patch dimer + discrete bath + spin bosons.')
@@ -58,7 +61,8 @@ model_def.add_model_args(parser)
 parser.add_argument('--n_ph', type=int, default=3, help='Phonon levels kept per boson mode, minus one')
 parser.add_argument('--n_ph_check', type=int, default=1,
                     help='Also solve with n_ph + this many levels and report the difference (0 to skip)')
-parser.add_argument('--n_tau', type=int, default=201, help='Imaginary-time points on [0, beta]')
+parser.add_argument('--n_tau', type=int, default=grids.N_TAU,
+                    help='Imaginary-time points on [0, beta]; the default is the grid run_cthyb.py uses')
 parser.add_argument('--n_iw', type=int, default=256, help='Positive Matsubara frequencies')
 parser.add_argument('--psd_tol', type=float, default=1e-10,
                     help='Eigenvalues of -J below -psd_tol make the model non-representable')
@@ -164,6 +168,10 @@ block_keys = sorted(set(N_tot))
 tau = np.linspace(0.0, M.beta, args.n_tau)
 w_n = (2 * np.arange(args.n_iw) + 1) * np.pi / M.beta
 iw = 1j * w_n
+# Budget for one (frequency chunk, d_m, d) complex temporary in the Matsubara Lehmann sum.
+# Taking all n_iw frequencies at once built n_iw of them: a 23.6 GB peak at --n_ph 2, and
+# ~250 GB per temporary at the --n_ph 4 truncation check of the default --n_ph 3 run.
+IW_CHUNK_BYTES = 2 ** 30
 
 
 def boson_operators(n_lev):
@@ -231,13 +239,19 @@ def correlators(blocks, n_lev):
         # G_a(tau) and G_a(iw), m one particle fewer than n
         if key - 1 in blocks:
             idx_m, E_m, U_m, _ = blocks[key - 1]
+            # Independent of the orbital, so built once per block pair rather than per a.
+            wl_m = np.exp(-np.outer(M.beta - tau, E_m - E0))
+            dE = E_m[:, None] - E[None, :]
+            w8 = np.exp(-M.beta * (E_m - E0))[:, None] + np.exp(-M.beta * (E - E0))[None, :]
+            chunk = max(1, int(IW_CHUNK_BYTES // (16 * dE.size)))
             for a in range(n_so):
                 C = U_m.conj().T @ np.kron(c[a][np.ix_(idx_m, idx)], np.eye(dim_b)) @ U
                 C2 = np.abs(C) ** 2
-                G[a] -= ((np.exp(-np.outer(M.beta - tau, E_m - E0)) @ C2) * wr).sum(axis=1)
-                dE = E_m[:, None] - E[None, :]
-                w8 = np.exp(-M.beta * (E_m - E0))[:, None] + np.exp(-M.beta * (E - E0))[None, :]
-                G_iw[a] += ((C2 * w8)[None, :, :] / (iw[:, None, None] + dE[None, :, :])).sum(axis=(1, 2))
+                G[a] -= ((wl_m @ C2) * wr).sum(axis=1)
+                weight = C2 * w8
+                for start in range(0, len(iw), chunk):
+                    z = iw[start:start + chunk, None, None]
+                    G_iw[a, start:start + chunk] += (weight[None, :, :] / (z + dE[None, :, :])).sum(axis=(1, 2))
 
         mean_phonons += boltz @ (np.tile(ph_number, len(idx)) @ (np.abs(U) ** 2))
 

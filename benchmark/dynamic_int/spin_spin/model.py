@@ -57,7 +57,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common import baths, kernels, selfenergy  # noqa: E402
+from common import baths, grids, kernels, selfenergy  # noqa: E402
 
 from triqs.operators import n  # noqa: E402
 from triqs_cthyb.dynamical_interactions import half_filling_mu, static_shift  # noqa: E402
@@ -92,9 +92,10 @@ def add_model_args(parser):
                              "first-iteration Bethe. 'discrete': one bath site, ED-representable")
     parser.add_argument("--half_bandwidth", type=float, default=2.0, help="For --bath semicircular")
     parser.add_argument("--V_sq", type=float, default=0.49, help="V^2 for --bath discrete")
-    parser.add_argument("--n_iw", type=float, default=1025, help="Fermionic Matsubara frequencies")
-    parser.add_argument("--n_tau", type=int, default=4096, help="Fermionic tau points")
-    parser.add_argument("--n_tau_bosonic", type=int, default=2001, help="Bosonic tau points")
+    parser.add_argument("--n_iw", type=int, default=grids.N_IW, help="Fermionic Matsubara frequencies")
+    parser.add_argument("--n_tau", type=int, default=grids.N_TAU,
+                        help="Tau points for every tau quantity -- G, the kernel and every correlator, "
+                             "in every solver (common/grids.py)")
     parser.add_argument("--n_cycles", type=int, default=500000, help="MC cycles (halved from the old 1e6)")
     parser.add_argument("--n_warmup_cycles", type=int, default=25000, help="Warmup cycles")
     parser.add_argument("--length_cycle", type=int, default=100, help="Moves per cycle")
@@ -115,7 +116,10 @@ class Model:
         self.beta, self.U, self.J = args.beta, args.U, args.J
         self.jperp, self.szsz = args.jperp, args.szsz
         self.n_iw = int(args.n_iw)
-        self.n_tau, self.n_tau_bosonic = args.n_tau, args.n_tau_bosonic
+        # One tau grid for fermionic and bosonic quantities alike, so every solver's
+        # correlator lands on the same points (common/grids.py).
+        self.n_tau = args.n_tau
+        self.n_tau_bosonic = self.n_tau
 
         # Retarded kernel, at this beta. Positive, symmetric about beta/2.
         self.Q = kernels.spin_kernel_Q(self.beta, self.n_tau_bosonic)

@@ -106,6 +106,10 @@ if mpi.is_master_node():
         if nn_kink is not None:
             A["corr_alt"] = nn_kink
         A["density"], A["average_sign"] = density, S.average_sign
-        A["pert_order"], A["pert_order_dyn"] = S.perturbation_order_total.data, S.perturbation_order_dyn.data
+        A["pert_order"] = S.perturbation_order_total.data
+        # The solver only counts the stochastic vertices, so this is None whenever lang_firsov=True:
+        # uniform g routes every vertex analytically. The plots read a missing key as NaN.
+        if S.perturbation_order_dyn is not None:
+            A["pert_order_dyn"] = S.perturbation_order_dyn.data
         A["G_tau_gf"], A["G_l_gf"] = S.G_tau, S.G_l
     print(f"Saved {path}")

@@ -19,7 +19,7 @@ from triqs_cthyb import Solver
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common import selfenergy  # noqa: E402
+from common import grids, selfenergy  # noqa: E402
 import model as model_def
 
 str_to_bool = lambda x: str(x).lower() in ['true', '1', 'yes']
@@ -43,7 +43,9 @@ parser.add_argument('--out_dir', default=os.path.join(os.path.dirname(os.path.ab
 args = parser.parse_args()
 M = model_def.Model(args)
 
-n_iw, n_tau, n_tau_bosonic = 1025, 10001, 2001
+# One tau grid for G, the kernel and Q, shared with run_ed.py (common/grids.py).
+n_iw, n_tau = grids.N_IW, grids.N_TAU
+n_tau_bosonic = n_tau
 S = Solver(beta=M.beta, gf_struct=M.gf_struct, n_iw=n_iw, n_tau=n_tau, n_l=args.n_l,
            n_tau_bosonic=n_tau_bosonic, delta_interface=True)
 for bl, delta in M.delta_iw(n_iw):
@@ -126,6 +128,24 @@ if mpi.is_master_node():
     print("  " + selfenergy.diagnose(sigma_orb[0], w_n)["text"])
     print(f"  <n> = {np.round(density, 5)}")
 
+    # Equilibrium check, to read before Sigma. An unequilibrated chain still gives a G(tau)
+    # that looks right by eye, while at beta = 100 the Dyson inversion amplifies |dG/G| by
+    # 1/|G(i w_0)|^2 ~ 250 here. Two estimators of the same occupations (density matrix and
+    # G_l) and spin symmetry catch it: they agree to ~1e-3 at beta = 10, and missed by up
+    # to 0.06 in the 2026-09-28 beta = 100 runs, whose warmup was a tenth of tau_auto.
+    n_orb = len(M.labels) // 2
+    spin_asym = np.abs(density[:n_orb] - density[n_orb:]).max()
+    text = (f"auto-correlation time {S.auto_corr_time:.0f} cycles"
+            + ("" if S.auto_corr_time_converged else " (lower bound)")
+            + f" vs warmup {args.n_warmup_cycles}, n_cycles {args.n_cycles}; "
+            + f"max |n_up - n_down| {spin_asym:.4f}")
+    suspect = S.auto_corr_time > args.n_warmup_cycles or spin_asym > 5e-3
+    if args.density_matrix:
+        estimator_gap = np.abs(A_occupations - density).max()
+        text += f"; max |n_rho - n_G| {estimator_gap:.4f}"
+        suspect = suspect or estimator_gap > 5e-3
+    print(("  WARNING, likely not equilibrated -- " if suspect else "  equilibrium: ") + text)
+
     os.makedirs(args.out_dir, exist_ok=True)
     seed_tag = '' if args.random_seed is None else f"_seed-{args.random_seed}"
     filename = os.path.join(args.out_dir, f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}{seed_tag}.h5")
@@ -152,6 +172,10 @@ if mpi.is_master_node():
         A['mu'] = M.mu
         A['lang_firsov'] = args.lang_firsov
         A['n_cycles'] = args.n_cycles
+        A['n_warmup_cycles'] = args.n_warmup_cycles
+        A['length_cycle'] = args.length_cycle
+        A['auto_corr_time'] = S.auto_corr_time
+        A['auto_corr_time_converged'] = S.auto_corr_time_converged
         A['random_seed'] = -1 if args.random_seed is None else args.random_seed
         if args.density_matrix:
             A['equal_time_conserved'] = A_equal_time

@@ -17,17 +17,21 @@
 import argparse
 import os
 import time
+import sys
 import numpy as np
 from h5 import HDFArchive
 from triqs.operators import n
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from common import grids  # noqa: E402
 import model as model_def
 
 parser = argparse.ArgumentParser(description='ED reference: Kanamori impurity + bath sites + phonon.')
 model_def.add_model_args(parser)
 parser.add_argument('--n_ph', type=int, default=24, help='Phonon levels kept')
 parser.add_argument('--n_ph_check', type=int, default=6, help='Also solve with n_ph + this many levels and report the difference')
-parser.add_argument('--n_tau', type=int, default=401, help='Imaginary-time points on [0, beta]')
-parser.add_argument('--n_iw', type=int, default=1025, help='Positive Matsubara frequencies for G(iw) and Sigma(iw)')
+parser.add_argument('--n_tau', type=int, default=grids.N_TAU,
+                    help='Imaginary-time points on [0, beta]; the default is the grid run_cthyb.py uses')
+parser.add_argument('--n_iw', type=int, default=grids.N_IW, help='Positive Matsubara frequencies for G(iw) and Sigma(iw)')
 # No --target_n here: the mu bisection lives in calibrate_mu.py, which drives this script
 # as a subprocess and reads the <n_a> line below. One implementation, not two.
 parser.add_argument('--out_dir', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))

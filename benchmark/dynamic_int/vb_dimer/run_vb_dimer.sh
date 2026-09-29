@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=96
 #SBATCH --cpus-per-task=1
-#SBATCH --time=04:00:00
+#SBATCH --time=24:00:00
 #
 # Two-patch valence-bond dimer with a retarded real-space spin-spin interaction.
 # Model shared by every driver: model.py
@@ -101,6 +101,12 @@ if [ "$SOLVER" = ed ]; then
   for BETA in 10.0 100.0; do
     python run_ed.py $COMMON $J_ED --beta $BETA --n_ph 3 --n_ph_check 1 --out_dir "$OUT"
   done
+  # The doped points, at the same pinned mu the CTHYB runs below take, so the n = 0.75
+  # comparison has its exact reference too. ~1.9 h each with the n_ph check.
+  [ -n "$MU_B10_N075" ] && \
+    python run_ed.py $COMMON $J_ED --beta 10.0  --mu "$MU_B10_N075"  --n_ph 3 --n_ph_check 1 --out_dir "$OUT"
+  [ -n "$MU_B100_N075" ] && \
+    python run_ed.py $COMMON $J_ED --beta 100.0 --mu "$MU_B100_N075" --n_ph 3 --n_ph_check 1 --out_dir "$OUT"
   echo "ED references written to $OUT"
   echo "NOTE: no ED for the J_DCA point -- see the header for why."
   exit 0
@@ -152,16 +158,15 @@ run 100 "$NC_B100" $J_ED
 # hybridization is not particle-hole symmetric (model.half_filling_is_exact() is False,
 # patch DOS variance ratio 1.174), so mu = U/2 lands at an unknown filling. Verified: a
 # short probe at mu = U/2 came out well away from n = 0.5.
-if [ -n "$MU_DCA_B10_N05" ]; then
-  run 10  "$NC_B10"  $J_DCA --mu "$MU_DCA_B10_N05"
-else
-  echo "SKIPPING beta=10 DCA half filling: set MU_DCA_B10_N05 (see calibrate_mu.py)" >&2
-fi
-if [ -n "$MU_DCA_B100_N05" ]; then
-  run 100 "$NC_B100" $J_DCA --mu "$MU_DCA_B100_N05"
-else
-  echo "SKIPPING beta=100 DCA half filling: set MU_DCA_B100_N05 (see calibrate_mu.py)" >&2
-fi
+#
+# Until MU_DCA_* is calibrated these fall back to mu = U/2 -- the model default, and exactly
+# what the lang_firsov=False run below already does -- so the True/False pair exists and
+# solves one Hamiltonian either way (lf=False there gave n = 0.498). Skipping only the True
+# half, as this used to, left the False run with nothing to be compared against.
+[ -z "$MU_DCA_B10_N05" ] && echo "NOTE: beta=10 DCA at mu = U/2, not calibrated to n = 0.5" >&2
+run 10  "$NC_B10"  $J_DCA ${MU_DCA_B10_N05:+--mu "$MU_DCA_B10_N05"}
+[ -z "$MU_DCA_B100_N05" ] && echo "NOTE: beta=100 DCA at mu = U/2, not calibrated to n = 0.5" >&2
+run 100 "$NC_B100" $J_DCA ${MU_DCA_B100_N05:+--mu "$MU_DCA_B100_N05"}
 
 # n = 0.75, once calibrated
 if [ -n "$MU_B10_N075" ]; then
