@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=96
 #SBATCH --cpus-per-task=1
-#SBATCH --time=03:00:00
+#SBATCH --time=23:00:00
 #
 # Single-orbital retarded spin-spin benchmark: CTHYB and CTSEG against CTINT.
 # Model, conventions and the factors of 2: model.py

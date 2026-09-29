@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=96
 #SBATCH --cpus-per-task=1
-#SBATCH --time=04:00:00
+#SBATCH --time=23:00:00
 #
 # Two-orbital Hubbard-Kanamori + Holstein phonon: CTHYB against exact diagonalization.
 # Model (shared by both sides, so they solve one Hamiltonian): model.py
@@ -84,40 +84,62 @@ fi
 # ---------------------------------------------------------------------------------------
 # Statistics and wall-clock
 # ---------------------------------------------------------------------------------------
-# 45 min budget for the multiorbital benchmarks. n_cycles is per rank.
+# n_cycles is per rank.
 # Measured single-core at beta = 10, uniform g: sign 1.0, 16 analytic / 0 stochastic
 # vertices. Unequal g pushes part of the coupling into the stochastic residual, so expect
 # a worse sign there -- that is the point of the run, and why it gets more cycles.
 #
-# WALL-CLOCK BUDGET -- worst case is (number of `run` calls) x MAX_TIME plus startup and
-# the final h5 write. Six calls are live (both betas at half filling, both at n = 0.75
-# since MU_B*_N075 are set, and the two $MODEL_UNIFORM runs):
+# WALL-CLOCK BUDGET -- worst case is the sum of each `run` call's max_time plus startup and
+# the final h5 write. max_time bounds warmup AND accumulation together (one clock for
+# both), so it is the whole cost of a call. Six calls are live: four at beta = 10 (half
+# filling, n = 0.75, and the two $MODEL_UNIFORM runs) and two at beta = 100:
 #
-#   6 calls x 1800 s = 180 min  -> fits --time=04:00:00 with an hour spare.
+#   4 x 1800 s + 2 x 5400 s = 300 min  -> fits --time=23:00:00 with plenty spare.
 #
-# This script was the worst offender of the set: 6 x 2700 s = 270 min against a 180 min
-# allocation, i.e. 90 min over, not merely tight. The symptom was that the two
-# $MODEL_UNIFORM runs at the bottom -- the last calls made -- had no cthyb output on disk
-# at all while the four above them did. If more calls are added, redo this arithmetic.
+# This script was once the worst offender of the set: 6 x 2700 s = 270 min against a
+# 180 min allocation. The symptom was that the $MODEL_UNIFORM runs at the bottom -- the
+# last calls made -- had no cthyb output on disk at all while the four above them did.
+# If more calls are added, redo this arithmetic.
 MAX_TIME=1800
 NC_B10=500000
-# Halved on 2026-09-22. This is the most expensive cell in the whole benchmark set:
-# measured <k_dyn> is 31.5 at beta = 100 half filling and 82.7 at beta = 100, n = 0.75,
-# against 3.4 and 8.3 at beta = 10 -- a 10x order increase, with cost per cycle growing
-# with the order. The sign stays 1.000 throughout, so this is pure cost, not variance.
-# If the n = 0.75 call still caps out at MAX_TIME, quarter this rather than halve it;
-# each run reports its achieved count, so retune from that.
-NC_B100=25000
+
+# beta = 100 is run differently, because there the chain is slow, not just expensive.
+# The 2026-09-28 runs (length_cycle 100, 1250 warmup cycles, 25000 cycles) logged an
+# auto-correlation time of >13000 cycles at n = 0.75 (>40000 in the longer seed runs of
+# run_kanamori_b100_seeds.sh), against ~20 at beta = 10: about 2 independent samples per
+# rank, after a warmup of a tenth of that time. All ranks relax from the same empty
+# configuration, so they share one bias and agree with each other while all being wrong:
+# <n> came out 2% low and spin-asymmetric, and the density-matrix and G(tau) occupations
+# disagreed by up to 0.06. The Dyson inversion amplifies that ~250x at w_0 -- the single
+# bath level at eps = 0 gives |Delta(i w_0)| = V^2 beta / pi = 15.6 -- which is the whole
+# Sigma miss; G(tau) looked fine by eye.
+#
+#   LC_B100  87% of the wall-clock went to measuring D0 every 100 moves while samples stay
+#            correlated for >1e6 moves. 5000 moves per cycle puts that time back into
+#            moves: ~10x more updates in the same budget.
+#   NW_B100  4000 x 5000 = 2e7 moves, ~5x the largest auto-correlation lower bound seen
+#            (4e6 moves). ~20 min at the ~2e4 moves/s measured at this beta.
+#   NC_B100  about what fits in the remaining ~70 min at ~0.33 s per cycle (0.27 s of moves
+#            plus 0.06 s of measurement at n = 0.75); MAX_TIME_B100 catches the rest.
+#
+# Before reading Sigma, check the log's "Auto-correlation time" against the cycle count and
+# the "equilibrium:" line run_cthyb.py prints.
+LC_B100=5000
+NW_B100=4000
+NC_B100=13000
+MAX_TIME_B100=5400
 
 run () {  # run <beta> <n_cycles> [extra...]
   local beta="$1"; local ncyc="$2"; shift 2
-  echo "=== cthyb  beta=$beta  n_cycles=$ncyc  $* ==="
+  local nwarm=$((ncyc / 20)) lcyc=100 tmax=$MAX_TIME
+  if [ "$beta" = 100 ]; then nwarm=$NW_B100 lcyc=$LC_B100 tmax=$MAX_TIME_B100; fi
+  echo "=== cthyb  beta=$beta  n_cycles=$ncyc  n_warmup=$nwarm  length_cycle=$lcyc  max_time=$tmax  $* ==="
   mpirun -n "$NRANKS" python run_cthyb.py --beta "$beta" --n_cycles "$ncyc" \
-      --n_warmup_cycles $((ncyc / 20)) --max_time "$MAX_TIME" --out_dir "$OUT" "$@"
+      --n_warmup_cycles "$nwarm" --length_cycle "$lcyc" --max_time "$tmax" --out_dir "$OUT" "$@"
 }
 
 # ------------------------------------------------- core grid: orbital-dependent coupling
-run 10  "$NC_B10"  $MODEL
+#run 10  "$NC_B10"  $MODEL
 run 100 "$NC_B100" $MODEL
 
 # n = 0.75, once calibrated

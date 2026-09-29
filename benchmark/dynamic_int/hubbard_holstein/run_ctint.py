@@ -34,12 +34,13 @@ from triqs_ctint import Solver
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import model as M  # noqa: E402
-from common import baths, kernels, selfenergy  # noqa: E402
+from common import baths, ctint, kernels, selfenergy  # noqa: E402
 
 
 def add_ctint_args(parser):
     parser.add_argument("--dlr_wmax", type=float, default=10.0, help="DLR frequency cutoff")
     parser.add_argument("--dlr_eps", type=float, default=1e-10, help="DLR accuracy")
+    ctint.add_alpha_args(parser)
 
 
 args = M.parse_args("CTINT single-orbital Hubbard-Holstein benchmark (reference)", add_ctint_args)
@@ -72,10 +73,21 @@ if use_d:
     for (s1, s2), d in d0.items():
         S.D0_iw[s1, s2].data[:] = dlr_imfreq_from_tau(d).data[:]
 
-S.solve(h_int=model.h_int(),
+# D0 < 0 in every channel (boson_Q is negative), so signed_alpha shifts all four the same
+# way, and opposite ways for the repulsive U. Same (block1, block2) order as the library.
+names = [bl for bl, _ in M.GF_STRUCT]
+d0_channels = [d0[bl1, bl2] for bl1 in names for bl2 in names] if use_d else []
+alpha_kwargs, alpha_report = ctint.alpha_kwargs(args, model.h_int(), d0_channels)
+if mpi.is_master_node():
+    print(alpha_report)
+
+S.solve(h_int=model.h_int(), **alpha_kwargs,
+        length_cycle=args.length_cycle,
         n_warmup_cycles=args.n_warmup_cycles, n_cycles=args.n_cycles, max_time=args.max_time,
         measure_M_iw=True, measure_M_tau=False,
-        measure_chiAB_tau=True, chi_A_vec=[M.N_TOT], chi_B_vec=[M.N_TOT],
+        # On the shared grid rather than the library's 201 points, so the correlator
+        # compares point by point with CTHYB's and CTSEG's (cost: common/grids.py).
+        measure_chiAB_tau=True, chi_A_vec=[M.N_TOT], chi_B_vec=[M.N_TOT], n_tau_chi2=model.n_tau,
         post_process=True)
 
 
@@ -124,7 +136,8 @@ if mpi.is_master_node():
 
     diag = selfenergy.diagnose(sigma_up, w_n, mu=mu if abs(args.filling - 0.5) < 1e-12 else None)
     print("  " + diag["text"])
-    print(f"  average sign = {S.average_sign:.4f}   <n> = {np.round(density, 5)}")
+    print(f"  average sign = {S.average_sign:.4f}   average order = {S.average_k:.2f}   "
+          f"<n> = {np.round(density, 5)}")
 
     path = model.output_file("ctint")
     with HDFArchive(path, "w") as A:

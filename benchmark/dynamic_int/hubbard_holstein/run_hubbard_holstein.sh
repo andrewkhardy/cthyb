@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=96
 #SBATCH --cpus-per-task=1
-#SBATCH --time=03:00:00
+#SBATCH --time=23:00:00
 #
 # Single-orbital Hubbard-Holstein benchmark: CTHYB and CTSEG against CTINT.
 # Model and conventions: model.py
@@ -44,22 +44,28 @@ OUT=/mnt/home/ahardy/ceph/CTHYB_Data/hubbard_holstein
 # interesting point: a clearly visible retarded effect, still short of the bipolaronic
 # regime. CTHYB and CTSEG handle it with sign 1.0.
 #
-# CTINT cannot. It expands in the full interaction including the retarded attractive
-# density-density term, and its sign collapses as the polaron shift grows. Measured at
-# beta = 10, U = 4, 15k cycles:
+# CTINT used to be restricted to G_WEAK. With triqs_ctint's automatic alpha (Hartree-Fock
+# centre, delta = 0.1) its sign collapsed as the polaron shift grew -- measured at beta = 10,
+# U = 4, 15k cycles:
 #
 #     g      g^2/w0^2    sign     <k>
 #     0.0    0.00        1.000    6.3     (pure Hubbard: no retarded term at all)
-#     0.2    0.04        0.908    6.6
 #     0.3    0.09        0.786    6.9
-#     0.4    0.16        0.544    7.6
 #     0.5    0.25        0.225    9.2
-#     0.7    0.49        0.016   13.6     <- unusable
+#     0.7    0.49        0.016   13.6
 #
-# So CTINT runs only at G_WEAK = 0.3, where all three solvers work and any disagreement is
-# a genuine bug rather than a sign-problem artefact. That three-way check at weak coupling
-# plus the CTHYB/CTSEG pair at G_MAIN covers both questions: "do the solvers agree?" and
-# "what does a real retarded interaction do?".
+# run_ctint.py now uses the signed alpha of common/ctint.py (0.5 +- 0.51, just outside
+# [0, 1]), which measured, 16 ranks, short runs, g = 0.7 at the mu below:
+#
+#     beta   n       sign     <k>
+#     10     0.5     1.000    18.8
+#     10     0.75    1.000    13.1
+#     100    0.5     0.998   186.5
+#     100    0.75    0.977   130.6
+#
+# so CTINT now runs every point CTHYB and CTSEG run, and the three-way check covers the
+# physically interesting coupling too. G_WEAK stays as the point where the retarded term is
+# a small correction on top of the Hubbard U.
 G_MAIN=0.7
 G_WEAK=0.3
 MODEL_BASE="--U 4.0 --omega_0 1.0 --bath semicircular --out_dir $OUT"
@@ -90,13 +96,11 @@ case "$SOLVER" in
   ctint) NC_B10=3000000; NC_B100=300000 ;;
 esac
 
-# beta = 100 needs a finer bosonic grid than beta = 10. K'(0) comes from Simpson quadrature
-# on the n_tau_bosonic grid and the boson kernel is most curved at tau = 0 and beta, so the
-# error grows with omega_0*beta/2: measured relative error at n_tau_bosonic = 2001 is 3e-12
-# at omega_0*beta/2 = 5 but 3e-8 at 50 and 6e-7 at 100. Since K'(0) sets mu, give beta = 100
-# the finer grid; it costs nothing.
-GRID_B10="--n_tau 4096  --n_tau_bosonic 2001 --n_iw 1025"
-GRID_B100="--n_tau 16384 --n_tau_bosonic 8001 --n_iw 2049"
+# Every run, at both temperatures and in every solver, uses the one grid of common/grids.py
+# (4001 tau points for G, the kernel and every correlator; 1025 frequencies), so the plots
+# compare solvers point by point. beta = 100 used to get a finer bosonic grid for K'(0),
+# which is Simpson quadrature on it: the relative error at omega_0*beta/2 = 50 is 3e-8 on
+# 2001 points and ~2e-9 on 4001, well inside check_half_filling_mu's 1e-5.
 
 # ---------------------------------------------------------------------------------------
 # Chemical potentials
@@ -126,37 +130,31 @@ GRID_B100="--n_tau 16384 --n_tau_bosonic 8001 --n_iw 2049"
 MU_B10_N075=3.416250    # -> n = 0.749263  (deviation -7.4e-4)
 MU_B100_N075=3.416250   # -> n = 0.751271  (deviation +1.3e-3)
 
-run () {  # run <beta> <n_cycles> <grid> [extra...]
-  local beta="$1"; local ncyc="$2"; local grid="$3"; shift 3
+run () {  # run <beta> <n_cycles> [extra...]
+  local beta="$1"; local ncyc="$2"; shift 2
   echo "=== $SOLVER  beta=$beta  n_cycles=$ncyc  $* ==="
-  mpirun -n "$NRANKS" python "run_${SOLVER}.py" $MODEL $grid \
+  mpirun -n "$NRANKS" python "run_${SOLVER}.py" $MODEL \
       --beta "$beta" --n_cycles "$ncyc" --n_warmup_cycles $((ncyc / 20)) \
       --max_time "$MAX_TIME" "$@"
 }
 
 # ---------------------------------------------------------------- core grid: half filling
-if [ "$SOLVER" = ctint ]; then
-  # Weak coupling only -- see the sign table above. Extra cycles to pay for sign ~0.79.
-  MODEL="$MODEL_BASE --g $G_WEAK"
-  run 10  $((NC_B10 * 2))  "$GRID_B10"  --filling 0.5
-  run 100 $((NC_B100 * 2)) "$GRID_B100" --filling 0.5
-else
-  run 10  "$NC_B10"  "$GRID_B10"  --filling 0.5
-  run 100 "$NC_B100" "$GRID_B100" --filling 0.5
-  # The same weak-coupling point, so CTHYB and CTSEG can be compared against CTINT there.
-  MODEL_MAIN="$MODEL"; MODEL="$MODEL_BASE --g $G_WEAK"
-  run 10 "$NC_B10" "$GRID_B10" --filling 0.5
-  MODEL="$MODEL_MAIN"
-fi
+# The same list for every solver, so every point has all three.
+run 10  "$NC_B10"  --filling 0.5
+run 100 "$NC_B100" --filling 0.5
+# The weak-coupling point.
+MODEL_MAIN="$MODEL"; MODEL="$MODEL_BASE --g $G_WEAK"
+run 10 "$NC_B10" --filling 0.5
+MODEL="$MODEL_MAIN"
 
 # ------------------------------------------------------------------ core grid: n = 0.75
 if [ -n "$MU_B10_N075" ]; then
-  run 10 "$NC_B10" "$GRID_B10" --filling 0.75 --mu "$MU_B10_N075"
+  run 10 "$NC_B10" --filling 0.75 --mu "$MU_B10_N075"
 else
   echo "SKIPPING beta=10 n=0.75: set MU_B10_N075 (see calibrate_mu.py)" >&2
 fi
 if [ -n "$MU_B100_N075" ]; then
-  run 100 "$NC_B100" "$GRID_B100" --filling 0.75 --mu "$MU_B100_N075"
+  run 100 "$NC_B100" --filling 0.75 --mu "$MU_B100_N075"
 else
   echo "SKIPPING beta=100 n=0.75: set MU_B100_N075 (see calibrate_mu.py)" >&2
 fi
@@ -167,14 +165,14 @@ fi
 # is a solver bug, not statistics -- this is the single most informative run in the set.
 # The stochastic route has a worse sign, hence the extra cycles.
 if [ "$SOLVER" = cthyb ]; then
-  run 10 $((NC_B10 * 2)) "$GRID_B10" --filling 0.5 --lang_firsov False
+  run 10 $((NC_B10 * 2)) --filling 0.5 --lang_firsov False
 fi
 
 # ---------------------------------------------------------------- extended (uncomment)
-#run 100 $((NC_B100 * 2)) "$GRID_B100" --filling 0.5 --lang_firsov False
+#run 100 $((NC_B100 * 2)) --filling 0.5 --lang_firsov False
 # Coupling sweep at the reference point, to see the retarded effect grow:
 #for G in 0.3 0.5 0.9; do
 #  mpirun -n "$NRANKS" python "run_${SOLVER}.py" --U 4.0 --g $G --omega_0 1.0 \
-#      --bath semicircular --out_dir $OUT $GRID_B10 --beta 10 --filling 0.5 \
+#      --bath semicircular --out_dir $OUT --beta 10 --filling 0.5 \
 #      --n_cycles "$NC_B10" --n_warmup_cycles $((NC_B10 / 20)) --max_time "$MAX_TIME"
 #done

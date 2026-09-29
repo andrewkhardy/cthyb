@@ -58,7 +58,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common import baths, kernels  # noqa: E402
+from common import baths, grids, kernels  # noqa: E402
 
 from triqs.operators import n  # noqa: E402
 from triqs_cthyb.dynamical_interactions import half_filling_mu, kprime_0_boson, static_shift  # noqa: E402
@@ -91,9 +91,10 @@ def add_model_args(parser):
                              "benchmark, for comparing the two")
     parser.add_argument("--half_bandwidth", type=float, default=2.0, help="For --bath semicircular")
     parser.add_argument("--V_sq", type=float, default=0.49, help="V^2 for --bath discrete")
-    parser.add_argument("--n_iw", type=int, default=1025, help="Fermionic Matsubara frequencies")
-    parser.add_argument("--n_tau", type=int, default=4096, help="Fermionic tau points")
-    parser.add_argument("--n_tau_bosonic", type=int, default=2001, help="Bosonic tau points")
+    parser.add_argument("--n_iw", type=int, default=grids.N_IW, help="Fermionic Matsubara frequencies")
+    parser.add_argument("--n_tau", type=int, default=grids.N_TAU,
+                        help="Tau points for every tau quantity -- G, the kernel and every correlator, "
+                             "in every solver (common/grids.py)")
     parser.add_argument("--n_cycles", type=int, default=500000, help="MC cycles (halved from the old 1e6)")
     parser.add_argument("--n_warmup_cycles", type=int, default=25000, help="Warmup cycles")
     parser.add_argument("--length_cycle", type=int, default=100, help="Moves per cycle")
@@ -108,7 +109,10 @@ class Model:
         self.args = args
         self.beta, self.U = args.beta, args.U
         self.g, self.omega_0 = args.g, args.omega_0
-        self.n_iw, self.n_tau, self.n_tau_bosonic = args.n_iw, args.n_tau, args.n_tau_bosonic
+        # One tau grid for fermionic and bosonic quantities alike, so every solver's
+        # correlator lands on the same points (common/grids.py).
+        self.n_iw, self.n_tau = args.n_iw, args.n_tau
+        self.n_tau_bosonic = self.n_tau
 
         # Single Einstein boson, closed form, valid at any beta.
         self.Q = kernels.boson_Q(self.beta, self.n_tau_bosonic, self.omega_0)
@@ -155,7 +159,7 @@ class Model:
         strongly curved exactly at tau = 0 and beta -- so the error grows with the
         peakedness `omega_0 beta / 2` and falls as n_tau^-4. Measured relative error at
         n_tau_bosonic = 2001: 3e-12 at omega_0 beta/2 = 5, 3e-8 at 50, 6e-7 at 100,
-        9e-6 at 200 (8001 points buys ~250x at each).
+        9e-6 at 200 (8001 points buys ~250x at each, so the 4001 of common/grids.py ~16x).
 
         Using the exact `kprime_0_boson` closed form here would make the check trivially
         tight, but it would also stop testing the code path that matters: the solver

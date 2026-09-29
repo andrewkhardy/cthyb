@@ -27,6 +27,7 @@ from h5 import HDFArchive
 
 # ---------------------------------------------------------------------------------- knobs
 DATA_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/spin_spin"
+DATA_DIR = "/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin"  # on the cluster
 # (beta, filling) -> one figure each. 0.5 is half filling, 0.75 the doped runs.
 GRID = [(10.0, 0.5), (10.0, 0.75), (100.0, 0.5), (100.0, 0.75)]
 U, J = 4.0, 1.0
@@ -34,7 +35,6 @@ CASES = [((1, 1), r"$\mathbf{S}\cdot\mathbf{S}$"),
          ((1, 0), r"$J_\perp$ only"),
          ((0, 1), r"$S_zS_z$ only")]
 W_MAX = 15.0           # Matsubara axis limit; Sigma is plotted raw, never tail-fitted
-RESIDUAL_POINTS = 61   # coarse common grid for the residual panel, see below
 MIN_SIGN = 0.01        # below this a series is noise, not data -- see check_quality
 REFERENCE_ORDER = ["CTINT", "CTSEG"]   # first one that passes check_quality is the reference
 SAVE_AS = None         # e.g. "spin_spin_b{beta:g}_n{filling:g}.pdf"
@@ -54,6 +54,17 @@ STYLE = {
     "CTHYB lf=False": dict(color="#c1121f", linestyle="-.", linewidth=1.5),
 }
 ALT_STYLE = dict(linewidth=1.0, alpha=0.75, linestyle=(0, (1, 1)))
+MARKER = {"CTINT": "o", "CTSEG": "s", "CTHYB": "^", "CTHYB lf=False": "v"}
+
+
+def matsubara_style(label, alt=False):
+    """Every Matsubara point marked, joined by a thin dotted line: the data are discrete, and
+    a solid curve would hide where the points actually are. The second estimator gets the
+    same marker, open."""
+    color = STYLE[label]["color"]
+    return dict(color=color, linestyle=":", linewidth=0.8, marker=MARKER[label], markersize=3.5,
+                markerfacecolor="none" if alt else color, markeredgewidth=0.9,
+                alpha=0.75 if alt else 1.0)
 
 
 def load_case(jperp, szsz, beta, filling):
@@ -65,6 +76,11 @@ def load_case(jperp, szsz, beta, filling):
             with HDFArchive(path, "r") as A:
                 runs[label] = {k: A[k] for k in A.keys()}
     return runs
+
+
+def same_grid(tau_a, tau_b):
+    """Whether two saved tau arrays are the same grid, so the residual needs no resampling."""
+    return len(tau_a) == len(tau_b) and np.allclose(tau_a, tau_b)
 
 
 def check_quality(run):
@@ -134,16 +150,16 @@ def make_figure(beta, filling):
             if "Sigma" in run:
                 w, sigma = run["w_n"], run["Sigma"]
                 keep = w <= W_MAX
-                axes[1][col].plot(w[keep], sigma[keep].real, label=legend, **style)
-                axes[2][col].plot(w[keep], sigma[keep].imag, label=legend, **style)
+                axes[1][col].plot(w[keep], sigma[keep].real, label=legend, **matsubara_style(label))
+                axes[2][col].plot(w[keep], sigma[keep].imag, label=legend, **matsubara_style(label))
                 if ok:
                     note(1, sigma[keep].real)
                     note(2, sigma[keep].imag)
                 # Second, independent Sigma route -- the pair bounds the systematic.
                 if run.get("Sigma_alt") is not None:
                     alt = np.asarray(run["Sigma_alt"])
-                    axes[1][col].plot(w[keep], alt[keep].real, color=style["color"], **ALT_STYLE)
-                    axes[2][col].plot(w[keep], alt[keep].imag, color=style["color"], **ALT_STYLE)
+                    axes[1][col].plot(w[keep], alt[keep].real, **matsubara_style(label, alt=True))
+                    axes[2][col].plot(w[keep], alt[keep].imag, **matsubara_style(label, alt=True))
                     if ok:
                         note(1, alt[keep].real)
                         note(2, alt[keep].imag)
@@ -153,24 +169,23 @@ def make_figure(beta, filling):
                 if ok:
                     note(3, run["corr"])
                 if run.get("corr_alt") is not None:
-                    # corr_alt lives on the BOSONIC tau mesh (Q_tau, n_tau_bosonic points) while
-                    # corr lives on O_tau's fermionic one -- 2001 vs 4096 for these files -- so it
-                    # needs its own x. The mesh is uniform on [0, beta], and linspace reproduces
-                    # it to 2e-15.
+                    # Saved without its own tau. The mesh is uniform on [0, beta], which
+                    # linspace reproduces to 2e-15.
                     alt = np.asarray(run["corr_alt"])
                     axes[3][col].plot(np.linspace(0.0, run["beta"], len(alt)), alt,
                                       color=style["color"], **ALT_STYLE)
                     if ok:
                         note(3, alt)
                 if ref is not None and label != ref_label and ok:
-                    # On a coarse common grid: the raw tau grids differ between solvers (2001
-                    # vs 501 points here), so a point-by-point residual is dominated by
-                    # interpolation noise and is unreadable. Binning to RESIDUAL_POINTS shows
-                    # the systematic offset, which is what this panel is for.
-                    grid = np.linspace(0.0, beta, RESIDUAL_POINTS)
-                    residual = (np.interp(grid, run["tau_corr"], run["corr"])
-                                - np.interp(grid, ref["tau_corr"], ref["corr"]))
-                    axes[4][col].plot(grid, residual, label=label, marker="o", markersize=2.5, **style)
+                    # Point by point: every solver writes its correlator on the grid of
+                    # common/grids.py. A file from before that is skipped, not resampled.
+                    if same_grid(run["tau_corr"], ref["tau_corr"]):
+                        axes[4][col].plot(run["tau_corr"], run["corr"] - ref["corr"], label=label,
+                                          **{**style, "linewidth": 1.0})
+                    else:
+                        print(f"[beta={beta:g} n={filling:g} jperp={jperp} szsz={szsz}] {label}: "
+                              f"{len(run['tau_corr'])} tau points against {ref_label}'s "
+                              f"{len(ref['tau_corr'])} -- residual skipped, rerun on the shared grid")
 
             h = np.asarray(run.get("pert_order_dyn", [np.nan]), dtype=float)
             order = (np.arange(len(h)) * h).sum() / h.sum()
@@ -223,7 +238,8 @@ def make_figure(beta, filling):
             axes[row][0].legend(fontsize=8)
 
     fig.suptitle(r"Single-orbital retarded spin-spin, $\beta$" + f"={beta:g}, n={filling:g}"
-                 "\ndotted = second estimator of the same quantity (bounds the systematic); "
+                 "\nsecond estimator of the same quantity (bounds the systematic): dotted in tau, "
+                 "open markers in iw_n; "
                  "[...] marks a series that failed the sign / sum-rule check",
                  fontsize=12)
     fig.tight_layout(rect=(0, 0, 1, 0.96))

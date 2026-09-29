@@ -48,7 +48,7 @@ from triqs_cthyb import Solver
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common import selfenergy  # noqa: E402
+from common import grids, selfenergy  # noqa: E402
 import model as model_def
 from model import key_to_string, N_PATCH
 
@@ -81,7 +81,9 @@ parser.add_argument('--out_dir', default=os.path.join(os.path.dirname(os.path.ab
 args = parser.parse_args()
 M = model_def.Model(args)
 
-n_iw, n_tau, n_tau_bosonic = 1025, 4096, 2001
+# One tau grid for G, the kernel and O_tau, shared with run_ed.py (common/grids.py).
+n_iw, n_tau = grids.N_IW, grids.N_TAU
+n_tau_bosonic = n_tau
 S = Solver(beta=M.beta, gf_struct=M.gf_struct, n_iw=n_iw, n_tau=n_tau, n_l=args.n_l,
            n_tau_bosonic=n_tau_bosonic, delta_interface=True)
 # Kept, rather than rebuilt after the solve: this is the *input* hybridization, and it is
@@ -198,7 +200,7 @@ if mpi.is_master_node():
     os.makedirs(args.out_dir, exist_ok=True)
     seed_tag = '' if args.random_seed is None else f"_seed-{args.random_seed}"
     filename = os.path.join(args.out_dir,
-                            f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}{seed_tag}.h5")
+                            f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nl-{args.n_l}_nc-{args.n_cycles}{seed_tag}.h5")
     with HDFArchive(filename, 'w') as A:
         # Same key names as run_ed.py, so plot_vb_dimer.py reads both sides the same way.
         A['tau'] = np.array([float(t) for t in S.G_tau[M.gf_struct[0][0]].mesh])
@@ -240,5 +242,6 @@ if mpi.is_master_node():
         A['mu'] = M.mu
         A['lang_firsov'] = args.lang_firsov
         A['n_cycles'] = args.n_cycles
+        A['n_l'] = args.n_l
         A['random_seed'] = -1 if args.random_seed is None else args.random_seed
     print(f"Saved {filename}")
