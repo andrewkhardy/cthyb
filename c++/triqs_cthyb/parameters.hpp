@@ -47,7 +47,7 @@ namespace triqs_cthyb {
     /// Number of imaginary-time points.
     int n_tau = 10001;
 
-    /// Number of tau points for bosonic gf<imtime, matrix_valued> (for dynamical interactions)
+    /// Number of imaginary-time points of the dynamical interactions and their correlators.
     int n_tau_bosonic = 10001;
 
     /// Number of Legendre polynomials.
@@ -101,14 +101,7 @@ namespace triqs_cthyb {
     /// Maximum runtime in seconds, use -1 to set infinite.
     long max_time = -1;
 
-    /// Verbosity level. 0 silent, 1 warnings, 2 the standard per-solve report (h_loc, the
-    /// dynamical-interaction split, the Lang-Firsov K'(0) shifts), 3 the default on rank 0,
-    /// 4 additionally a full audit of everything the solver *infers* about the dynamical
-    /// interaction: the conserved density combinations of h_loc, the per-vertex
-    /// analytic/stochastic classification with the reason for each, the vertex lists the
-    /// projector split produced, and the h_loc finally used. Nothing about the routing then
-    /// has to be reverse-engineered from the result. (EXT_DEBUG is a separate compile-time
-    /// option for per-Monte-Carlo-move tracing, far too verbose for this.)
+    /// Verbosity level.
     int verbosity = ((mpi::communicator().rank() == 0) ? 3 : 0); // silence the slave nodes
 
     /// Add shifting an operator as a move?
@@ -120,17 +113,11 @@ namespace triqs_cthyb {
     /// Calculate the full trace or use an estimate?
     bool use_trace_estimator = false;
 
-    /// Use the analytic Lang-Firsov resummation for density-density dynamical-interaction
-    /// vertices wherever it's valid (each vertex is checked individually against h_loc;
-    /// anything ineligible -- off-diagonal vertices like Jperp, or density vertices that
-    /// don't commute with h_loc -- automatically falls back to the stochastic double
-    /// expansion in the same solve). Defaults to true since this is strictly safe: unlike
-    /// the stochastic-only path, it never introduces a sign problem for the vertices it
-    /// does handle. Set to false to force everything through the stochastic path instead
-    /// (e.g. for debugging, or comparing the two methods against each other).
+    /// Resum the density-density dynamical vertices that commute with h_loc analytically (Lang-Firsov)?
+    /// All other vertices, or all of them if false, are sampled stochastically.
     bool lang_firsov = true;
 
-    /// Number of Legendre coefficients for Lang-Firsov trace and static shift
+    /// Number of Legendre coefficients of the Lang-Firsov kernel and of the dynamical correlators.
     int dyn_n_l = 50;
 
     /// Measure \f$ G(\tau) \f$? Hermiticity \f$ G_{ij}(\tau) = G_{ji}^*(\tau) \f$ is enforced.
@@ -146,13 +133,8 @@ namespace triqs_cthyb {
     /// measurement makes as many insertions as the perturbation order, or this many if more.
     int measure_O_tau_min_ins = 10;
 
-    /// Measure density-density correlators from the occupation kinks (dyn_n_l Legendre
-    /// coefficients), for the density combinations O_i that commute with h_loc
-    /// (conserved_density_operators): Q_conserved_tau_ij = <O_i(tau) O_j(0)> - <O_i O_j>, i.e.
-    /// without the equal-time value (the Python Solver adds it back when measure_density_matrix is
-    /// also on). If every n_a commutes with h_loc, the orbital-resolved Q_tau_ab =
-    /// <n_a(tau) n_b(0)> - <n_a n_b> is filled too; otherwise Q_tau is left empty, since the kinks
-    /// do not determine it. Lang-Firsov is not required.
+    /// Measure density-density correlators from the occupation kinks: Q_conserved_tau for the density combinations that
+    /// commute with h_loc, and Q_tau if every n_a does. The equal-time part is added by the Python Solver with the density matrix.
     bool measure_D0_corr = false;
 
     /// Measure \f$ G^{(2)}(\tau,\tau',\tau'') \f$ with three fermionic times.
@@ -230,10 +212,7 @@ namespace triqs_cthyb {
     /// Overall probability of the global moves.
     double move_global_prob = 0.05;
 
-    /// Apply a global move to every operator it maps at once? By default a random subset of
-    /// them is substituted. For a symmetry such as a spin flip only the full substitution has a
-    /// sizable weight at large perturbation order (a subset is chosen as the full one with
-    /// probability ~ 1/order). Stochastic dynamical vertices are always substituted whole.
+    /// Substitute every operator mapped by a global move, instead of a random subset?
     bool move_global_full = false;
 
     /// Threshold below which imaginary components of \f$ \Delta \f$ and \f$ h_{loc} \f$ are set to zero.

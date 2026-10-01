@@ -96,7 +96,7 @@ constexpr auto _c2py_doc_member_b3cf4a40 = R"DOC(Inverse temperature :math:`\bet
 constexpr auto _c2py_doc_member_c3d7f82d = R"DOC(Structure of the Green's function (names and sizes of blocks).)DOC";
 constexpr auto _c2py_doc_member_3ad1678d = R"DOC(Number of Matsubara frequencies.)DOC";
 constexpr auto _c2py_doc_member_7e4a921d = R"DOC(Number of imaginary-time points.)DOC";
-constexpr auto _c2py_doc_member_e4d31fdb = R"DOC(Number of tau points for bosonic gf<imtime, matrix_valued> (for dynamical interactions))DOC";
+constexpr auto _c2py_doc_member_e4d31fdb = R"DOC(Number of imaginary-time points of the dynamical interactions and their correlators.)DOC";
 constexpr auto _c2py_doc_member_8c372e07 = R"DOC(Number of Legendre polynomials.)DOC";
 constexpr auto _c2py_doc_member_2e016d4c = R"DOC(Use :math:`\Delta(\tau)` and :math:`h_{loc0}` as input instead of :math:`G_0(i\omega)`.)DOC";
 static PyObject *prop_get_dict_99469753(PyObject *self, void *) {
@@ -195,6 +195,7 @@ static int synth_constructor_167a5c32(PyObject *self, PyObject *args, PyObject *
   de("proposal_prob", self_c.proposal_prob, true);
   de("move_global", self_c.move_global, true);
   de("move_global_prob", self_c.move_global_prob, true);
+  de("move_global_full", self_c.move_global_full, true);
   de("imag_threshold", self_c.imag_threshold, true);
   de("det_init_size", self_c.det_init_size, true);
   de("det_n_operations_before_check", self_c.det_n_operations_before_check, true);
@@ -308,21 +309,23 @@ move_global : {par_45}, default={}
 
 move_global_prob : {par_46}, default=0.05
 
-imag_threshold : {par_47}, default=1.e-13
+move_global_full : {par_47}, default=false
 
-det_init_size : {par_48}, default=100
+imag_threshold : {par_48}, default=1.e-13
 
-det_n_operations_before_check : {par_49}, default=100
+det_init_size : {par_49}, default=100
 
-det_precision_warning : {par_50}, default=1.e-8
+det_n_operations_before_check : {par_50}, default=100
 
-det_precision_error : {par_51}, default=1.e-5
+det_precision_warning : {par_51}, default=1.e-8
 
-det_singular_threshold : {par_52}, default=-1
+det_precision_error : {par_52}, default=1.e-5
 
-off_diag_threshold : {par_53}, default=0.0
+det_singular_threshold : {par_53}, default=-1
 
-h_loc0 : {par_54}, default={}
+off_diag_threshold : {par_54}, default=0.0
+
+h_loc0 : {par_55}, default={}
 
 )DOC",
                       "par",
@@ -373,6 +376,7 @@ h_loc0 : {par_54}, default={}
                        c2py::python_typename<std::map<std::string, double>>(),
                        c2py::python_typename<std::map<std::string, triqs_cthyb::indices_map_t>>(),
                        c2py::python_typename<double>(),
+                       c2py::python_typename<bool>(),
                        c2py::python_typename<double>(),
                        c2py::python_typename<int>(),
                        c2py::python_typename<int>(),
@@ -400,37 +404,21 @@ constexpr auto _c2py_doc_member_261489c3 = R"DOC(Number of cycles for thermaliza
 constexpr auto _c2py_doc_member_96181889 = R"DOC(Seed for random number generator.)DOC";
 constexpr auto _c2py_doc_member_c907e317 = R"DOC(Name of random number generator.)DOC";
 constexpr auto _c2py_doc_member_01758266 = R"DOC(Maximum runtime in seconds, use -1 to set infinite.)DOC";
-constexpr auto _c2py_doc_member_d618aa45 = R"DOC(Verbosity level. 0 silent, 1 warnings, 2 the standard per-solve report (h_loc, the
-dynamical-interaction split, the Lang-Firsov K'(0) shifts), 3 the default on rank 0,
-4 additionally a full audit of everything the solver *infers* about the dynamical
-interaction: the conserved density combinations of h_loc, the per-vertex
-analytic/stochastic classification with the reason for each, the vertex lists the
-projector split produced, and the h_loc finally used. Nothing about the routing then
-has to be reverse-engineered from the result. (EXT_DEBUG is a separate compile-time
-option for per-Monte-Carlo-move tracing, far too verbose for this.))DOC";
+constexpr auto _c2py_doc_member_d618aa45 = R"DOC(Verbosity level.)DOC";
 constexpr auto _c2py_doc_member_68e6d012 = R"DOC(Add shifting an operator as a move?)DOC";
 constexpr auto _c2py_doc_member_3d1a62d7 = R"DOC(Add double insertions as a move?)DOC";
 constexpr auto _c2py_doc_member_de609b18 = R"DOC(Calculate the full trace or use an estimate?)DOC";
-constexpr auto _c2py_doc_member_bbdc9102 = R"DOC(Use the analytic Lang-Firsov resummation for density-density dynamical-interaction
-vertices wherever it's valid (each vertex is checked individually against h_loc;
-anything ineligible -- off-diagonal vertices like Jperp, or density vertices that
-don't commute with h_loc -- automatically falls back to the stochastic double
-expansion in the same solve). Defaults to true since this is strictly safe: unlike
-the stochastic-only path, it never introduces a sign problem for the vertices it
-does handle. Set to false to force everything through the stochastic path instead
-(e.g. for debugging, or comparing the two methods against each other).)DOC";
-constexpr auto _c2py_doc_member_b49d62c9 = R"DOC(Number of Legendre coefficients for Lang-Firsov trace and static shift)DOC";
+constexpr auto _c2py_doc_member_bbdc9102 = R"DOC(Resum the density-density dynamical vertices that commute with h_loc analytically (Lang-Firsov)?
+All other vertices, or all of them if false, are sampled stochastically.)DOC";
+constexpr auto _c2py_doc_member_b49d62c9 = R"DOC(Number of Legendre coefficients of the Lang-Firsov kernel and of the dynamical correlators.)DOC";
 constexpr auto _c2py_doc_member_19ebb74f = R"DOC(Measure :math:`G(\tau)`? Hermiticity :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` is enforced.)DOC";
 constexpr auto _c2py_doc_member_9fe4e2b9 = R"DOC(Measure :math:`G_l` (Legendre)? No hermiticity is enforced.)DOC";
 constexpr auto _c2py_doc_member_c478e947 = R"DOC(Measure :math:`O(\tau)` by insertion.)DOC";
-constexpr auto _c2py_doc_member_32a7d2a3 = R"DOC(Minimum number of operator insertions in the :math:`O(\tau)` insertion measure.)DOC";
-constexpr auto _c2py_doc_member_7bd1b214 = R"DOC(Measure density-density correlators from the occupation kinks (dyn_n_l Legendre
-coefficients), for the density combinations O_i that commute with h_loc
-(conserved_density_operators): Q_conserved_tau_ij = <O_i(tau) O_j(0)> - <O_i O_j>, i.e.
-without the equal-time value (the Python Solver adds it back when measure_density_matrix is
-also on). If every n_a commutes with h_loc, the orbital-resolved Q_tau_ab =
-<n_a(tau) n_b(0)> - <n_a n_b> is filled too; otherwise Q_tau is left empty, since the kinks
-do not determine it. Lang-Firsov is not required.)DOC";
+constexpr auto _c2py_doc_member_32a7d2a3 = R"DOC(Minimum number of operator insertions in the :math:`O(\tau)` insertion measure. Each
+measurement makes as many insertions as the perturbation order, or this many if more.)DOC";
+constexpr auto _c2py_doc_member_7bd1b214 =
+   R"DOC(Measure density-density correlators from the occupation kinks: Q_conserved_tau for the density combinations that
+commute with h_loc, and Q_tau if every n_a does. The equal-time part is added by the Python Solver with the density matrix.)DOC";
 constexpr auto _c2py_doc_member_c35e2239 = R"DOC(Measure :math:`G^{(2)}(\tau,\tau',\tau'')` with three fermionic times.)DOC";
 constexpr auto _c2py_doc_member_e514acd9 = R"DOC(Measure :math:`G^{(2)}(i\nu,i\nu',i\nu'')` with three fermionic frequencies.)DOC";
 constexpr auto _c2py_doc_member_82de938c = R"DOC(Measure :math:`G^{(2)}(i\nu,i\nu',i\nu'')` with three fermionic frequencies.)DOC";
@@ -457,6 +445,7 @@ constexpr auto _c2py_doc_member_9c443a14 = R"DOC(Operator insertion/removal prob
 constexpr auto _c2py_doc_member_86410015 =
    R"DOC(List of global moves (with their names). Each move is specified with an index substitution dictionary.)DOC";
 constexpr auto _c2py_doc_member_a5b369a5 = R"DOC(Overall probability of the global moves.)DOC";
+constexpr auto _c2py_doc_member_964a3627 = R"DOC(Substitute every operator mapped by a global move, instead of a random subset?)DOC";
 constexpr auto _c2py_doc_member_3eb4a96e =
    R"DOC(Threshold below which imaginary components of :math:`\Delta` and :math:`h_{loc}` are set to zero.)DOC";
 constexpr auto _c2py_doc_member_a4993264 = R"DOC(The maximum size of the determinant matrix before a resize.)DOC";
@@ -517,6 +506,7 @@ static PyObject *prop_get_dict_167a5c32(PyObject *self, void *) {
   dic["proposal_prob"]                 = self_c.proposal_prob;
   dic["move_global"]                   = self_c.move_global;
   dic["move_global_prob"]              = self_c.move_global_prob;
+  dic["move_global_full"]              = self_c.move_global_full;
   dic["imag_threshold"]                = self_c.imag_threshold;
   dic["det_init_size"]                 = self_c.det_init_size;
   dic["det_n_operations_before_check"] = self_c.det_n_operations_before_check;
@@ -580,6 +570,7 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_a2b1dce8>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::proposal_prob, _c2py_cls_a2b1dce8>("proposal_prob", _c2py_doc_member_9c443a14),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::move_global, _c2py_cls_a2b1dce8>("move_global", _c2py_doc_member_86410015),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::move_global_prob, _c2py_cls_a2b1dce8>("move_global_prob", _c2py_doc_member_a5b369a5),
+   c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::move_global_full, _c2py_cls_a2b1dce8>("move_global_full", _c2py_doc_member_964a3627),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::imag_threshold, _c2py_cls_a2b1dce8>("imag_threshold", _c2py_doc_member_3eb4a96e),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::det_init_size, _c2py_cls_a2b1dce8>("det_init_size", _c2py_doc_member_a4993264),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::det_n_operations_before_check, _c2py_cls_a2b1dce8>("det_n_operations_before_check",
@@ -626,12 +617,8 @@ static auto const _c2py_fun_cdee5b11 = c2py::dispatcher_f_kw_t{
    c2py::cmethod([](_c2py_cls_7e768e6a &self, const triqs_cthyb::solve_parameters_t &p) -> decltype(auto) { return self.solve(p); }, "self", "p")};
 
 static const auto _c2py_doc_fbf34b50 = _c2py_fun_fbf34b50.doc(R"DOC(
-Register an explicit dynamical-interaction vertex: a retarded coupling
-D(tau) * op1(tau) * op2(0) between two fermion bilinears op1, op2 (e.g.
-c_dag('up',0)*c('down',0)). Each must reduce to exactly one fermion
-bilinear; this is checked when the solver is run, not here. Can be called
-any number of times before solve(); combines with (does not replace)
-any D0_tau()/Jperp_tau() interactions also set on this solver.
+Add the dynamical vertex coupling(tau) op1(tau) op2(0), op1 and op2 single fermion bilinears such as
+c_dag('up',0)*c('down',0). Adds to D0_tau and Jperp_tau.
 )DOC");
 static const auto _c2py_doc_cdee5b11 = _c2py_fun_cdee5b11.doc(R"DOC(
 Solve the impurity problem.
@@ -657,15 +644,12 @@ template <> PyMethodDef c2py::tp_methods<_c2py_cls_7e768e6a>[] = {
 
 constexpr auto _c2py_doc_member_28c40d2e = R"DOC(Parameters used for constructing the solver.)DOC";
 constexpr auto _c2py_doc_member_6ca31b4a = R"DOC(Parameters passed to the solve method.)DOC";
-constexpr auto _c2py_doc_member_2900a75a = R"DOC(Analytic density-density bath coefficients K_n[a][b][n].)DOC";
-constexpr auto _c2py_doc_member_52353366 = R"DOC(The combinations of orbital densities that commute with h_loc, O_i = sum_a c_ia n_a, in
-reduced row-echelon form (e.g. N_up and N_down for a Kanamori h_loc with spin-flip and
-pair-hopping, the individual n_a for a density-only h_loc), with
-Q_conserved_tau[i, j] = <O_i(tau) O_j(0)>. Filled when measure_D0_corr is on.)DOC";
-constexpr auto _c2py_doc_member_1633453a = R"DOC(The two bilinears (op1, op2) of every stochastic dynamical vertex type, in the order of
-dyn_vertex_corr_tau / dyn_vertex_hist_l.)DOC";
-constexpr auto _c2py_doc_member_b1db761f = R"DOC(The retarded coupling each of those vertex types carries -- for a density pair this is the
-residual R_ab(tau) left by split_density_couplings, not the coupling as registered.)DOC";
+constexpr auto _c2py_doc_member_2900a75a = R"DOC(Legendre coefficients K_n[a][b][n] of the Lang-Firsov kernel.)DOC";
+constexpr auto _c2py_doc_member_52353366 = R"DOC(The density combinations O_i = sum_a c_ia n_a that commute with h_loc, in reduced row-echelon form
+(e.g. N_up and N_down for Kanamori with spin flip), indexing Q_conserved_tau. Filled by measure_D0_corr.)DOC";
+constexpr auto _c2py_doc_member_1633453a =
+   R"DOC(The bilinears (op1, op2) of each stochastic dynamical vertex type, in the order of dyn_vertex_corr_tau.)DOC";
+constexpr auto _c2py_doc_member_b1db761f = R"DOC(The coupling of each stochastic dynamical vertex type (for a split density pair, the residual).)DOC";
 constexpr auto _c2py_doc_member_a630495a = R"DOC(Single-particle Green's function :math:`G(\tau)` in imaginary time.)DOC";
 constexpr auto _c2py_doc_member_789d035e = R"DOC(Intermediate Green's function used to accumulate :math:`G(\tau)` (real or complex).)DOC";
 constexpr auto _c2py_doc_member_c4b4ab9c = R"DOC(Violation of the property :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` after the measurement.)DOC";
@@ -673,13 +657,11 @@ constexpr auto _c2py_doc_member_bb9bd800 = R"DOC(Single-particle Green's functio
 constexpr auto _c2py_doc_member_2fc3b9f2 = R"DOC(General operator Green's function :math:`O(\tau)` in imaginary time.)DOC";
 constexpr auto _c2py_doc_member_d13e3140 = R"DOC(Density-density correlator :math:`Q() =  n() n(0) ` in imaginary time.)DOC";
 constexpr auto _c2py_doc_member_7d53005e = R"DOC(Density-density correlator in Legendre representation.)DOC";
-constexpr auto _c2py_doc_member_39308cca = R"DOC(Correlator :math:` O_i() O_j(0) ` of the density combinations that commute with h_loc
-(conserved_density_operators), in imaginary time.)DOC";
+constexpr auto _c2py_doc_member_39308cca =
+   R"DOC(:math:` O_i() O_j(0) ` of the density combinations that commute with h_loc (conserved_density_operators).)DOC";
 constexpr auto _c2py_doc_member_ef7d1e70 = R"DOC(Conserved-combination density-density correlator in Legendre representation.)DOC";
-constexpr auto _c2py_doc_member_e68b30fe = R"DOC(:math:` O_1() O_2(0) ` for every stochastic dynamical vertex type, from the
-histogram of vertex separations (see measures/dyn_vertex_corr.hpp). The operators of each type
-are in solver_core::dyn_vertex_operators, their couplings in dyn_vertex_couplings. Measured
-whenever there is at least one stochastic dynamical vertex.)DOC";
+constexpr auto _c2py_doc_member_e68b30fe =
+   R"DOC(:math:` O_1() O_2(0) ` of each stochastic dynamical vertex type (dyn_vertex_operators), from the vertex separations.)DOC";
 constexpr auto _c2py_doc_member_54171dfe = R"DOC(Legendre coefficients of the raw vertex-separation histogram, before folding and division.)DOC";
 constexpr auto _c2py_doc_member_7651e12a = R"DOC(Two-particle Green's function :math:`G^{(2)}(\tau_1,\tau_2,\tau_3)` with three fermionic times.)DOC";
 constexpr auto _c2py_doc_member_411ac008 =
@@ -696,14 +678,14 @@ constexpr auto _c2py_doc_member_f1ffaa95 = R"DOC(Two-particle Green's function :
 constexpr auto _c2py_doc_member_e9ff9dfd = R"DOC(Two-particle Green's function :math:`G^{(2)}(i\omega,l,l')` in the particle-hole channel.)DOC";
 constexpr auto _c2py_doc_member_5bfd95dd = R"DOC(Histogram of the total perturbation order.)DOC";
 constexpr auto _c2py_doc_member_b85d7f38 = R"DOC(Histograms of the perturbation order for each block.)DOC";
-constexpr auto _c2py_doc_member_731a5150 = R"DOC(Histogram of the perturbation order in dynamical interactions)DOC";
-static constexpr auto prop_doc_86029fdf  = R"DOC(Dynamical density-density interaction :math:`D_0()`)DOC";
+constexpr auto _c2py_doc_member_731a5150 = R"DOC(Histogram of the number of stochastic dynamical vertices.)DOC";
+static constexpr auto prop_doc_86029fdf  = R"DOC(Dynamical density-density interaction :math:`D_0()`.)DOC";
 static constexpr auto prop_doc_3bddb197  = R"DOC(:math:`G_0^{-1}(i\omega_n = \infty)` in Matsubara frequencies.)DOC";
 static constexpr auto prop_doc_8edb23e9  = R"DOC(Hybridization function :math:`\Delta(\tau)` in imaginary time.)DOC";
 static constexpr auto prop_doc_2748acea  = R"DOC(Non-interacting Green's function :math:`G_0(i\omega)` in Matsubara frequencies.)DOC";
-static constexpr auto prop_doc_2574c814  = R"DOC(Dynamical spin-flip interaction :math:`{J}_()`, a single global up/down
-coupling (matches ctseg). For per-orbital-pair or inter-orbital spin-flip, use add_dyn_vertex.)DOC";
-static constexpr auto prop_doc_2036d594  = R"DOC(Auto-correlation time in units of MC cycles.)DOC";
+static constexpr auto prop_doc_2574c814 =
+   R"DOC(Dynamical spin-flip interaction :math:`{J}_()`, one up/down coupling as in ctseg (otherwise use add_dyn_vertex).)DOC";
+static constexpr auto prop_doc_2036d594 = R"DOC(Auto-correlation time in units of MC cycles.)DOC";
 static constexpr auto prop_doc_4545a854 =
    R"DOC(Whether the auto-correlation time estimate has saturated (false: it is only a lower bound, run longer).)DOC";
 static constexpr auto prop_doc_d6d80776 = R"DOC(Average perturbation order.)DOC";

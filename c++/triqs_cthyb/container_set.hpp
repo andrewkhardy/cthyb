@@ -53,17 +53,13 @@ namespace triqs_cthyb {
     /// Density-density correlator in Legendre representation.
     std::optional<Q_l_t> Q_l;
 
-    /// Correlator :math:`\langle O_i(\tau) O_j(0) \rangle` of the density combinations that commute with h_loc
-    /// (conserved_density_operators), in imaginary time.
+    /// :math:`\langle O_i(\tau) O_j(0) \rangle` of the density combinations that commute with h_loc (conserved_density_operators).
     std::optional<Q_conserved_tau_t> Q_conserved_tau;
 
     /// Conserved-combination density-density correlator in Legendre representation.
     std::optional<Q_conserved_l_t> Q_conserved_l;
 
-    /// :math:`\langle O_1(\tau) O_2(0) \rangle` for every stochastic dynamical vertex type, from the
-    /// histogram of vertex separations (see measures/dyn_vertex_corr.hpp). The operators of each type
-    /// are in solver_core::dyn_vertex_operators, their couplings in dyn_vertex_couplings. Measured
-    /// whenever there is at least one stochastic dynamical vertex.
+    /// :math:`\langle O_1(\tau) O_2(0) \rangle` of each stochastic dynamical vertex type (dyn_vertex_operators), from the vertex separations.
     std::optional<dyn_vertex_corr_tau_t> dyn_vertex_corr_tau;
 
     /// Legendre coefficients of the raw vertex-separation histogram, before folding and division.
@@ -104,10 +100,8 @@ namespace triqs_cthyb {
     /// Histograms of the perturbation order for each block.
     std::optional<histo_map_t> perturbation_order;
 
-    /// Histogram of the perturbation order in dynamical interactions
+    /// Histogram of the number of stochastic dynamical vertices.
     std::optional<histogram> perturbation_order_dyn;
-
-    // @DYN_IMPL : add a container for na(tau) nb (tau) measurement
 
     /// Function that writes all containers to hdf5 file
     friend void h5_write(h5::group h5group, std::string subgroup_name, container_set_t const &c);

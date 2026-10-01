@@ -15,10 +15,6 @@ namespace triqs_cthyb {
                                    std::vector<nda::vector<double>> const &conserved_vectors)
      : data(data), average_sign(0), n_leg(n_leg), conserved_vectors(conserved_vectors) {
 
-    // Only the occupation kinks enter, not the Lang-Firsov kernel. They determine exactly the
-    // correlators of the density combinations that commute with h_loc (piecewise constant between
-    // trace operators), and nothing else, with or without Lang-Firsov: see
-    // doc/notes/dynamical_interactions.tex, "Measuring correlators as coupling derivatives".
     if (n_leg <= 0) TRIQS_RUNTIME_ERROR << "measure_D0_corr requires n_leg > 0, got " << n_leg;
 
     n_lin = static_cast<int>(data.linindex.size());
@@ -60,7 +56,7 @@ namespace triqs_cthyb {
     s *= data.atomic_reweighting;
     average_sign += s;
 
-    // Every occupation kink in the trace, including the stochastic dynamical vertices' operators
+    // Every occupation kink in the trace, the dynamical vertices' operators included
     auto ops = data.trace_ops();
 
     if (ops.size() < 2) return;
@@ -76,8 +72,7 @@ namespace triqs_cthyb {
         double const s1s2 = (ops[i].second.dagger == ops[j].second.dagger) ? 1.0 : -1.0;
 
         double dt = double(ops[i].first - ops[j].first);
-        // The two operators of one stochastic dynamical vertex sit one tick (tau_seg epsilon) apart:
-        // a single event, i.e. a contact term at tau = 0 like i == j, not two kinks at separation dt.
+        // The two operators of a dynamical vertex bilinear sit one tick apart: one event, a contact term like i == j
         if (dt < 1e-10 * beta || dt > beta * (1.0 - 1e-10)) continue;
 
         triqs::utility::legendre_generator leg;
@@ -151,18 +146,14 @@ namespace triqs_cthyb {
     // Pack q_n into the block2 Legendre Green's function and reconstruct Q_tau
     for (auto bl1 : range(Q_l.size1())) {
       for (auto bl2 : range(Q_l.size2())) {
-        
+
         // 1. Pack Q_l
         for (auto l : Q_l(bl1, bl2).mesh()) {
           for (int i1 = 0; i1 < Q_l(bl1, bl2).target_shape()[0]; ++i1) {
             for (int i2 = 0; i2 < Q_l(bl1, bl2).target_shape()[1]; ++i2) {
               int lin1 = data.linindex.at({static_cast<int>(bl1), i1});
               int lin2 = data.linindex.at({static_cast<int>(bl2), i2});
-              if (l.index() < n_leg) {
-                Q_l(bl1, bl2)[l](i1, i2) = q_n(lin1, lin2, l.index());
-              } else {
-                Q_l(bl1, bl2)[l](i1, i2) = 0.0;
-              }
+              Q_l(bl1, bl2)[l](i1, i2) = q_n(lin1, lin2, l.index());
             }
           }
         }

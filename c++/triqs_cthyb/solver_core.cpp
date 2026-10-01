@@ -79,11 +79,9 @@ namespace triqs_cthyb {
     if (not delta_interface) _G0_iw = block_gf<imfreq>({beta, Fermion, n_iw}, gf_struct);
     _Delta_tau = block_gf<imtime>({beta, Fermion, n_tau}, gf_struct);
 
-    // Allocate dynamical interaction containers
-    inputs.D0t    = make_block2_gf<imtime>({beta, Boson, p.n_tau_bosonic}, gf_struct);
-    inputs.Jperpt = gf<imtime>({beta, Boson, p.n_tau_bosonic}, {1, 1});
-
-    // Initialize dynamical interactions to zero
+    // Dynamical interactions, zero unless set
+    inputs.D0t      = make_block2_gf<imtime>({beta, Boson, p.n_tau_bosonic}, gf_struct);
+    inputs.Jperpt   = gf<imtime>({beta, Boson, p.n_tau_bosonic}, {1, 1});
     inputs.D0t()    = 0;
     inputs.Jperpt() = 0;
   }
@@ -211,43 +209,14 @@ namespace triqs_cthyb {
 
     _h_loc  = params.h_int + _h_loc0;
 
-    // ------------------------------------------------------------------
-    // Dynamical interactions: build the unified vertex list (the user's explicit
-    // add_dyn_vertex(...) calls, plus D0_tau/Jperp_tau expanded into the same
-    // representation), and classify each vertex as Lang-Firsov-eligible or
-    // stochastic-only purely by operator algebra against h_loc -- nothing here
-    // guesses a block layout, see dynamical_interactions.hpp for the full picture.
-    // When params.lang_firsov is false, every vertex is routed to the stochastic
-    // list unconditionally (classify_dyn_vertices never evaluates eligibility), so
-    // this flag remains the master on/off switch it always was.
-    //
-    // After the per-vertex classification, split the density vertices that failed it:
-    // classify_dyn_vertices requires each vertex's own n_a and n_b to *individually*
-    // commute with h_loc, which correctly rejects everything under a genuine
-    // Hubbard-Kanamori h_loc with spin-flip/pair-hopping. But combinations of densities
-    // are usually still conserved (total charge always; N_up, N_down whenever spin-rotation
-    // symmetry about z isn't broken) -- find_conserved_density_combinations finds them
-    // directly from h_loc, and split_density_couplings sends the part of the rejected
-    // coupling that only involves them to Lang-Firsov and the residual to the stochastic
-    // path (an exact identity, see doc/notes/dynamical_interactions.tex).
-    //
-    // Lang-Firsov's K'(0) static shift must be applied here, before h_diag is built
-    // below; the K_n kernel and the stochastic dyn_op_list/dyn_interactions catalog
-    // for the remaining vertices are built later, once n_inner/histo_map etc. are
-    // finalized.
-    // ------------------------------------------------------------------
-    auto dyn_vertices = collect_dyn_vertices(inputs.dyn_vertices, inputs.D0t, inputs.Jperpt, gf_struct);
-    bool dyn_audit               = params.verbosity >= 4 && !dyn_vertices.empty();
-    auto classified_dyn_vertices = classify_dyn_vertices(dyn_vertices, _h_loc, fops, linindex, params.lang_firsov, dyn_audit);
+    // Dynamical vertices: each is routed to the Lang-Firsov resummation or to the stochastic expansion by operator
+    // algebra against h_loc, density couplings are split along the conserved density combinations, and the static part
+    // of the Lang-Firsov vertices goes into h_loc before h_diag is built
+    auto dyn_vertices            = collect_dyn_vertices(inputs.dyn_vertices, inputs.D0t, inputs.Jperpt, gf_struct);
+    auto classified_dyn_vertices = classify_dyn_vertices(dyn_vertices, _h_loc, fops, linindex, params.lang_firsov);
     if (params.lang_firsov) {
       auto conserved = conserved_densities(_h_loc, fops, linindex);
-      if (dyn_audit) {
-        std::cout << "[dyn_audit] h_loc has " << conserved.operators.size() << " conserved density combination(s); the projector\n"
-                  << "[dyn_audit] split can only route a density coupling analytically inside their span:\n";
-        for (size_t i = 0; i < conserved.operators.size(); ++i)
-          std::cout << "[dyn_audit]   O_" << i << " = " << conserved.operators[i] << "\n";
-      }
-      auto split = split_density_couplings(classified_dyn_vertices, conserved.vectors, fops, linindex);
+      auto split     = split_density_couplings(classified_dyn_vertices, conserved.vectors, fops, linindex);
       if (params.verbosity >= 2 && split.n_input > 0) {
         if (split.block_structured)
           std::cout << "Found " << conserved.vectors.size() << " conserved density combination(s); split the coupling of " << split.n_input
@@ -259,26 +228,7 @@ namespace triqs_cthyb {
                     << std::endl;
       }
     }
-    auto lang_firsov_shift = apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
-    if (dyn_audit) {
-      std::cout << "[dyn_audit] final routing: " << classified_dyn_vertices.lang_firsov.size() << " analytic, "
-                << classified_dyn_vertices.stochastic.size() << " stochastic\n";
-      auto report = [](std::string const &tag, std::vector<dyn_vertex_t> const &vs) {
-        for (size_t i = 0; i < vs.size(); ++i) {
-          auto const &d = vs[i].coupling.data();
-          std::cout << "[dyn_audit]   " << tag << "[" << i << "] " << vs[i].op1 << "  x  " << vs[i].op2
-                    << "   D(0) = " << d(0) << ", D(beta/2) = " << d(d.size() / 2) << "\n";
-        }
-      };
-      report("analytic  ", classified_dyn_vertices.lang_firsov);
-      report("stochastic", classified_dyn_vertices.stochastic);
-      std::cout << "[dyn_audit] static K'(0) shift folded into h_loc -- U_renorm:\n"
-                << lang_firsov_shift.U_renorm << "\n[dyn_audit] mu_renorm: " << lang_firsov_shift.mu_renorm
-                << "\n[dyn_audit] h_loc actually used:\n"
-                << _h_loc << std::endl;
-    }
-    // ------------------------------------------------------------------
-
+    apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
 
 #ifndef HYBRIDISATION_IS_COMPLEX
     // Check that diagonal components of Delta_tau are real
@@ -345,18 +295,11 @@ namespace triqs_cthyb {
       return;
     }
 
-    // --------------------------------------------------------------------------
-    // Build dynamical interaction operator lists and functions
-    // --------------------------------------------------------------------------
-    
+    // Lang-Firsov kernel, and the stochastic vertex catalog, whose order labels dyn_vertex_corr_tau
     std::vector<bosonic_op_pair_t> dyn_op_list;
     std::vector<std::function<double(double)>> dyn_interactions;
-
     K_n = build_K_n(classified_dyn_vertices.lang_firsov, beta, linindex, fops, params.dyn_n_l);
     fold_into_stochastic_catalog(classified_dyn_vertices.stochastic, fops, linindex, dyn_op_list, dyn_interactions);
-
-    // What the stochastic catalog ended up holding, in its own order: the labels of
-    // dyn_vertex_corr_tau / dyn_vertex_hist_l
     dyn_vertex_operators.clear();
     dyn_vertex_couplings.clear();
     for (auto const &v : classified_dyn_vertices.stochastic) {
@@ -367,8 +310,6 @@ namespace triqs_cthyb {
     if (params.verbosity >= 2)
       std::cout << "Dynamical interaction vertices: " << classified_dyn_vertices.lang_firsov.size() << " analytic (Lang-Firsov), "
                 << dyn_op_list.size() << " stochastic (sampled by insert_dyn/remove_dyn)" << std::endl;
-
-    // Automatically enable dynamical moves if any vertex was routed to the stochastic path.
     bool has_dyn_interactions = !dyn_op_list.empty();
 
     // Initialise Monte Carlo quantities
@@ -501,11 +442,6 @@ namespace triqs_cthyb {
       auto comm_1          = O1 * _h_loc - _h_loc * O1;
       auto comm_2          = O2 * _h_loc - _h_loc * O2;
 
-      // Unconditional: this was previously nested inside `if (params.verbosity >= 2)`, so at
-      // lower verbosity a non-commuting pair was accepted and O_tau measured wrongly with no
-      // message at all -- and since non-master ranks default to verbosity 0, rank 0 would throw
-      // while the others carried on. The estimator genuinely requires [O1, O2] = [O_i, h_loc] = 0,
-      // so this is an error at every verbosity and on every rank.
       if (!comm_0.is_zero() || !comm_1.is_zero() || !comm_2.is_zero())
         TRIQS_RUNTIME_ERROR << "measure_O_tau: the supplied operators must commute with each other and with the "
                                "local Hamiltonian; the insertion estimator is only valid then.\n"
@@ -518,9 +454,7 @@ namespace triqs_cthyb {
     }
 
     if (params.measure_D0_corr) {
-      // The occupation kinks only determine correlators of density combinations that commute with
-      // h_loc (doc/notes/dynamical_interactions.tex), so measure in that basis; orbital-resolved
-      // only if every n_a commutes
+      // The occupation kinks only determine correlators of the density combinations that commute with h_loc
       auto conserved              = conserved_densities(_h_loc, fops, linindex);
       conserved_density_operators = conserved.operators;
       if (conserved.vectors.size() < linindex.size() && params.verbosity >= 1) {
@@ -554,13 +488,11 @@ namespace triqs_cthyb {
       }
       qmc.add_measure(measure_perturbation_hist_total(data, *perturbation_order_total), "Perturbation order");
     }
-    // Dynamical interaction perturbation order - automatically enabled
     if (has_dyn_interactions) {
       perturbation_order_dyn = histogram{};
       qmc.add_measure(measure_perturbation_hist_dyn(data, *perturbation_order_dyn), "Perturbation order (dynamical interactions)");
 
-      // <O_1(tau) O_2(0)> per vertex type, from the vertex separations alone: no trace evaluation,
-      // so this is automatically enabled too
+      // <O_1(tau) O_2(0)> per vertex type, from the vertex separations alone
       qmc.add_measure(measure_dyn_vertex_corr{dyn_vertex_corr_tau, dyn_vertex_hist_l, data, constr_parameters.n_tau_bosonic, params.dyn_n_l},
                       "Dynamical vertex correlators");
     }

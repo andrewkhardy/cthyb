@@ -22,16 +22,13 @@
 #include "./math_utils.hpp"
 #include <triqs/utility/exceptions.hpp>
 #include <limits>
-#include <set>
 
 namespace triqs_cthyb {
 
-  using namespace triqs::operators; // for c<h_scalar_t>(...), c_dag<h_scalar_t>(...)
+  using namespace triqs::operators;
 
   namespace {
 
-    // (block_index, inner_index) -> is there any non-zero data anywhere in this
-    // scalar-valued slice's mesh?
     bool any_nonzero(gf_const_view<imtime, matrix_valued> block, int i1, int i2, double threshold = 1.e-13) {
       for (auto const &tau_pt : block.mesh())
         if (std::abs(block[tau_pt](i1, i2)) > threshold) return true;
@@ -42,9 +39,7 @@ namespace triqs_cthyb {
       return max_element(nda::abs(block.data())) > threshold;
     }
 
-    // Extract a single (i1, i2) scalar component of a matrix-valued block as its own
-    // scalar-valued gf, dividing by `factor` -- the shared last step of both D0 and
-    // Jperp expansion.
+    // Component (i1, i2) of a matrix-valued block, times factor, as a scalar gf
     gf<imtime, scalar_valued> scalar_component(gf_const_view<imtime, matrix_valued> block, int i1, int i2, double factor = 1.0) {
       auto coupling = gf<imtime, scalar_valued>{block.mesh()};
       for (auto const &tau_pt : block.mesh()) coupling[tau_pt] = real(block[tau_pt](i1, i2)) * factor;
@@ -59,11 +54,7 @@ namespace triqs_cthyb {
       return n;
     }
 
-    // Bare (pre-shift) density-density matrix reading of h_loc, matching the
-    // Kanamori-style U_matrix(i,j) n_i n_j (i!=j) / mu_vec(i) n_i term shapes -- purely
-    // for the diagnostic printout in apply_lang_firsov_shift below (as in CTSEG).
-    // classify_dyn_vertices / the shift math never depend on h_loc having this shape;
-    // terms that don't match it (e.g. hopping, spin-flip) simply don't contribute here.
+    // The U_ij n_i n_j (i != j) and -mu_i n_i terms of h_loc, for the verbosity-2 report (as in CTSEG)
     std::pair<nda::matrix<double>, nda::vector<double>> bare_density_matrix(many_body_op_t const &h_loc, fundamental_operator_set const &fops,
                                                                             int n_orbitals) {
       nda::matrix<double> U_matrix(n_orbitals, n_orbitals);
@@ -88,124 +79,100 @@ namespace triqs_cthyb {
       return {U_matrix, mu_vec};
     }
 
-  } // namespace
+    // op as the bilinear {creation operator, annihilation operator}, with checks
+    op_desc_pair_t extract_bilinear(many_body_op_t const &op, fundamental_operator_set const &fops,
+                                    std::map<std::pair<int, int>, int> const &linindex, std::string const &op_name) {
 
-  // -----------------------------------------------------------------------------------
+      int n_terms = 0;
+      monomial_t the_monomial;
+      h_scalar_t the_coeff = 0.0;
+      for (auto const &[monomial, coeff] : op) {
+        ++n_terms;
+        the_monomial = monomial;
+        the_coeff    = coeff;
+      }
+      if (n_terms != 1)
+        TRIQS_RUNTIME_ERROR << op_name << " must be a single fermion bilinear (e.g. c_dag('up',0)*c('down',0)), but has " << n_terms << " terms.";
+      if (the_monomial.size() != 2)
+        TRIQS_RUNTIME_ERROR << op_name << " must be a bilinear (exactly one creation and one annihilation operator), but has " << the_monomial.size()
+                            << " operators.";
+      if (the_monomial[0].dagger == the_monomial[1].dagger)
+        TRIQS_RUNTIME_ERROR << op_name << " must contain one creation and one annihilation operator, but has two "
+                            << (the_monomial[0].dagger ? "creation" : "annihilation") << " operators.";
 
-  op_desc_pair_t extract_bilinear(many_body_op_t const &op, fundamental_operator_set const &fops,
-                                  std::map<std::pair<int, int>, int> const &linindex, std::string const &op_name) {
+      // A prefactor would be dropped here but kept by apply_lang_firsov_shift, which uses op1/op2 as written
+      if (std::abs(the_coeff - 1.0) > 1.e-12)
+        TRIQS_RUNTIME_ERROR << op_name << " carries the scalar coefficient " << the_coeff
+                            << ", but a dynamical vertex is coupling(tau) * op1(tau) * op2(0): every numeric factor "
+                               "belongs in the coupling, which is the only place it is read. Pass the bare bilinear "
+                               "(n('up',0), not 0.5*n('up',0)) and multiply the coupling by the factor instead.";
 
-    int n_terms = 0;
-    monomial_t the_monomial;
-    h_scalar_t the_coeff = 0.0;
-    for (auto const &[monomial, coeff] : op) {
-      ++n_terms;
-      the_monomial = monomial;
-      the_coeff    = coeff;
+      auto to_op_desc = [&](auto const &fermion_op) -> op_desc {
+        int lin = fops[fermion_op.indices];
+        for (auto const &[block_inner, linear] : linindex)
+          if (linear == lin) return op_desc{block_inner.first, block_inner.second, fermion_op.dagger, lin};
+        TRIQS_RUNTIME_ERROR << "extract_bilinear: linear index " << lin << " (from " << op_name << ") not found in linindex; "
+                            << "is this operator built from a block/orbital outside gf_struct?";
+      };
+
+      auto const &dag_op    = the_monomial[0].dagger ? the_monomial[0] : the_monomial[1];
+      auto const &nondag_op = the_monomial[0].dagger ? the_monomial[1] : the_monomial[0];
+      return {to_op_desc(dag_op), to_op_desc(nondag_op)};
     }
-    if (n_terms != 1)
-      TRIQS_RUNTIME_ERROR << op_name << " must be a single fermion bilinear (e.g. c_dag('up',0)*c('down',0)), but has " << n_terms
-                          << " terms.";
-    if (the_monomial.size() != 2)
-      TRIQS_RUNTIME_ERROR << op_name << " must be a bilinear (exactly one creation and one annihilation operator), but has "
-                          << the_monomial.size() << " operators.";
-    if (the_monomial[0].dagger == the_monomial[1].dagger)
-      TRIQS_RUNTIME_ERROR << op_name << " must contain one creation and one annihilation operator, but has two "
-                          << (the_monomial[0].dagger ? "creation" : "annihilation") << " operators.";
 
-    // A scalar prefactor on op1/op2 is redundant with the coupling -- D(tau) (a M1)(b M2) is the
-    // same vertex as (a b D(tau)) M1 M2 -- and only the coupling is ever read here, so a factor
-    // written on the operator would be dropped. Worse, it would be dropped *inconsistently*:
-    // apply_lang_firsov_shift uses op1/op2 as full expressions, coefficients included, so the
-    // analytic static shift and the sampled retarded part of the same vertex would disagree by
-    // that factor. Refuse it rather than pick one interpretation silently.
-    if (std::abs(the_coeff - 1.0) > 1.e-12)
-      TRIQS_RUNTIME_ERROR << op_name << " carries the scalar coefficient " << the_coeff
-                          << ", but a dynamical vertex is coupling(tau) * op1(tau) * op2(0): every numeric factor "
-                             "belongs in the coupling, which is the only place it is read. Pass the bare bilinear "
-                             "(n('up',0), not 0.5*n('up',0)) and multiply the coupling by the factor instead.";
+    bool is_density_bilinear(op_desc_pair_t const &bp) {
+      return bp.opL.block_index == bp.opR.block_index && bp.opL.inner_index == bp.opR.inner_index;
+    }
 
-    // Reverse-lookup (block_index, inner_index) from the linear index fops already
-    // assigns each fundamental operator -- exactly the same primitive the existing
-    // h_loc term-matcher used (fops[indices] gives the linear index directly).
-    auto to_op_desc = [&](auto const &fermion_op) -> op_desc {
-      int lin = fops[fermion_op.indices];
-      for (auto const &[block_inner, linear] : linindex)
-        if (linear == lin) return op_desc{block_inner.first, block_inner.second, fermion_op.dagger, lin};
-      TRIQS_RUNTIME_ERROR << "extract_bilinear: linear index " << lin << " (from " << op_name << ") not found in linindex; "
-                          << "is this operator built from a block/orbital outside gf_struct?";
-    };
+    void expand_D0_into_vertices(block2_gf_const_view<imtime> D0t, gf_struct_t const &gf_struct, std::vector<dyn_vertex_t> &vertices) {
+      for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
+        for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
+          auto D0_bl = D0t(bl1, bl2);
+          if (!any_nonzero(D0_bl)) continue;
 
-    auto const &dag_op    = the_monomial[0].dagger ? the_monomial[0] : the_monomial[1];
-    auto const &nondag_op = the_monomial[0].dagger ? the_monomial[1] : the_monomial[0];
-    return {to_op_desc(dag_op), to_op_desc(nondag_op)};
-  }
+          auto bl1_name = gf_struct[bl1].first;
+          auto bl2_name = gf_struct[bl2].first;
+          int bl1_size  = gf_struct[bl1].second;
+          int bl2_size  = gf_struct[bl2].second;
 
-  // -----------------------------------------------------------------------------------
-
-  bool is_density_bilinear(op_desc_pair_t const &bp) {
-    return bp.opL.block_index == bp.opR.block_index && bp.opL.inner_index == bp.opR.inner_index;
-  }
-
-  // -----------------------------------------------------------------------------------
-
-  void expand_D0_into_vertices(block2_gf_const_view<imtime> D0t, gf_struct_t const &gf_struct, std::vector<dyn_vertex_t> &vertices) {
-    // D0(tau) n_a(tau) n_b(0): unlike Jperp, a density-density coupling needs no
-    // spin/orbital convention -- every non-zero (bl1, i1, bl2, i2) entry is its own
-    // vertex, whatever bl1 and bl2 are.
-    for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
-      for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
-        auto D0_bl = D0t(bl1, bl2);
-        if (!any_nonzero(D0_bl)) continue;
-
-        auto bl1_name = gf_struct[bl1].first;
-        auto bl2_name = gf_struct[bl2].first;
-        int bl1_size  = gf_struct[bl1].second;
-        int bl2_size  = gf_struct[bl2].second;
-
-        for (int i1 = 0; i1 < bl1_size; ++i1) {
-          for (int i2 = 0; i2 < bl2_size; ++i2) {
-            if (!any_nonzero(D0_bl, i1, i2)) continue;
-            vertices.push_back({c_dag<h_scalar_t>(bl1_name, i1) * c<h_scalar_t>(bl1_name, i1),
-                                c_dag<h_scalar_t>(bl2_name, i2) * c<h_scalar_t>(bl2_name, i2), scalar_component(D0_bl, i1, i2)});
+          for (int i1 = 0; i1 < bl1_size; ++i1) {
+            for (int i2 = 0; i2 < bl2_size; ++i2) {
+              if (!any_nonzero(D0_bl, i1, i2)) continue;
+              vertices.push_back({c_dag<h_scalar_t>(bl1_name, i1) * c<h_scalar_t>(bl1_name, i1),
+                                  c_dag<h_scalar_t>(bl2_name, i2) * c<h_scalar_t>(bl2_name, i2), scalar_component(D0_bl, i1, i2)});
+            }
           }
         }
       }
     }
-  }
 
-  // -----------------------------------------------------------------------------------
+    void expand_Jperp_into_vertices(gf_const_view<imtime, matrix_valued> Jperpt, gf_struct_t const &gf_struct, std::vector<dyn_vertex_t> &vertices) {
+      if (!any_nonzero(Jperpt)) return;
+      if (gf_struct.size() != 2)
+        TRIQS_RUNTIME_ERROR << "Jperp_tau (spin-flip) is a single global coupling and only supports exactly 2 blocks "
+                               "(e.g. spin up/down), matching ctseg. Found "
+                            << gf_struct.size()
+                            << " blocks. For per-orbital-pair or inter-orbital spin-flip, use "
+                               "solver.add_dyn_vertex(...) directly, specifying each vertex's operators explicitly.";
+      if (gf_struct[0].second != 1 || gf_struct[1].second != 1)
+        TRIQS_RUNTIME_ERROR << "Jperp_tau (spin-flip) is a single global coupling with no orbital index, so both blocks "
+                               "must have exactly 1 orbital; got sizes "
+                            << gf_struct[0].second << " and " << gf_struct[1].second
+                            << ". For multi-orbital spin-flip, use solver.add_dyn_vertex(...) directly.";
 
-  void expand_Jperp_into_vertices(gf_const_view<imtime, matrix_valued> Jperpt, gf_struct_t const &gf_struct, std::vector<dyn_vertex_t> &vertices) {
-    if (!any_nonzero(Jperpt)) return;
+      auto bl0_name = gf_struct[0].first;
+      auto bl1_name = gf_struct[1].first;
+      auto coupling = scalar_component(Jperpt, 0, 0, 0.5); // Jperp(tau)/2
 
-    // Jperp_tau is a single global up/down coupling with no orbital index of its own
-    // (matches ctseg exactly), so it only applies to the unambiguous case of exactly 2
-    // blocks, each a single fermion mode. For per-orbital-pair or inter-orbital
-    // spin-flip, use solver.add_dyn_vertex(...) directly -- nothing here is inferred.
-    if (gf_struct.size() != 2)
-      TRIQS_RUNTIME_ERROR << "Jperp_tau (spin-flip) is a single global coupling and only supports exactly 2 blocks "
-                             "(e.g. spin up/down), matching ctseg. Found "
-                          << gf_struct.size()
-                          << " blocks. For per-orbital-pair or inter-orbital spin-flip, use "
-                             "solver.add_dyn_vertex(...) directly, specifying each vertex's operators explicitly.";
-    if (gf_struct[0].second != 1 || gf_struct[1].second != 1)
-      TRIQS_RUNTIME_ERROR << "Jperp_tau (spin-flip) is a single global coupling with no orbital index, so both blocks "
-                             "must have exactly 1 orbital; got sizes "
-                          << gf_struct[0].second << " and " << gf_struct[1].second
-                          << ". For multi-orbital spin-flip, use solver.add_dyn_vertex(...) directly.";
+      // S+(tau) S-(0): c_dag(bl0,0) c(bl1,0) (tau) * c_dag(bl1,0) c(bl0,0) (0)
+      vertices.push_back(
+         {c_dag<h_scalar_t>(bl0_name, 0) * c<h_scalar_t>(bl1_name, 0), c_dag<h_scalar_t>(bl1_name, 0) * c<h_scalar_t>(bl0_name, 0), coupling});
+      // S-(tau) S+(0): c_dag(bl1,0) c(bl0,0) (tau) * c_dag(bl0,0) c(bl1,0) (0)
+      vertices.push_back(
+         {c_dag<h_scalar_t>(bl1_name, 0) * c<h_scalar_t>(bl0_name, 0), c_dag<h_scalar_t>(bl0_name, 0) * c<h_scalar_t>(bl1_name, 0), coupling});
+    }
 
-    auto bl0_name = gf_struct[0].first;
-    auto bl1_name = gf_struct[1].first;
-    auto coupling = scalar_component(Jperpt, 0, 0, 0.5); // Jperp(tau)/2, as in the original derivation
-
-    // S+(tau) S-(0): c_dag(bl0,0) c(bl1,0) (tau) * c_dag(bl1,0) c(bl0,0) (0)
-    vertices.push_back(
-       {c_dag<h_scalar_t>(bl0_name, 0) * c<h_scalar_t>(bl1_name, 0), c_dag<h_scalar_t>(bl1_name, 0) * c<h_scalar_t>(bl0_name, 0), coupling});
-    // S-(tau) S+(0): c_dag(bl1,0) c(bl0,0) (tau) * c_dag(bl0,0) c(bl1,0) (0)
-    vertices.push_back(
-       {c_dag<h_scalar_t>(bl1_name, 0) * c<h_scalar_t>(bl0_name, 0), c_dag<h_scalar_t>(bl0_name, 0) * c<h_scalar_t>(bl1_name, 0), coupling});
-  }
+  } // namespace
 
   // -----------------------------------------------------------------------------------
 
@@ -221,34 +188,12 @@ namespace triqs_cthyb {
 
   classified_dyn_vertices_t classify_dyn_vertices(std::vector<dyn_vertex_t> const &vertices, many_body_op_t const &h_loc,
                                                   fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex,
-                                                  bool lang_firsov_requested, bool debug) {
+                                                  bool lang_firsov_requested) {
     auto commutes_with_hloc = [&](many_body_op_t const &op) { return (op * h_loc - h_loc * op).is_almost_zero(); };
-
-    if (debug)
-      std::cout << "\n[dyn_audit] classifying " << vertices.size() << " dynamical vertex(es)"
-                << (lang_firsov_requested ? "" : " -- lang_firsov=false, so every one is forced stochastic") << ":\n";
-
     classified_dyn_vertices_t result;
-    for (size_t i = 0; i < vertices.size(); ++i) {
-      auto const &v = vertices[i];
-      bool eligible = false;
-      bool dens1 = false, dens2 = false, comm1 = false, comm2 = false;
-      if (lang_firsov_requested) {
-        auto bp1 = extract_bilinear(v.op1, fops, linindex, "op1");
-        auto bp2 = extract_bilinear(v.op2, fops, linindex, "op2");
-        dens1    = is_density_bilinear(bp1);
-        dens2    = is_density_bilinear(bp2);
-        comm1    = commutes_with_hloc(v.op1);
-        comm2    = commutes_with_hloc(v.op2);
-        eligible = dens1 && dens2 && comm1 && comm2;
-      }
-      if (debug) {
-        auto yn = [](bool b) { return b ? "yes" : "no "; };
-        std::cout << "[dyn_audit]   [" << i << "] " << v.op1 << "   (tau) x (0)   " << v.op2 << "\n"
-                  << "[dyn_audit]        is n_a: " << yn(dens1) << " / " << yn(dens2)
-                  << "   [op, h_loc] = 0: " << yn(comm1) << " / " << yn(comm2) << "   ->  "
-                  << (eligible ? "Lang-Firsov (analytic)" : "stochastic") << "\n";
-      }
+    for (auto const &v : vertices) {
+      bool eligible = lang_firsov_requested && is_density_bilinear(extract_bilinear(v.op1, fops, linindex, "op1"))
+         && is_density_bilinear(extract_bilinear(v.op2, fops, linindex, "op2")) && commutes_with_hloc(v.op1) && commutes_with_hloc(v.op2);
       (eligible ? result.lang_firsov : result.stochastic).push_back(v);
     }
     return result;
@@ -256,27 +201,18 @@ namespace triqs_cthyb {
 
   // -----------------------------------------------------------------------------------
 
-  lang_firsov_shift_t apply_lang_firsov_shift(many_body_op_t &h_loc, std::vector<dyn_vertex_t> const &lf_vertices,
-                                              fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex,
-                                              double beta, int N_leg, int verbosity) {
-    if (lf_vertices.empty()) return {};
+  void apply_lang_firsov_shift(many_body_op_t &h_loc, std::vector<dyn_vertex_t> const &lf_vertices, fundamental_operator_set const &fops,
+                               std::map<std::pair<int, int>, int> const &linindex, double beta, int N_leg, int verbosity) {
+    if (lf_vertices.empty()) return;
 
-    // Aggregate before/after view of the shift, as a density-density matrix over all
-    // orbitals (as in CTSEG) -- independent of how many orbitals/blocks are in play,
-    // and of whether the eligible vertices came from D0_tau or explicit add_dyn_vertex
-    // density couplings.
-    int n_orb                = count_orbitals(linindex);
-    auto [U_matrix, mu_vec]  = bare_density_matrix(h_loc, fops, n_orb);
-    nda::matrix<double> U_renorm  = U_matrix;
-    nda::vector<double> mu_renorm = mu_vec;
-
+    auto [U_renorm, mu_renorm] = bare_density_matrix(h_loc, fops, count_orbitals(linindex));
     if (verbosity >= 2) {
-      std::cout << "\n Interaction matrix: U =" << std::endl << U_matrix << std::endl;
-      std::cout << "\nOrbital energies: mu - eps = " << mu_vec << std::endl;
+      std::cout << "\n Interaction matrix: U =" << std::endl << U_renorm << std::endl;
+      std::cout << "\nOrbital energies: mu - eps = " << mu_renorm << std::endl;
     }
 
     for (auto const &v : lf_vertices) {
-      auto bp1 = extract_bilinear(v.op1, fops, linindex, "op1"); // guaranteed a density bilinear: classify_dyn_vertices checked
+      auto bp1 = extract_bilinear(v.op1, fops, linindex, "op1");
       auto bp2 = extract_bilinear(v.op2, fops, linindex, "op2");
 
       int n_pt_tau = v.coupling.mesh().size();
@@ -289,16 +225,11 @@ namespace triqs_cthyb {
       int lin1 = bp1.opL.linear_index;
       int lin2 = bp2.opL.linear_index;
 
+      // H -> H - K'(0)/2 n_a n_b per ordered vertex, so a pair registered both ways shifts by K'(0)
       if (lin1 == lin2) {
-        // Diagonal: chemical-potential shift H -> H - 0.5 * K'(0) * n
         h_loc = h_loc - 0.5 * Kprime_0 * v.op1;
         mu_renorm(lin1) += 0.5 * Kprime_0;
       } else {
-        // Off-diagonal: H -> H - 0.5 * K'(0) * n_1 * n_2. Vertices for both orbital
-        // orderings (a,b) and (b,a) are expected in lf_vertices (that's how
-        // expand_D0_into_vertices enumerates them), giving the total 1.0*K'(0) factor;
-        // the symmetric double-write below mirrors that same convention in U_renorm,
-        // and stays correct even for a single explicit (unpaired) add_dyn_vertex too.
         h_loc = h_loc - 0.5 * Kprime_0 * v.op1 * v.op2;
         U_renorm(lin1, lin2) -= 0.5 * Kprime_0;
         U_renorm(lin2, lin1) -= 0.5 * Kprime_0;
@@ -312,8 +243,6 @@ namespace triqs_cthyb {
       std::cout << "\n Renormalized interaction matrix: U =" << std::endl << U_renorm << std::endl;
       std::cout << "\nRenormalized orbital energies: mu - eps = " << mu_renorm << std::endl;
     }
-
-    return {U_renorm, mu_renorm};
   }
 
   // -----------------------------------------------------------------------------------
@@ -338,7 +267,6 @@ namespace triqs_cthyb {
 
       int lin1 = bp1.opL.linear_index;
       int lin2 = bp2.opL.linear_index;
-      // Vertices on the same pair add up, as their static shifts do in apply_lang_firsov_shift
       for (int n = 0; n < N_leg; ++n) K_n[lin1][lin2][n] += k_n_vec(n);
     }
     return K_n;
@@ -352,89 +280,78 @@ namespace triqs_cthyb {
     for (auto const &v : stoch_vertices) {
       auto bp1 = extract_bilinear(v.op1, fops, linindex, "op1");
       auto bp2 = extract_bilinear(v.op2, fops, linindex, "op2");
-
-      int f_index = static_cast<int>(dyn_interactions.size());
-      auto coupling_copy = v.coupling; // copy for lambda capture, mirrors the existing D0/Jperp lambda pattern
-      dyn_interactions.emplace_back([coupling_copy](double tau) -> double { return eval_scalar_gf(coupling_copy, tau); });
-      dyn_op_list.push_back({bp1, bp2, f_index});
+      dyn_op_list.push_back({bp1, bp2, int(dyn_interactions.size())});
+      dyn_interactions.emplace_back([coupling = v.coupling](double tau) { return eval_scalar_gf(coupling, tau); });
     }
   }
 
   // -----------------------------------------------------------------------------------
 
-  std::vector<nda::vector<double>> find_conserved_density_combinations(many_body_op_t const &h_loc, fundamental_operator_set const &fops,
-                                                                        std::map<std::pair<int, int>, int> const &linindex) {
-    int M = count_orbitals(linindex);
-    if (M == 0) return {};
+  namespace {
+    // A basis of { c : [sum_a c_a n_a, h_loc] = 0 }: the nullspace of the linear map c -> sum_a c_a [n_a, h_loc]
+    std::vector<nda::vector<double>> find_conserved_density_combinations(many_body_op_t const &h_loc, fundamental_operator_set const &fops,
+                                                                         std::map<std::pair<int, int>, int> const &linindex) {
+      int M = count_orbitals(linindex);
+      if (M == 0) return {};
 
-    // [n_a, h_loc] for every orbital a, indexed by linear index. n_a must be built from
-    // fops's own indices_t for that linear position (via the data_t conversion) -- NOT
-    // from linindex's (block_index, inner_index) key directly, which uses gf_struct's
-    // block *position*, not its name, and would silently build an operator on a
-    // fundamental mode unrelated to h_loc's actual operator algebra (making every
-    // commutator trivially, and wrongly, zero).
-    auto fops_indices = fundamental_operator_set::data_t(fops);
-    std::vector<many_body_op_t> commutators(M);
-    for (auto const &[block_inner, a] : linindex) {
-      auto const &indices_a = fops_indices[a];
-      auto c_dag_a           = many_body_op_t::make_canonical(true, indices_a);
-      auto c_a               = many_body_op_t::make_canonical(false, indices_a);
-      auto n_a               = c_dag_a * c_a;
-      commutators[a]         = n_a * h_loc - h_loc * n_a;
-    }
+      // [n_a, h_loc], with n_a built from fops's indices (linindex keys hold block positions, not names)
+      auto fops_indices = fundamental_operator_set::data_t(fops);
+      std::vector<many_body_op_t> commutators(M);
+      for (auto const &[block_inner, a] : linindex) {
+        auto const &indices_a = fops_indices[a];
+        auto c_dag_a          = many_body_op_t::make_canonical(true, indices_a);
+        auto c_a              = many_body_op_t::make_canonical(false, indices_a);
+        auto n_a              = c_dag_a * c_a;
+        commutators[a]        = n_a * h_loc - h_loc * n_a;
+      }
 
-    // Collect every distinct monomial appearing in any commutator, as rows of a real
-    // matrix -- real and imaginary parts of each coefficient kept as separate rows, so
-    // this is correct whether h_scalar_t is real or complex.
-    std::map<monomial_t, nda::vector<double>> real_rows, imag_rows;
-    auto accumulate = [&](std::map<monomial_t, nda::vector<double>> &rows, monomial_t const &monomial, int a, double value) {
-      if (std::abs(value) < 1.e-13) return;
-      auto it = rows.find(monomial);
-      if (it == rows.end()) {
+      // One row per monomial of the commutators, real and imaginary parts separately
+      std::map<monomial_t, nda::vector<double>> real_rows, imag_rows;
+      auto accumulate = [&](std::map<monomial_t, nda::vector<double>> &rows, monomial_t const &monomial, int a, double value) {
+        if (std::abs(value) < 1.e-13) return;
+        auto it = rows.find(monomial);
+        if (it == rows.end()) it = rows.emplace(monomial, nda::zeros<double>(M)).first;
+        it->second(a) += value;
+      };
+      for (int a = 0; a < M; ++a)
+        for (auto const &[monomial, coeff] : commutators[a]) {
+          accumulate(real_rows, monomial, a, real(coeff));
+          accumulate(imag_rows, monomial, a, imag(coeff));
+        }
+
+      int P = static_cast<int>(real_rows.size() + imag_rows.size());
+      if (P == 0) { // every n_a commutes with h_loc
+        std::vector<nda::vector<double>> unit_vectors(M, nda::zeros<double>(M));
+        for (int a = 0; a < M; ++a) unit_vectors[a](a) = 1.0;
+        return unit_vectors;
+      }
+
+      nda::matrix<double> mat = nda::zeros<double>(P, M);
+      int row                 = 0;
+      for (auto const &[monomial, vec] : real_rows) {
+        mat(row, nda::range::all) = vec;
+        ++row;
+      }
+      for (auto const &[monomial, vec] : imag_rows) {
+        mat(row, nda::range::all) = vec;
+        ++row;
+      }
+
+      auto [U, s, Vt]  = nda::linalg::svd(mat);
+      double s_max     = (s.size() > 0) ? s(0) : 0.0;
+      double threshold = 1.e-9 * std::max(s_max, 1.0);
+
+      std::vector<nda::vector<double>> conserved;
+      for (int i = 0; i < M; ++i) {
+        bool is_null = (i >= s.size()) || (s(i) < threshold);
+        if (!is_null) continue;
         nda::vector<double> v(M);
-        v  = 0.0;
-        it = rows.emplace(monomial, v).first;
+        for (int k = 0; k < M; ++k) v(k) = Vt(i, k);
+        conserved.push_back(v);
       }
-      it->second(a) += value;
-    };
-    for (int a = 0; a < M; ++a)
-      for (auto const &[monomial, coeff] : commutators[a]) {
-        accumulate(real_rows, monomial, a, real(coeff));
-        accumulate(imag_rows, monomial, a, imag(coeff));
-      }
-
-    int P = static_cast<int>(real_rows.size() + imag_rows.size());
-    if (P == 0) { // every n_a commutes with h_loc individually: the whole space is conserved
-      std::vector<nda::vector<double>> unit_vectors;
-      for (int a = 0; a < M; ++a) {
-        nda::vector<double> e(M);
-        e    = 0.0;
-        e(a) = 1.0;
-        unit_vectors.push_back(e);
-      }
-      return unit_vectors;
+      return conserved;
     }
-
-    nda::matrix<double> mat(P, M);
-    mat     = 0.0;
-    int row = 0;
-    for (auto const &[monomial, vec] : real_rows) { mat(row, nda::range::all) = vec; ++row; }
-    for (auto const &[monomial, vec] : imag_rows) { mat(row, nda::range::all) = vec; ++row; }
-
-    auto [U, s, Vt]  = nda::linalg::svd(mat);
-    double s_max     = (s.size() > 0) ? s(0) : 0.0;
-    double threshold = 1.e-9 * std::max(s_max, 1.0);
-
-    std::vector<nda::vector<double>> conserved;
-    for (int i = 0; i < M; ++i) {
-      bool is_null = (i >= s.size()) || (s(i) < threshold);
-      if (!is_null) continue;
-      nda::vector<double> v(M);
-      for (int k = 0; k < M; ++k) v(k) = Vt(i, k);
-      conserved.push_back(v);
-    }
-    return conserved;
-  }
+  } // namespace
 
   // -----------------------------------------------------------------------------------
 
@@ -466,7 +383,6 @@ namespace triqs_cthyb {
       ++row;
     }
 
-    // n_a built from fops's own indices, as in find_conserved_density_combinations
     auto fops_indices = fundamental_operator_set::data_t(fops);
     conserved_densities_t result;
     for (int i = 0; i < r; ++i) {
@@ -489,7 +405,7 @@ namespace triqs_cthyb {
                                                  fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex) {
     if (conserved_combinations.empty()) return {};
 
-    // The density-density vertices classify_dyn_vertices rejected; every other vertex stays as it is
+    // The rejected density-density vertices; the others stay as they are
     std::vector<dyn_vertex_t> density_vertices, other_vertices;
     std::vector<std::pair<int, int>> density_pairs;
     for (auto const &v : classified.stochastic) {
@@ -503,10 +419,8 @@ namespace triqs_cthyb {
     }
     if (density_vertices.empty()) return {};
 
-    // The Lang-Firsov part may only involve the conserved combinations. When these are indicator
-    // vectors of disjoint orbital sets S_i (N, or N_up and N_down: the form conserved_densities returns
-    // them in), that means a matrix constant on each block S_i x S_j and zero elsewhere. Otherwise the
-    // rejected density vertices stay fully stochastic.
+    // The Lang-Firsov part may only couple the conserved combinations: for indicator vectors of disjoint orbital
+    // sets S_i, a matrix constant on each block S_i x S_j. Otherwise nothing is split.
     int const M = count_orbitals(linindex);
     std::vector<std::vector<int>> members(conserved_combinations.size());
     std::vector<bool> assigned(M, false);
@@ -520,27 +434,22 @@ namespace triqs_cthyb {
       }
     }
 
-    // D_ab(tau) on the finest mesh among these vertices (others are read at the closest mesh point,
-    // as the stochastic moves do); zero for pairs no vertex couples, vertices on one pair add up
+    // D_ab(tau) on the finest mesh of these vertices (the others read at the closest point); vertices on a pair add up
     auto const *finest = &density_vertices[0].coupling;
     for (auto const &v : density_vertices)
       if (v.coupling.mesh().size() > finest->mesh().size()) finest = &v.coupling;
     auto const mesh = finest->mesh();
     int const n_tau = mesh.size();
-    nda::array<double, 3> D(n_tau, M, M);
-    D = 0.0;
+    nda::array<double, 3> D = nda::zeros<double>(n_tau, M, M);
     for (size_t k = 0; k < density_vertices.size(); ++k) {
       auto [a, b] = density_pairs[k];
       for (auto const &tau : mesh) D(tau.index(), a, b) += eval_scalar_gf(density_vertices[k].coupling, tau.value());
     }
 
-    // Sign-preserving split, pointwise in tau (doc/notes/dynamical_interactions.tex, sec:split-sign):
-    // on each block S_i x S_j the Lang-Firsov part is the entry of smallest magnitude when all entries
-    // share a sign, and zero otherwise, so every residual entry keeps the sign of D or vanishes and no
-    // stochastic vertex gets a weight of the opposite sign to the coupling it came from
+    // Sign-preserving split, pointwise in tau: on each block the Lang-Firsov part is the entry of smallest
+    // magnitude if all entries share a sign, zero otherwise, so every residual entry keeps the sign of D or vanishes
     int const n_blocks = static_cast<int>(members.size());
-    nda::array<double, 3> lang_firsov_part(n_tau, M, M), residual(n_tau, M, M);
-    lang_firsov_part = 0.0;
+    nda::array<double, 3> lang_firsov_part = nda::zeros<double>(n_tau, M, M), residual(n_tau, M, M);
     for (int t = 0; t < n_tau; ++t) {
       for (int i = 0; i < n_blocks; ++i) {
         for (int j = 0; j < n_blocks; ++j) {
@@ -564,8 +473,7 @@ namespace triqs_cthyb {
     }
     residual = D - lang_firsov_part;
 
-    // One vertex per pair with a non-zero entry; entries at round-off level (e.g. all of R when D is
-    // exactly representable through the conserved combinations) are dropped
+    // One vertex per pair with a non-zero entry, round-off level entries dropped
     double const threshold = 1.e-10 * max_element(nda::abs(D));
     auto fops_indices      = fundamental_operator_set::data_t(fops);
     auto density           = [&](int a) {

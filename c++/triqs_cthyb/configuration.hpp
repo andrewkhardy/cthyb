@@ -78,8 +78,9 @@ namespace triqs_cthyb {
     bool operator==(op_desc const &op) const = default;
   };
 
+  /// A fermion bilinear opL opR: a creation operator opL and an annihilation operator opR
   struct op_desc_pair_t { // NOLINT
-    op_desc opL, opR;     // FIXME Need only block and inner index ? what about linear index ?
+    op_desc opL, opR;
 
     bool operator==(op_desc_pair_t const &op) const = default;
     static std::string hdf5_format() { return "op_desc_pair_t"; }
@@ -97,9 +98,10 @@ namespace triqs_cthyb {
     }
   };
 
+  /// A type of stochastic dynamical vertex: D(tau) op1(tau) op2(0), with D = qmc_data::dyn_interactions[f_index]
   struct bosonic_op_pair_t { // NOLINT
     op_desc_pair_t op1, op2;
-    int f_index; // index of the function f associated to this pair
+    int f_index;
 
     bool operator==(bosonic_op_pair_t const &op) const = default;
     static std::string hdf5_format() { return "bosonic_op_pair_t"; }
@@ -119,19 +121,10 @@ namespace triqs_cthyb {
     }
   };
 
-  /// A single dynamical-interaction vertex, as specified by a user: a retarded coupling
-  /// between two fermion bilinears, D(tau) * op1(tau) * op2(0).
-  ///
-  /// op1 and op2 are ordinary many-body operators (e.g. \c c_dag('up',0)*c('down',0)),
-  /// exactly the same way \c h_int is specified -- NOT the low-level \c bosonic_op_pair_t
-  /// above. Each is required to reduce to exactly one fermion bilinear c^dagger_a c_b; this
-  /// is validated (via \c extract_bilinear, see dynamical_interactions.hpp) when the vertex
-  /// is registered with the solver, not assumed. \c bosonic_op_pair_t is the internal
-  /// representation the stochastic double expansion actually samples; a \c dyn_vertex_t is
-  /// converted to it after the bilinear check.
+  /// A dynamical vertex as given by the user: coupling(tau) op1(tau) op2(0), op1 and op2 single fermion bilinears
   struct dyn_vertex_t { // NOLINT
     many_body_op_t op1, op2;
-    gf<imtime, scalar_valued> coupling; // the retarded propagator D(tau) for this vertex
+    gf<imtime, scalar_valued> coupling;
 
     static std::string hdf5_format() { return "dyn_vertex_t"; }
     friend void h5_write(h5::group g, std::string const &name, dyn_vertex_t const &v) {
@@ -157,10 +150,8 @@ namespace triqs_cthyb {
 
     // a map associating an operator to an imaginary time
     using oplist_t = std::map<time_pt, op_desc, std::greater<time_pt>>;
-    // @DYN_IMPL the couples of ops for J and \cal U
-    // a list of pair or times + 2 monomial description (a,b,c,d) : c^+_a c_b   c_^+_c c_d
-    //  f[f_index] (tau - tau') c^+_a c_b (tau) c^+_c d_d (tau')
 
+    /// A stochastic dynamical vertex: its type, with op1 at the later time tau1 and op2 at tau2
     struct dyn_bosonic_pair_t { // NOLINT
       bosonic_op_pair_t ops;
       time_pt tau1, tau2;
@@ -232,14 +223,6 @@ namespace triqs_cthyb {
     C2PY_IGNORE oplist_t::const_iterator begin() const { return oplist_.begin(); }
     C2PY_IGNORE oplist_t::const_iterator end() const { return oplist_.end(); }
 
-    // Find the n-th operator associated to an hybridiation in the configuration with given block_index and dagger
-    C2PY_IGNORE time_pt find_nth_hybridization_op(int n, int block_index, bool dagger) {
-      int i = 0;
-      for (auto const &[tau, op] : oplist_)
-        if (op.dagger == dagger && op.block_index == block_index && ++i == n + 1) return tau;
-      TRIQS_RUNTIME_ERROR << "Operator not found";
-    };
-
     friend std::ostream &operator<<(std::ostream &out, configuration const &c) {
       for (auto const &op : c) out << "tau = " << op.first << " : " << op.second << std::endl;
       return out;
@@ -262,7 +245,6 @@ namespace triqs_cthyb {
     C2PY_IGNORE static configuration h5_read_construct(h5::group g, std::string const &name) {
       h5::group gr = g.open_group(name);
       h5::assert_hdf5_format(gr, configuration{0.0});
-      // h5::assert_hdf5_format<configuration>(gr);
       auto beta   = h5::read<double>(gr, "beta");
       auto id     = h5::read<long>(gr, "id");
       auto oplist = h5::read<oplist_t>(gr, "oplist");
@@ -282,11 +264,13 @@ namespace triqs_cthyb {
 #endif
     }
 
-    //private:
-    C2PY_IGNORE double beta_;
-    C2PY_IGNORE long id_; // configuration id, for debug purposes
-    C2PY_IGNORE oplist_t oplist_;
+    /// The stochastic dynamical vertices (their operators are in the trace, not in this oplist)
     C2PY_IGNORE dyn_oplist_t dyn_oplist;
+
+    private:
+    double beta_;
+    long id_; // configuration id, for debug purposes
+    oplist_t oplist_;
 
 #ifdef SAVE_CONFIGS
     // HDF5 file to save configurations

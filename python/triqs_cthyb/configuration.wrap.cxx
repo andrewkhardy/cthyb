@@ -175,7 +175,9 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_828b6936>[] = {
    {"__dict__", (getter)prop_get_dict_a1aecb80, nullptr, "", nullptr},
    {nullptr, nullptr, nullptr, nullptr, nullptr}};
 
-template <> const std::string c2py::tp_doc<_c2py_cls_828b6936> = R"DOC()DOC" + c2py::tp_ctor_doc<_c2py_cls_828b6936>;
+template <>
+const std::string c2py::tp_doc<_c2py_cls_828b6936> = R"DOC(A fermion bilinear opL opR: a creation operator opL and an annihilation operator opR)DOC"
+   + std::string{"\n\n----------\n\n"} + c2py::tp_ctor_doc<_c2py_cls_828b6936>;
 // --------- class _c2py_cls_bb185c2c -----------
 using _c2py_cls_bb185c2c                                            = triqs_cthyb::bosonic_op_pair_t;
 template <> constexpr bool c2py::is_wrapped<_c2py_cls_bb185c2c>     = true;
@@ -250,7 +252,10 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_bb185c2c>[] = {
    {"__dict__", (getter)prop_get_dict_6a33906e, nullptr, "", nullptr},
    {nullptr, nullptr, nullptr, nullptr, nullptr}};
 
-template <> const std::string c2py::tp_doc<_c2py_cls_bb185c2c> = R"DOC()DOC" + c2py::tp_ctor_doc<_c2py_cls_bb185c2c>;
+template <>
+const std::string c2py::tp_doc<_c2py_cls_bb185c2c> =
+   R"DOC(A type of stochastic dynamical vertex: D(tau) op1(tau) op2(0), with D = qmc_data::dyn_interactions[f_index])DOC"
+   + std::string{"\n\n----------\n\n"} + c2py::tp_ctor_doc<_c2py_cls_bb185c2c>;
 // --------- class _c2py_cls_5e49151b -----------
 using _c2py_cls_5e49151b                                            = triqs_cthyb::configuration;
 template <> constexpr bool c2py::is_wrapped<_c2py_cls_5e49151b>     = true;
@@ -420,7 +425,10 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_d8db9312>[] = {
    {"__dict__", (getter)prop_get_dict_3d0bd9e1, nullptr, "", nullptr},
    {nullptr, nullptr, nullptr, nullptr, nullptr}};
 
-template <> const std::string c2py::tp_doc<_c2py_cls_d8db9312> = R"DOC()DOC" + c2py::tp_ctor_doc<_c2py_cls_d8db9312>;
+template <>
+const std::string c2py::tp_doc<_c2py_cls_d8db9312> =
+   R"DOC(A stochastic dynamical vertex: its type, with op1 at the later time tau1 and op2 at tau2)DOC" + std::string{"\n\n----------\n\n"}
+   + c2py::tp_ctor_doc<_c2py_cls_d8db9312>;
 
 // ==================== module functions ====================
 

@@ -63,11 +63,11 @@ namespace triqs_cthyb {
     G_tau_t _Delta_tau;                                           // Imaginary-time Hybridization function
     std::optional<std::vector<matrix<dcomplex>>> Delta_infty_vec; // Quadratic instantaneous part of G0_iw
 
-    // Dynamical interaction input containers
+    // Dynamical interactions
     struct {
-      gf<imtime> Jperpt;                      // Dynamical spin-flip interaction J_perp(tau); single global up/down coupling, as in ctseg
-      block2_gf<imtime> D0t;                  // Dynamical density-density interaction D0(tau)
-      std::vector<dyn_vertex_t> dyn_vertices; // Explicitly user-specified dynamical vertices (general 4-index terms, multi-orbital spin-flip)
+      gf<imtime> Jperpt;
+      block2_gf<imtime> D0t;
+      std::vector<dyn_vertex_t> dyn_vertices; // from add_dyn_vertex
     } inputs;
 
     // Return reference to container_set
@@ -81,31 +81,17 @@ namespace triqs_cthyb {
     /// Parameters passed to the solve method.
     solve_parameters_t solve_parameters;
 
-    /// Analytic density-density bath coefficients K_n[a][b][n].
+    /// Legendre coefficients K_n[a][b][n] of the Lang-Firsov kernel.
     std::vector<std::vector<std::vector<double>>> K_n;
 
-    // Removed: lang_firsov_U_renorm / lang_firsov_mu_renorm. They reported only the static
-    // shift of the vertices this solve happened to route analytically, so they were route
-    // dependent, while the offset that matters for mu is a property of the input coupling
-    // alone -- picking mu from them gave a lang_firsov=true and a lang_firsov=false run
-    // different Hamiltonians. Compute the offset from the vertex list instead, with
-    // triqs_cthyb.dynamical_interactions.{kprime_0, static_shift, half_filling_mu}, and add
-    // it to mu explicitly. For what was actually folded into the Hamiltonian, h_loc() below
-    // returns it exactly and completely (including the non-density terms a U/mu pair cannot
-    // represent); verbosity >= 2 prints the shift and >= 4 the full audit.
-
-    /// The combinations of orbital densities that commute with h_loc, O_i = sum_a c_ia n_a, in
-    /// reduced row-echelon form (e.g. N_up and N_down for a Kanamori h_loc with spin-flip and
-    /// pair-hopping, the individual n_a for a density-only h_loc), with
-    /// Q_conserved_tau[i, j] = <O_i(tau) O_j(0)>. Filled when measure_D0_corr is on.
+    /// The density combinations O_i = sum_a c_ia n_a that commute with h_loc, in reduced row-echelon form
+    /// (e.g. N_up and N_down for Kanamori with spin flip), indexing Q_conserved_tau. Filled by measure_D0_corr.
     std::vector<many_body_op_t> conserved_density_operators;
 
-    /// The two bilinears (op1, op2) of every stochastic dynamical vertex type, in the order of
-    /// dyn_vertex_corr_tau / dyn_vertex_hist_l.
+    /// The bilinears (op1, op2) of each stochastic dynamical vertex type, in the order of dyn_vertex_corr_tau.
     std::vector<std::pair<many_body_op_t, many_body_op_t>> dyn_vertex_operators;
 
-    /// The retarded coupling each of those vertex types carries -- for a density pair this is the
-    /// residual R_ab(tau) left by split_density_couplings, not the coupling as registered.
+    /// The coupling of each stochastic dynamical vertex type (for a split density pair, the residual).
     std::vector<gf<imtime, scalar_valued>> dyn_vertex_couplings;
 
     /**
@@ -150,19 +136,14 @@ namespace triqs_cthyb {
     /// Hybridization function \f$ \Delta(\tau) \f$ in imaginary time.
     block_gf_view<imtime> Delta_tau() { return _Delta_tau; }
 
-    /// Dynamical spin-flip interaction :math:`\mathcal{J}_\perp(\tau)`, a single global up/down
-    /// coupling (matches ctseg). For per-orbital-pair or inter-orbital spin-flip, use add_dyn_vertex.
+    /// Dynamical spin-flip interaction :math:`\mathcal{J}_\perp(\tau)`, one up/down coupling as in ctseg (otherwise use add_dyn_vertex).
     gf_view<imtime> Jperp_tau() { return inputs.Jperpt; }
 
-    /// Dynamical density-density interaction :math:`D_0(\tau)`
+    /// Dynamical density-density interaction :math:`D_0(\tau)`.
     block2_gf_view<imtime> D0_tau() { return inputs.D0t; }
 
-    /// Register an explicit dynamical-interaction vertex: a retarded coupling
-    /// D(tau) * op1(tau) * op2(0) between two fermion bilinears op1, op2 (e.g.
-    /// c_dag('up',0)*c('down',0)). Each must reduce to exactly one fermion
-    /// bilinear; this is checked when the solver is run, not here. Can be called
-    /// any number of times before solve(); combines with (does not replace)
-    /// any D0_tau()/Jperp_tau() interactions also set on this solver.
+    /// Add the dynamical vertex coupling(tau) op1(tau) op2(0), op1 and op2 single fermion bilinears such as
+    /// c_dag('up',0)*c('down',0). Adds to D0_tau and Jperp_tau.
     void add_dyn_vertex(many_body_op_t const &op1, many_body_op_t const &op2, gf_const_view<imtime, scalar_valued> coupling) {
       inputs.dyn_vertices.push_back({op1, op2, gf<imtime, scalar_valued>(coupling)});
     }

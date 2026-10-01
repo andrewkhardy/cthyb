@@ -15,9 +15,8 @@ namespace triqs_cthyb {
 
   class measure_D0_corr {
     public:
-    /// conserved_vectors: the density combinations that commute with h_loc (conserved_densities),
-    /// indexed by linear index. Q_conserved is always measured; the orbital-resolved Q_l/Q_tau only
-    /// if every n_a commutes with h_loc, and are reset otherwise.
+    /// conserved_vectors: the density combinations that commute with h_loc (conserved_densities), by linear index.
+    /// Q_l and Q_tau are measured only if these are all the n_a, and reset otherwise.
     measure_D0_corr(std::optional<Q_l_t> &Q_l_opt, std::optional<Q_tau_t> &Q_tau_opt, std::optional<Q_conserved_l_t> &Q_conserved_l_opt,
                     std::optional<Q_conserved_tau_t> &Q_conserved_tau_opt, qmc_data const &data, int n_tau, int n_leg,
                     gf_struct_t const &gf_struct, std::vector<nda::vector<double>> const &conserved_vectors);

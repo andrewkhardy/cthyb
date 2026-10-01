@@ -238,30 +238,22 @@ class Solver(SolverCore):
 
                 self.Sigma_iw = dyson(G0_iw=G0_iw, G_iw=self.G_iw)
 
-        if getattr(self.last_solve_parameters, "measure_D0_corr", False) and getattr(self.last_solve_parameters, "measure_density_matrix", False):
-            from triqs.operators import c, c_dag
+        if self.last_solve_parameters.measure_D0_corr and self.last_solve_parameters.measure_density_matrix:
+            from triqs.operators import n
             from triqs.atom_diag import trace_rho_op
 
-            # Add back the equal-time values <O_i O_j> of the conserved density combinations
+            def equal_time(op):
+                return trace_rho_op(self.density_matrix, op, self.h_loc_diagonalization).real
+
+            # Add back the equal-time part the kink estimator leaves out
             ops = self.conserved_density_operators
-            offset = np.array([[trace_rho_op(self.density_matrix, Oi * Oj, self.h_loc_diagonalization).real for Oj in ops] for Oi in ops])
+            offset = np.array([[equal_time(Oi * Oj) for Oj in ops] for Oi in ops])
             self.Q_conserved_l.data[0, :, :] += offset
             self.Q_conserved_tau.data[:] += offset
-
-            # Orbital-resolved Q_tau is only measured when every orbital density commutes with h_loc
-            if self.Q_tau is not None and self.Q_l is not None:
+            if self.Q_tau is not None:
                 for bl1, bl2 in self.Q_tau.indices:
-                    size1 = self.Q_tau[bl1, bl2].target_shape[0]
-                    size2 = self.Q_tau[bl1, bl2].target_shape[1]
-                    offset = np.zeros((size1, size2), dtype=float)
-                    for i1 in range(size1):
-                        for i2 in range(size2):
-                            if bl1 == bl2 and i1 == i2:
-                                op = c_dag(bl1, i1) * c(bl1, i1)
-                            else:
-                                op = c_dag(bl1, i1) * c(bl1, i1) * c_dag(bl2, i2) * c(bl2, i2)
-                            offset[i1, i2] = trace_rho_op(self.density_matrix, op, self.h_loc_diagonalization).real
-                    
+                    n1, n2 = self.Q_tau[bl1, bl2].target_shape
+                    offset = np.array([[equal_time(n(bl1, i1) * n(bl2, i2)) for i2 in range(n2)] for i1 in range(n1)])
                     self.Q_l[bl1, bl2].data[0, :, :] += offset
                     self.Q_tau[bl1, bl2].data[:] += offset
 

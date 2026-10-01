@@ -16,8 +16,7 @@ namespace triqs_cthyb {
     n_types = static_cast<int>(data.dyn_op_list.size());
     if (n_types == 0) TRIQS_RUNTIME_ERROR << "measure_dyn_vertex_corr: there are no stochastic dynamical vertices to measure.";
 
-    // accumulate() indexes by the vertex's own f_index, which fold_into_stochastic_catalog assigns
-    // in catalog order
+    // accumulate() indexes by f_index, which must be the catalog position
     for (int t = 0; t < n_types; ++t)
       if (data.dyn_op_list[t].f_index != t)
         TRIQS_RUNTIME_ERROR << "measure_dyn_vertex_corr: dynamical vertex catalog entry " << t << " has coupling index "
