@@ -2,22 +2,10 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Physics validation for the dynamical Hubbard-Kanamori conserved-density split (see
-# kanamori_dyn.py for the physical setup and find_conserved_density_combinations /
-# split_density_couplings in dynamical_interactions.cpp for the mechanism). ctseg/CTINT
-# can't do multi-orbital dynamical interactions, so the check here is internal (for an
-# external check, benchmark/dynamic_int/ed_reference solves a similar model exactly):
-# solve the identical physical setup (off-diagonal vertices *and* the explicit diagonal
-# self-terms, together a coupling to total spin-up/spin-down density) twice -- once with
-# lang_firsov=True (sends every vertex to the analytic path: individual orbital
-# densities do not commute with h_loc under real spin-flip/pair-hopping, but total
-# spin-up and total spin-down density each do) and once with lang_firsov=False (forces
-# every vertex through the stochastic insert_dyn/remove_dyn path instead) -- and check the
-# two independent methods agree.
-#
-# Two separate Solver instances are used rather than re-solving one solver twice: solve()
-# mutates h_loc in place via the Lang-Firsov K'(0) shift, so reusing one instance across
-# both runs would contaminate the second.
+# The conserved-density split of a dynamical Hubbard-Kanamori interaction (model as in kanamori_dyn.py,
+# with spin flip and pair hopping in h_loc): the same model is solved with lang_firsov=True, where the
+# coupling to the total spin-up and spin-down densities is resummed analytically, and with
+# lang_firsov=False, where every vertex is sampled stochastically. The two must agree.
 #
 # Comparison uses G_l (Legendre coefficients), not raw G_tau: the raw binned G_tau
 # estimator has large single-bin noise at this vertex count/statistics level (isolated
@@ -83,10 +71,7 @@ def build_and_solve(lang_firsov, n_cycles, seed_offset):
     return S
 
 
-# Lang-Firsov run: fast (analytic), forced-stochastic run: needs more statistics to
-# converge to the same precision. Average sign stays close to 1 in both, i.e. no severe
-# sign problem for this setup, unlike the unresolved pure-stochastic one for the
-# single-orbital spin_spin case (doc/notes/dynamical_interactions.tex, "Open items").
+# The stochastic run needs more statistics for the same precision; the sign stays close to 1 in both.
 S_lf = build_and_solve(lang_firsov=True, n_cycles=200000, seed_offset=0)
 S_stoch = build_and_solve(lang_firsov=False, n_cycles=300000, seed_offset=1000)
 

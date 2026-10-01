@@ -1,5 +1,5 @@
 # Two-patch DCA model with a *real-space* retarded spin-spin interaction, shared by run_cthyb.py,
-# run_ed.py and calibrate_mu.py (and loaded by path by SYK_yukawa/DCA/dca_syk.py).
+# run_ed.py and calibrate_mu.py.
 #
 # Two-patch DCA (VBDMFT, Ferrero et al. PRB 80, 064501) of the 2D Hubbard model: the zone is cut
 # into a central patch (|kx|, |ky| < pi/sqrt(2)) and the rest, and the solver's operators are

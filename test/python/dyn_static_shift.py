@@ -34,17 +34,15 @@ class TestDynStaticShift(unittest.TestCase):
             self.assertAlmostEqual(kprime_0(q, BETA), 1.0 / (2 * OMEGA_0**2), places=8)
 
     def test_zero_frequency_shortcut_only_for_symmetric_kernels(self):
-        """-(1/2) int D is K'(0) only when D is symmetric about beta/2 (benchmark/dynamic_int/
-        holstein.py relies on this). It must fail for an asymmetric kernel, or that reliance
-        would be silently wrong wherever the kernel is not a plain boson propagator."""
+        """-(1/2) int D is K'(0) only when D is symmetric about beta/2, not for an asymmetric kernel."""
         shortcut = lambda D: -0.5 * np.trapezoid(D, TAU)
         self.assertAlmostEqual(shortcut(Q), kprime_0(Q, BETA), places=5)     # symmetric: agrees
         D_asym = -np.exp(-OMEGA_0 * TAU)
         self.assertGreater(abs(shortcut(D_asym) - kprime_0(D_asym, BETA)), 0.1)  # asymmetric: does not
 
     def test_reproduces_kanamori_phonon_reference(self):
-        """Must reproduce benchmark/dynamic_int/ed_reference/model.py, which is validated against
-        exact diagonalization, for the non-uniform coupling g = (0.7, 0.3)."""
+        """The closed-form W and mu of the two-orbital Kanamori-phonon model (checked against exact
+        diagonalization), for the non-uniform coupling g = (0.7, 0.3)."""
         U, J, g_orb = 2.0, 0.3, [0.7, 0.3]
         labels = [(s, o) for s in ('up', 'down') for o in range(2)]
         g = np.array([g_orb[o] for _, o in labels])
@@ -61,7 +59,7 @@ class TestDynStaticShift(unittest.TestCase):
         W_shift, level_shift = static_shift(vertices, n_so, BETA)
         mu = half_filling_mu(kanamori, W_shift, level_shift)
 
-        # model.py: W_ab = kanamori_ab - g_a g_b/omega^2, mu = 0.5 W.sum(axis=1) - g_a^2/(2 omega^2)
+        # Closed form: W_ab = kanamori_ab - g_a g_b/omega^2, mu = 0.5 W.sum(axis=1) - g_a^2/(2 omega^2)
         W_ref = np.array([[0.0 if a == b else kanamori[a, b] - g[a] * g[b] / OMEGA_0**2
                            for b in range(n_so)] for a in range(n_so)])
         mu_ref = 0.5 * W_ref.sum(axis=1) - g**2 / (2 * OMEGA_0**2)
@@ -72,7 +70,7 @@ class TestDynStaticShift(unittest.TestCase):
         self.assertGreater(abs(mu[0] - mu[1]), 0.3)
 
     def test_reproduces_single_orbital_holstein(self):
-        """benchmark/dynamic_int/holstein.py's mu = U/2 - g^2/omega_0^2."""
+        """Single-orbital Holstein: mu = U/2 - g^2/omega_0^2."""
         U, g = 4.0, 0.5
         vertices = [(a, b, g * g * Q) for a in range(2) for b in range(2)]
         W_shift, level_shift = static_shift(vertices, 2, BETA)

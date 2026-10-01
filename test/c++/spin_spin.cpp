@@ -47,9 +47,6 @@ using namespace triqs_cthyb;
 //      statistics and additionally checks Sigma; prefer it for judging correctness, and
 //      see its header for how to tell noise from a real change.
 //   3. Copy spin_spin.out.h5 -> spin_spin.ref.h5 (in both source and build dirs)
-//
-// Last regenerated 2026-09-18, after the Bug A/C fixes added the swap_dyn move, which
-// changed the random stream.
 
 TEST(CTHYB, Spin_Spin) {
 

@@ -38,9 +38,6 @@
 #      if seed-to-seed scatter is comparable to the disagreement with the reference, it is
 #      noise.
 #   3. Copy spin_spin.out.h5 -> spin_spin.ref.h5
-#
-# Last regenerated 2026-09-18, after the Bug A/C fixes added the swap_dyn move, which
-# changed the random stream. Verified noise-only by the seed comparison described above.
 
 import triqs.utility.mpi as mpi
 from triqs.gf import *

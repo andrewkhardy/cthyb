@@ -45,8 +45,7 @@ J = 0.2
 # Poles of Delta
 epsilon = 2.3
 
-# Retarded phonon kernel Q(tau), coupled uniformly to total density -- same closed form
-# as benchmark/dynamic_int/multiorb_spin_spin.py / spin_spin.py's single bosonic mode.
+# Retarded phonon kernel Q(tau) of a single bosonic mode, coupled uniformly to the total density
 omega_0 = 1.0
 g = 0.5
 n_tau_bosonic = 2001
@@ -62,8 +61,7 @@ delta_w << inverse(iOmega_n - epsilon) + inverse(iOmega_n + epsilon)
 delta_w.from_L_G_R(V, delta_w, V)
 
 # Block structure of GF -- kanamori_dynamical_vertices needs n(spin, orb) indexing, i.e.
-# spin-named blocks each holding n_orb orbitals (off_diag=True), not the per-orbital-per-spin
-# block convention used elsewhere in this repo (e.g. multiorb_spin_spin.py).
+# spin-named blocks each holding n_orb orbitals (off_diag=True), not one block per orbital and spin.
 spin_names = ('up', 'down')
 gf_struct = set_operator_structure(spin_names, n_orb, True)
 
