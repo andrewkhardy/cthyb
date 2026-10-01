@@ -33,6 +33,9 @@ namespace triqs_cthyb {
   using namespace triqs::mesh;
   using namespace nda;
 
+  // Trace operators with their times
+  using timed_ops_t = std::vector<std::pair<time_pt, op_desc>>;
+
   /************************
  * The Monte Carlo data
  ***********************/
@@ -70,23 +73,13 @@ namespace triqs_cthyb {
     h_scalar_t atomic_weight;                                    // The current value of the trace or norm
     h_scalar_t atomic_reweighting;                               // The current value of the reweighting
 
-    // FIXME : where to put this section of dynamical stuff ?
-    std::vector<bosonic_op_pair_t> dyn_op_list;                  // List of bosonic operator pairs for dynamic interactions
-    std::vector<std::function<double(double)>> dyn_interactions; // List of dynamic interactions
-    //std::vector<gfs::gf<imtime, scalar_valued>> dyn_interactions; // List of dynamic interactions
-
-    // Analytic Density-Density bath support
-    // Matrix of k_n polynomials: K_n[a][b][n] where a and b are linear indices.
-    std::vector<std::vector<std::vector<double>>> K_n; 
-    int K_n_size = 0; // size of polynomials
-    bool use_lang_firsov = false;
+    std::vector<bosonic_op_pair_t> dyn_op_list;                  // Catalog of the stochastic dynamical vertex types
+    std::vector<std::function<double(double)>> dyn_interactions; // Their couplings D(tau), indexed by f_index
 
     // Construction
     qmc_data(double beta, solve_parameters_t const &p, atom_diag const &h_diag, std::map<std::pair<int, int>, int> linindex,
-             block_gf_const_view<imtime> delta, std::vector<int> n_inner, histo_map_t *histo_map,
-             std::vector<bosonic_op_pair_t> const &dyn_op_list_ = {},
-             std::vector<std::function<double(double)>> const &dyn_interactions_ = {},
-             std::vector<std::vector<std::vector<double>>> const &K_n_ = {})
+             block_gf_const_view<imtime> delta, std::vector<int> n_inner, histo_map_t *histo_map, std::vector<bosonic_op_pair_t> const &dyn_op_list,
+             std::vector<std::function<double(double)>> const &dyn_interactions, std::vector<std::vector<std::vector<double>>> const &K_n)
        : config(beta),
          tau_seg(beta),
          linindex(linindex),
@@ -96,15 +89,10 @@ namespace triqs_cthyb {
          delta(map([](gf_const_view<imtime> d) { return real(d); }, delta)),
          current_sign(1),
          old_sign(1),
-         dyn_op_list(dyn_op_list_),
-         dyn_interactions(dyn_interactions_),
-         K_n(K_n_) {
+         dyn_op_list(dyn_op_list),
+         dyn_interactions(dyn_interactions) {
 
-      use_lang_firsov = p.lang_firsov;
-      if (!K_n.empty() && !K_n[0].empty()) {
-        K_n_size = K_n[0][0].size();
-        build_K_table(p.verbosity);
-      }
+      if (!K_n.empty()) build_K_table(K_n, p.verbosity);
 
       std::vector<std::vector<std::pair<time_pt, int>>> X(delta.size()), Y(delta.size());
 
@@ -178,18 +166,27 @@ namespace triqs_cthyb {
     qmc_data(qmc_data const &)            = delete; // Member imp_trace is not copyable
     qmc_data &operator=(qmc_data const &) = delete;
 
-    /// The four trace operators of a stochastic dynamical vertex, exactly where
-    /// insert_dyn places them: op1 as opL(tau1) opR(tau1 - eps), op2 as opL(tau2) opR(tau2 - eps).
-    std::vector<std::pair<time_pt, op_desc>> dyn_vertex_ops(bosonic_op_pair_t const &ops, time_pt tau1, time_pt tau2) const {
+    /// The trace operators of a dynamical vertex: op1 as opL(tau1) opR(tau1 - eps), op2 likewise at tau2
+    timed_ops_t dyn_vertex_ops(configuration::dyn_bosonic_pair_t const &v) const {
       auto eps = tau_seg.get_epsilon();
-      return {{tau1, ops.op1.opL}, {tau1 - eps, ops.op1.opR}, {tau2, ops.op2.opL}, {tau2 - eps, ops.op2.opR}};
+      return {{v.tau1, v.ops.op1.opL}, {v.tau1 - eps, v.ops.op1.opR}, {v.tau2, v.ops.op2.opL}, {v.tau2 - eps, v.ops.op2.opR}};
     }
 
-    /// Call f(tau, op) for every fermion operator in the trace: the hybridization operators in
-    /// config, plus the operators of the stochastic dynamical vertices (config.dyn_oplist),
-    /// which are not in config's oplist but change orbital occupations all the same. These are
-    /// the density kinks the Lang-Firsov weight is built from. Visits in place rather than
-    /// returning a vector: compute_lang_firsov_ratio runs on every proposal.
+    /// The coupling D(tau1 - tau2) of a dynamical vertex
+    double dyn_coupling(configuration::dyn_bosonic_pair_t const &v) const { return dyn_interactions[v.ops.f_index](double(v.tau1 - v.tau2)); }
+
+    /// Catalog index of the vertex type (op1, op2), or -1 if there is none or more than one
+    int find_dyn_type(op_desc_pair_t const &op1, op_desc_pair_t const &op2) const {
+      int type = -1;
+      for (int i = 0; i < int(dyn_op_list.size()); ++i) {
+        if (dyn_op_list[i].op1 != op1 || dyn_op_list[i].op2 != op2) continue;
+        if (type != -1) return -1;
+        type = i;
+      }
+      return type;
+    }
+
+    /// f(tau, op) for every operator in the trace, those of the dynamical vertices included (written out: no allocation)
     template <typename F> void for_each_trace_op(F &&f) const {
       for (auto const &[tau, op] : config) f(tau, op);
       auto eps = tau_seg.get_epsilon();
@@ -201,49 +198,34 @@ namespace triqs_cthyb {
       }
     }
 
-    /// The same operators as for_each_trace_op, collected into a vector
-    std::vector<std::pair<time_pt, op_desc>> trace_ops() const {
-      std::vector<std::pair<time_pt, op_desc>> ops;
+    timed_ops_t trace_ops() const {
+      timed_ops_t ops;
       ops.reserve(config.size() + 4 * config.dyn_oplist.size());
       for_each_trace_op([&ops](time_pt const &tau, op_desc const &op) { ops.emplace_back(tau, op); });
       return ops;
     }
 
-    // ---------------------------------------------------------------------------------
-    // Tabulated Lang-Firsov kernel
-    //
-    // K_{ab}(tau) is needed for every (proposed operator, trace operator) pair of every
-    // proposal -- ~4 x 100 evaluations per move at beta = 100 -- so summing the dyn_n_l
-    // Legendre terms each time dominated the move cost. It is instead tabulated once on a
-    // uniform grid over [0, beta/2] (K(tau) = K(beta - tau)) and linearly interpolated. The
-    // grid is doubled until interpolation reproduces the Legendre series to
-    // K_TABLE_RTOL * max(1, max|K|) at every midpoint, so the table is a faithful stand-in for
-    // the series rather than a further approximation of the model: the series itself differs
-    // from the exact double integral of D(tau) by ~1e-5 at dyn_n_l = 50. The MC stays exact
-    // for the tabulated K -- every weight is computed from the same table.
-    // ---------------------------------------------------------------------------------
+    // Lang-Firsov kernel K_ab(tau) on [0, beta/2] (K(tau) = K(beta - tau)), linearly interpolated on a grid that is
+    // refined until it reproduces the Legendre series to K_TABLE_RTOL
     static constexpr double K_TABLE_RTOL  = 1e-9;
     static constexpr long K_TABLE_N_START = 4096;
     static constexpr long K_TABLE_N_MAX   = 1L << 20;
 
-    long n_K_lin = 0;          // K_tab is indexed by (linear index a, linear index b, grid point)
-    long n_K_tab = 0;          // number of grid intervals over [0, beta/2]
+    long n_K_lin       = 0;    // number of linear indices
+    long n_K_tab       = 0;    // number of grid intervals
     double K_tab_inv_h = 0.0;  // 1 / grid spacing
-    std::vector<double> K_tab; // (n_K_lin * n_K_lin) rows of n_K_tab + 1 points
+    std::vector<double> K_tab; // n_K_lin * n_K_lin rows of n_K_tab + 1 points, empty without Lang-Firsov vertices
 
-    /// K_{ab}(t) summed from its Legendre coefficients -- the reference the table is built from
-    double K_legendre(long a, long b, double t) const {
-      double const beta = config.beta();
-      triqs::utility::legendre_generator leg;
-      leg.reset(2.0 * t / beta - 1.0);
-      double val = 0.0;
-      for (int n = 0; n < K_n_size; ++n) val += K_n[a][b][n] * leg.next();
-      return val;
-    }
-
-    void build_K_table(int verbosity) {
-      n_K_lin           = long(K_n.size());
-      double const half = config.beta() / 2.0;
+    void build_K_table(std::vector<std::vector<std::vector<double>>> const &K_n, int verbosity) {
+      double const beta = config.beta(), half = beta / 2.0;
+      auto K_legendre = [beta](std::vector<double> const &k, double t) {
+        triqs::utility::legendre_generator leg;
+        leg.reset(2.0 * t / beta - 1.0);
+        double val = 0.0;
+        for (double k_n : k) val += k_n * leg.next();
+        return val;
+      };
+      n_K_lin        = long(K_n.size());
       double max_err = 0.0, max_K = 0.0;
       for (n_K_tab = K_TABLE_N_START;; n_K_tab *= 2) {
         double const h = half / double(n_K_tab);
@@ -251,14 +233,15 @@ namespace triqs_cthyb {
         max_err = max_K = 0.0;
         for (long a = 0; a < n_K_lin; ++a)
           for (long b = 0; b < n_K_lin; ++b) {
-            if (std::all_of(K_n[a][b].begin(), K_n[a][b].end(), [](double k) { return k == 0.0; })) continue;
+            auto const &k = K_n[a][b];
+            if (std::all_of(k.begin(), k.end(), [](double x) { return x == 0.0; })) continue;
             double *row = &K_tab[(a * n_K_lin + b) * (n_K_tab + 1)];
             for (long i = 0; i <= n_K_tab; ++i) {
-              row[i] = K_legendre(a, b, double(i) * h);
+              row[i] = K_legendre(k, double(i) * h);
               max_K  = std::max(max_K, std::abs(row[i]));
             }
             for (long i = 0; i < n_K_tab; ++i)
-              max_err = std::max(max_err, std::abs(0.5 * (row[i] + row[i + 1]) - K_legendre(a, b, (double(i) + 0.5) * h)));
+              max_err = std::max(max_err, std::abs(0.5 * (row[i] + row[i + 1]) - K_legendre(k, (double(i) + 0.5) * h)));
           }
         if (max_err <= K_TABLE_RTOL * std::max(1.0, max_K) || n_K_tab >= K_TABLE_N_MAX) break;
       }
@@ -283,54 +266,30 @@ namespace triqs_cthyb {
       return (op1.dagger == op2.dagger) ? val : -val;
     }
 
-/// Ratio of dynamical MC weights w^dyn_loc for a proposed operator update:
-///   exp{ Σ_{op pairs (α,β)} s_α s_β K_{i(α)j(β)}(τ_α - τ_β) }
-double compute_lang_firsov_ratio(
-    std::vector<std::pair<time_pt, op_desc>> const& inserted,
-    std::vector<std::pair<time_pt, op_desc>> const& removed) const {
+    /// Ratio exp(sum s s' K(tau - tau')) of the Lang-Firsov weights for inserting and removing these trace operators
+    double compute_lang_firsov_ratio(timed_ops_t const &inserted, timed_ops_t const &removed) const {
+      if (K_tab.empty()) return 1.0;
+      double delta_W = 0.0;
 
-  if (!use_lang_firsov || K_n_size == 0) return 1.0;
+      // with every trace operator that stays (trace times are unique)
+      auto background_interaction = [&](op_desc const &op, time_pt const &t, double sign) {
+        for_each_trace_op([&](time_pt const &t_bg, op_desc const &op_bg) {
+          bool is_removed = std::any_of(removed.begin(), removed.end(), [&](auto const &r) { return r.first == t_bg; });
+          if (!is_removed) delta_W += sign * eval_K(op, op_bg, t, t_bg);
+        });
+      };
+      for (auto const &[t, op] : inserted) background_interaction(op, t, +1.0);
+      for (auto const &[t, op] : removed) background_interaction(op, t, -1.0);
 
-#ifdef CTHYB_DEBUG
-  // eval_K indexes the table by op.linear_index, so an op_desc rebuilt by a move with that field
-  // left at a default silently reads another orbital's kernel (remove.cpp once did exactly this)
-  for (auto const *ops : {&inserted, &removed})
-    for (auto const &[t, op] : *ops)
-      if (op.linear_index != linindex.at({op.block_index, op.inner_index}))
-        TRIQS_RUNTIME_ERROR << "compute_lang_firsov_ratio: " << op << " carries linear_index " << op.linear_index;
-#endif
-
-  double delta_W = 0.0;
-
-  // 1. Interactions with the persistent background: every trace operator not being removed,
-  //    hybridization and stochastic dynamical-vertex operators alike
-  auto background_interaction = [&](op_desc const& op, time_pt const& t, double sign) {
-    for_each_trace_op([&](time_pt const& t_bg, op_desc const& op_bg) {
-      bool is_removed = std::any_of(removed.begin(), removed.end(), [&](auto const& r) {
-        return r.first == t_bg && r.second.block_index == op_bg.block_index && r.second.inner_index == op_bg.inner_index
-           && r.second.dagger == op_bg.dagger;
-      });
-      if (!is_removed) delta_W += sign * eval_K(op, op_bg, t, t_bg);
-    });
-  };
-  for (auto const& [t, op] : inserted) background_interaction(op, t, +1.0);
-  for (auto const& [t, op] : removed)  background_interaction(op, t, -1.0);
-
-  // 2. Cross-interactions within inserted/removed sets (each pair once, i < j)
-  // Note: diagonal terms K(0) = 0 by the Dirichlet boundary condition.
-  auto cross = [&](auto const& ops, double sign) {
-    for (size_t i = 0; i < ops.size(); ++i)
-      for (size_t j = i + 1; j < ops.size(); ++j)
-        delta_W += sign * eval_K(ops[i].second, ops[j].second, ops[i].first, ops[j].first);
-  };
-  cross(inserted, +1.0);
-  cross(removed,  -1);
-
-  return std::exp(delta_W);
-}
-
-
-
+      // within the inserted and within the removed operators, each pair once (K(0) = 0)
+      auto cross = [&](timed_ops_t const &ops, double sign) {
+        for (size_t i = 0; i < ops.size(); ++i)
+          for (size_t j = i + 1; j < ops.size(); ++j) delta_W += sign * eval_K(ops[i].second, ops[j].second, ops[i].first, ops[j].first);
+      };
+      cross(inserted, +1.0);
+      cross(removed, -1.0);
+      return std::exp(delta_W);
+    }
 
     void update_sign() {
 

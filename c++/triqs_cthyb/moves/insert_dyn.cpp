@@ -20,125 +20,57 @@
  ******************************************************************************/
 
 #include "./insert_dyn.hpp"
-#include <triqs/utility/time_pt.hpp>
 
 namespace triqs_cthyb {
 
-  move_insert_dyn::move_insert_dyn(qmc_data &data, mc_tools::random_generator &rng, histo_map_t *histos)
-     : data(data), config(data.config), rng(rng) {}
+  move_insert_dyn::move_insert_dyn(qmc_data &data, mc_tools::random_generator &rng) : data(data), config(data.config), rng(rng) {}
 
   mc_weight_t move_insert_dyn::attempt() {
 
-    // Choose 2 times tau1, tau2 for insertion
-    tau1 = data.tau_seg.get_random_pt(rng);
-    tau2 = data.tau_seg.get_random_pt(rng);
-    if (tau1 < tau2) std::swap(tau1, tau2);
+    // Two times, op1 at the later one, then a vertex type
+    vertex.tau1 = data.tau_seg.get_random_pt(rng);
+    vertex.tau2 = data.tau_seg.get_random_pt(rng);
+    if (vertex.tau1 < vertex.tau2) std::swap(vertex.tau1, vertex.tau2);
+    vertex.ops = data.dyn_op_list[rng(data.dyn_op_list.size())];
 
-    // Pick up pair of operators to insert
-    auto dyn_pair_idx = rng(data.dyn_op_list.size());
-    dyn_pair          = data.dyn_op_list[dyn_pair_idx];
-
-    // Insert operators in the tree
-    auto vertex_ops = data.dyn_vertex_ops(dyn_pair, tau1, tau2);
+    auto const ops = data.dyn_vertex_ops(vertex);
     try {
-      for (auto const &[tau, op] : vertex_ops) data.imp_trace.try_insert(tau, op);
-    } catch (rbt_insert_error const &) { // FIXME what this error ???
+      for (auto const &[tau, op] : ops) data.imp_trace.try_insert(tau, op);
+    } catch (rbt_insert_error const &) {
       std::cerr << "Insert error : recovering ... " << std::endl;
       data.imp_trace.cancel_insert();
       return 0;
     }
 
-    // The ratio for the dynamic interaction
-    double dyn_term_ratio = -1 * data.dyn_interactions[dyn_pair.f_index](double(tau1 - tau2));
-
-    // Lang-Firsov dressing: the vertex's operators change orbital occupations like any
-    // other operator in the trace (see qmc_data::trace_ops)
-    double lang_firsov_ratio = data.compute_lang_firsov_ratio(vertex_ops, {});
-
-    // Proposal probability ratio
-    mc_weight_t direct_probability  = (2.0 / (config.beta() * config.beta())) * (1.0 / data.dyn_op_list.size());
-    mc_weight_t reverse_probability = 1.0 / double(config.dyn_oplist.size() + 1);
-    mc_weight_t t_ratio             = reverse_probability / direct_probability;
+    double const beta        = config.beta();
+    mc_weight_t t_ratio      = beta * beta / 2 * data.dyn_op_list.size() / double(config.dyn_oplist.size() + 1);
+    double dyn_term_ratio    = -data.dyn_coupling(vertex);
+    double lang_firsov_ratio = data.compute_lang_firsov_ratio(ops, {});
 
     // For quick abandon
     double random_number = rng.preview();
     if (random_number == 0.0) return 0;
     double p_yee = std::abs(t_ratio * dyn_term_ratio * lang_firsov_ratio / data.atomic_weight);
 
-    // computation of the new trace after insertion
     std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
-    if (new_atomic_weight == 0.0) { return 0; }
-    auto atomic_weight_ratio = new_atomic_weight / data.atomic_weight;
-    if (!isfinite(atomic_weight_ratio))
-      TRIQS_RUNTIME_ERROR << "(insert_dyn) trace_ratio not finite " << new_atomic_weight << " " << data.atomic_weight << " "
-                          << new_atomic_weight / data.atomic_weight << " in config " << config.get_id();
+    if (new_atomic_weight == 0.0) return 0;
 
-    mc_weight_t p = atomic_weight_ratio * dyn_term_ratio * lang_firsov_ratio;
-
-#ifdef EXT_DEBUG
-    std::cerr << "Atomic ratio: " << atomic_weight_ratio << '\t';
-    std::cerr << "Det ratio: " << det_ratio << '\t';
-    std::cerr << "Prefactor: " << t_ratio << '\t';
-    std::cerr << "Weight: " << p * t_ratio << std::endl;
-    std::cerr << "p_yee * newtrace: " << p_yee * new_atomic_weight << std::endl;
-#endif
-
-    if (!isfinite(p * t_ratio)) {
-      std::cerr << "Insert_dyn move info:\n";
-      std::cerr << "Atomic ratio: " << atomic_weight_ratio << '\t';
-      std::cerr << "Det ratio: " << dyn_term_ratio << '\t';
-      std::cerr << "Prefactor: " << t_ratio << '\t';
-      std::cerr << "Weight: " << p * t_ratio << std::endl;
-      std::cerr << "p_yee * newtrace: " << p_yee * new_atomic_weight << std::endl;
-
-      TRIQS_RUNTIME_ERROR << "(insert_dyn) p * t_ratio not finite p : " << p << " t_ratio : " << t_ratio << " in config " << config.get_id();
-    }
-    return p * t_ratio;
+    mc_weight_t p = new_atomic_weight / data.atomic_weight * dyn_term_ratio * lang_firsov_ratio * t_ratio;
+    if (!isfinite(p)) TRIQS_RUNTIME_ERROR << "(insert_dyn) weight ratio not finite: " << p << " in config " << config.get_id();
+    return p;
   }
-
-  // -------------------------------------------------------------
 
   mc_weight_t move_insert_dyn::accept() {
-
-    // insert in the tree
     data.imp_trace.confirm_insert();
-
-    // insert in the configuration (all 4 operators: opL and opR for both op1 and op2)
-    // config.insert(tau1, dyn_pair.op1.opL);
-    // config.insert(tau1 - data.tau_seg.get_epsilon(), dyn_pair.op1.opR);
-    // config.insert(tau2, dyn_pair.op2.opL);
-    // config.insert(tau2 - data.tau_seg.get_epsilon(), dyn_pair.op2.opR);
-    
-    // Insert the pair of bosonic operators in the configuration
-    config.dyn_oplist.push_back({dyn_pair, tau1, tau2});
+    config.dyn_oplist.push_back(vertex);
     config.finalize();
-
-    data.update_sign();
     data.atomic_weight      = new_atomic_weight;
     data.atomic_reweighting = new_atomic_reweighting;
-    // if (histo_accepted) *histo_accepted << dtau;
-  // if (data.current_sign/ data.old_sign != 1.0) {
-  //     TRIQS_RUNTIME_ERROR << "(insert_dyn) Sign changed during bosonic operator insertion! "
-  //                         << "new sign is " << data.current_sign / data.old_sign
-  //                         << " in config " << config.get_id();
-  // }
-
-
-    return data.current_sign / data.old_sign;
+    return 1.0; // the permutation sign only involves hybridization operators
   }
 
-  // ----------------------------------------
-
   void move_insert_dyn::reject() {
-
     config.finalize();
     data.imp_trace.cancel_insert();
-    // data.dets[block_index].reject_last_try();
-
-#ifdef EXT_DEBUG
-    std::cerr << "* Move move_insert_dyn rejected" << std::endl;
-    std::cerr << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
-    // check_det_sequence(data.dets[block_index], config.get_id());
-#endif
   }
 } // namespace triqs_cthyb

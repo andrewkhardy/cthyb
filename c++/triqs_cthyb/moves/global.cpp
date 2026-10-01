@@ -87,7 +87,7 @@ namespace triqs_cthyb {
 #endif
 
     // Choose a random number of operators, which will not actually be updated
-    // (we always update at least one operator) -- unless every mapped operator is substituted
+    // (we always update at least one operator), unless all of them are to be substituted
     if (!full && updated_ops.size()) {
       int n_no_update = rng(updated_ops.size());
       // Remove some operators
@@ -102,48 +102,30 @@ namespace triqs_cthyb {
     std::cerr << updated_ops.size() << " operators will actually be changed" << std::endl;
 #endif
 
-    // Stochastic dynamical vertices. Their operators are in the trace but not in config, so
-    // they are substituted here -- always as whole vertices, since a vertex with only some of
-    // its four operators substituted is not a vertex of the catalog. The substituted operator
-    // pair must itself be a catalog entry (for a spin flip, S+S- <-> S-S+), otherwise the
-    // substitution is not a symmetry of the dynamical interaction and the move is rejected.
-    // Times are unchanged, so op1 stays at the later time as the catalog form requires.
-    updated_trace_ops = updated_ops;
-    new_dyn_oplist    = config.dyn_oplist;
-    dyn_changed       = false;
-    double dyn_ratio  = 1.0;
-    std::vector<std::pair<time_pt, op_desc>> dyn_inserted, dyn_removed;
-    auto substitute   = [&](op_desc const &op) { return (op.dagger ? substitute_c_dag : substitute_c)[op.linear_index]; };
+    // Dynamical vertices are substituted whole, into the catalog type of their substituted bilinears
+    new_dyn_oplist = config.dyn_oplist;
+    timed_ops_t inserted, removed; // trace operators, for the Lang-Firsov ratio
+    double dyn_ratio = 1.0;
+    auto substitute  = [&](op_desc const &op) { return (op.dagger ? substitute_c_dag : substitute_c)[op.linear_index]; };
     for (auto &vertex : new_dyn_oplist) {
       op_desc_pair_t const op1{substitute(vertex.ops.op1.opL), substitute(vertex.ops.op1.opR)};
       op_desc_pair_t const op2{substitute(vertex.ops.op2.opL), substitute(vertex.ops.op2.opR)};
       if (op1 == vertex.ops.op1 && op2 == vertex.ops.op2) continue;
-
-      int entry = -1;
-      for (int i = 0; i < int(data.dyn_op_list.size()); ++i) {
-        if (data.dyn_op_list[i].op1 == op1 && data.dyn_op_list[i].op2 == op2) {
-          if (entry != -1) return 0; // registered twice: ambiguous, reject (as move_swap_dyn does)
-          entry = i;
-        }
-      }
-      if (entry == -1) return 0;
-
-      double const dt        = double(vertex.tau1 - vertex.tau2);
-      double const old_coupl = data.dyn_interactions[vertex.ops.f_index](dt);
-      if (old_coupl == 0.0) return 0;
-      dyn_ratio *= data.dyn_interactions[data.dyn_op_list[entry].f_index](dt) / old_coupl;
-
-      auto const old_ops = data.dyn_vertex_ops(vertex.ops, vertex.tau1, vertex.tau2);
-      vertex.ops         = data.dyn_op_list[entry];
-      auto const new_ops = data.dyn_vertex_ops(vertex.ops, vertex.tau1, vertex.tau2);
+      int const type = data.find_dyn_type(op1, op2);
+      if (type == -1) return 0;
+      double const old_coupling = data.dyn_coupling(vertex);
+      if (old_coupling == 0.0) return 0;
+      auto const old_ops = data.dyn_vertex_ops(vertex);
+      vertex.ops         = data.dyn_op_list[type];
+      dyn_ratio *= data.dyn_coupling(vertex) / old_coupling;
+      auto const new_ops = data.dyn_vertex_ops(vertex);
       for (int m = 0; m < 4; ++m) {
         if (old_ops[m].second == new_ops[m].second) continue;
-        updated_trace_ops.emplace(new_ops[m].first, new_ops[m].second);
-        dyn_removed.push_back(old_ops[m]);
-        dyn_inserted.push_back(new_ops[m]);
+        removed.push_back(old_ops[m]);
+        inserted.push_back(new_ops[m]);
       }
-      dyn_changed = true;
     }
+    bool const dyn_changed = !removed.empty();
 
     // No operators can be updated...
     if (updated_ops.empty() && !dyn_changed) return 0;
@@ -180,36 +162,41 @@ namespace triqs_cthyb {
       det_ratio *= block_det_ratio;
     }
 
-      std::vector<std::pair<time_pt, op_desc>> inserted = dyn_inserted, removed = dyn_removed;
-      for (auto const &o : updated_ops) {
-        auto it = data.config.find(o.first);
-        removed.push_back({it->first, it->second});
-        inserted.push_back({o.first, o.second});
-      }
-      double lang_firsov_ratio = data.compute_lang_firsov_ratio(inserted, removed);
+    // All trace operators to replace, and the Lang-Firsov ratio (dynamical operators first)
+    if (dyn_changed) {
+      updated_trace_ops = updated_ops;
+      for (auto const &op : inserted) updated_trace_ops.insert(op);
+    }
+    for (auto const &[tau, op] : updated_ops) {
+      removed.emplace_back(tau, config.find(tau)->second);
+      inserted.emplace_back(tau, op);
+    }
+    double lang_firsov_ratio = data.compute_lang_firsov_ratio(inserted, removed);
 
-      // For quick abandon
-      double random_number = rng.preview();
-      if (random_number == 0.0) return 0;
-      double p_yee = std::abs(det_ratio * lang_firsov_ratio * dyn_ratio / data.atomic_weight);
+    // For quick abandon
+    double random_number = rng.preview();
+    if (random_number == 0.0) return 0;
+    double p_yee = std::abs(det_ratio * lang_firsov_ratio * dyn_ratio / data.atomic_weight);
 
-      data.imp_trace.try_replace(updated_trace_ops);
+    data.imp_trace.try_replace(dyn_changed ? updated_trace_ops : updated_ops);
 
-      // computation of the new trace after insertion
-      std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
-      if (new_atomic_weight == 0.0) {
-  #ifdef EXT_DEBUG
-        std::cerr << "trace == 0" << std::endl;
-  #endif
-        return 0;
-      }
-      auto atomic_weight_ratio = new_atomic_weight / data.atomic_weight;
-      if (!isfinite(atomic_weight_ratio))
-        TRIQS_RUNTIME_ERROR << "atomic_weight_ratio not finite " << new_atomic_weight << " " << data.atomic_weight << " "
-                            << new_atomic_weight / data.atomic_weight << " in config " << config.get_id();
+    // computation of the new trace after insertion
+    std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
+    if (new_atomic_weight == 0.0) {
+#ifdef EXT_DEBUG
+      std::cerr << "trace == 0" << std::endl;
+#endif
+      return 0;
+    }
+    auto atomic_weight_ratio = new_atomic_weight / data.atomic_weight;
+    if (!isfinite(atomic_weight_ratio))
+      TRIQS_RUNTIME_ERROR << "atomic_weight_ratio not finite " << new_atomic_weight << " " << data.atomic_weight << " "
+                          << new_atomic_weight / data.atomic_weight << " in config " << config.get_id();
 
-      mc_weight_t p = atomic_weight_ratio * det_ratio * lang_firsov_ratio * dyn_ratio;
-#ifdef EXT_DEBUG    std::cerr << "Trace ratio: " << atomic_weight_ratio << '\t';
+    mc_weight_t p = atomic_weight_ratio * det_ratio * lang_firsov_ratio * dyn_ratio;
+
+#ifdef EXT_DEBUG
+    std::cerr << "Trace ratio: " << atomic_weight_ratio << '\t';
     std::cerr << "Det ratio: " << det_ratio << '\t';
     std::cerr << "p_yee: " << p_yee << std::endl;
     std::cerr << "Weight: " << p << std::endl;
@@ -221,7 +208,7 @@ namespace triqs_cthyb {
   mc_weight_t move_global::accept() {
 
     for (auto const &o : updated_ops) data.config.replace(o.first, o.second);
-    if (dyn_changed) config.dyn_oplist = new_dyn_oplist;
+    std::swap(config.dyn_oplist, new_dyn_oplist);
     config.finalize();
 
     for (auto block_index : affected_blocks) data.dets[block_index].complete_operation();

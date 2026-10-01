@@ -78,11 +78,11 @@ namespace triqs_cthyb {
     std::cerr << num_c2 << "-th C(" << block_index2 << ",...)" << std::endl;
 #endif
 
-    // Get tau directly from the determinants (only contain hybridization operators)
-    tau1 = det1.get_y(num_c1).first;       // c operator from block 1
-    tau2 = det1.get_x(num_c_dag1).first;   // c_dag operator from block 1
-    tau3 = det2.get_y(num_c2).first;       // c operator from block 2
-    tau4 = det2.get_x(num_c_dag2).first;   // c_dag operator from block 2
+    // The times come from the dets, since the trace also holds the dynamical vertices' operators
+    tau1 = det1.get_y(num_c1).first;
+    tau2 = det1.get_x(num_c_dag1).first;
+    tau3 = det2.get_y(num_c2).first;
+    tau4 = det2.get_x(num_c_dag2).first;
 
     // now mark 4 nodes for deletion
     data.imp_trace.try_delete(tau1);
@@ -116,32 +116,42 @@ namespace triqs_cthyb {
       t_ratio = std::pow(block_size1 * config.beta() / double(det1_size), 2) * std::pow(block_size2 * config.beta() / double(det2_size), 2);
     }
 
-      // The removed operators exactly as stored in the configuration (see remove.cpp)
-      auto const &op1 = config.find(tau1)->second;
-      auto const &op2 = config.find(tau2)->second;
-      auto const &op3 = config.find(tau3)->second;
-      auto const &op4 = config.find(tau4)->second;
-      double lang_firsov_ratio = data.compute_lang_firsov_ratio({}, {{tau1, op1}, {tau2, op2}, {tau3, op3}, {tau4, op4}});
+    auto const &op1          = config.find(tau1)->second;
+    auto const &op2          = config.find(tau2)->second;
+    auto const &op3          = config.find(tau3)->second;
+    auto const &op4          = config.find(tau4)->second;
+    double lang_firsov_ratio = data.compute_lang_firsov_ratio({}, {{tau1, op1}, {tau2, op2}, {tau3, op3}, {tau4, op4}});
 
-      // For quick abandon
-      double random_number = rng.preview();
-      if (random_number == 0.0) return 0;
-      double p_yee = std::abs(det_ratio / t_ratio * lang_firsov_ratio / data.atomic_weight);
+    // For quick abandon
+    double random_number = rng.preview();
+    if (random_number == 0.0) return 0;
+    double p_yee = std::abs(det_ratio / t_ratio * lang_firsov_ratio / data.atomic_weight);
 
-      // recompute the trace
-      std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
-      if (new_atomic_weight == 0.0) {
-  #ifdef EXT_DEBUG
-        std::cerr << "atomic_weight == 0" << std::endl;
-  #endif
-        return 0;
-      }
-      auto atomic_weight_ratio = new_atomic_weight / data.atomic_weight;
-      if (!isfinite(atomic_weight_ratio))
-        TRIQS_RUNTIME_ERROR << "atomic_weight_ratio not finite " << new_atomic_weight << " " << data.atomic_weight << " "
-                            << new_atomic_weight / data.atomic_weight << " in config " << config.get_id();
+    // recompute the trace
+    std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
+    if (new_atomic_weight == 0.0) {
+#ifdef EXT_DEBUG
+      std::cerr << "atomic_weight == 0" << std::endl;
+#endif
+      return 0;
+    }
+    auto atomic_weight_ratio = new_atomic_weight / data.atomic_weight;
+    if (!isfinite(atomic_weight_ratio))
+      TRIQS_RUNTIME_ERROR << "atomic_weight_ratio not finite " << new_atomic_weight << " " << data.atomic_weight << " "
+                          << new_atomic_weight / data.atomic_weight << " in config " << config.get_id();
 
-      mc_weight_t p = atomic_weight_ratio * det_ratio * lang_firsov_ratio;
+    mc_weight_t p = atomic_weight_ratio * det_ratio * lang_firsov_ratio;
+
+#ifdef EXT_DEBUG
+    std::cerr << "Trace ratio: " << atomic_weight_ratio << '\t';
+    std::cerr << "Det ratio: " << det_ratio << '\t';
+    std::cerr << "Prefactor: " << t_ratio << '\t';
+    std::cerr << "Weight: " << p / t_ratio << std::endl;
+#endif
+
+    if (!isfinite(p)) TRIQS_RUNTIME_ERROR << "(remove) p not finite :" << p << " in config " << config.get_id();
+    if (!isfinite(p / t_ratio))
+      TRIQS_RUNTIME_ERROR << "p / t_ratio not finite p : " << p << " t_ratio :  " << t_ratio << " in config " << config.get_id();
     return p / t_ratio;
   }
 

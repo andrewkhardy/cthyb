@@ -24,14 +24,8 @@
 
 namespace triqs_cthyb {
 
-  // Exchange partners between two stochastic dynamical vertices (cf. ctseg's swap_spin_lines).
-  //
-  // insert_dyn/remove_dyn only add or remove a vertex whose two bilinears can enter or leave the
-  // trace on their own. For spin flips that means its S+ and S- are adjacent in the flip
-  // sequence, so pairings where every vertex crosses another (first possible with 3 vertices)
-  // are never reached with those moves alone. This move keeps every operator at its time --
-  // trace, determinants and Lang-Firsov weight are unchanged -- and only re-pairs two bilinears
-  // of the same kind, so its acceptance is the ratio of the coupling products.
+  // Exchange of same-kind bilinears between two stochastic dynamical vertices (cf. ctseg's swap_spin_lines).
+  // insert_dyn/remove_dyn alone cannot reach pairings in which every vertex crosses another.
   class move_swap_dyn {
 
     qmc_data &data;

@@ -292,34 +292,16 @@ namespace triqs_cthyb {
     std::vector<node> removed_nodes;
     std::vector<time_pt> removed_keys;
 
-    // Mark node n as deleted
-    void try_delete(node n) noexcept {
-      removed_nodes.push_back(n);             // store the node
-      removed_keys.push_back(n->key);         // store the key
-      tree.set_modified_from_root_to(n->key); // mark all nodes on path from node to root as modified
-      n->delete_flag = true;                  // mark the node for deletion
-      tree_size--;
-    }
-
     public:
-    // Find and mark as deleted the node with key key
-    void try_delete(time_pt const &key) noexcept {
-      auto x = tree.get(key);
-      EXPECTS_WITH_MESSAGE(x, "Error: trying to delete a non-existing node at key " << key);
-      try_delete(x);
-    }
-
-    // Find and mark as deleted the nth operator with fixed dagger and block_index
-    // n=0 : first operator, n=1, second, etc...
-    time_pt try_delete(int n, int block_index, bool dagger) noexcept {
-      // traverse the tree, looking for the nth operator of the correct dagger, block_index
-      int i  = 0;
-      node x = find_if(tree, [&](node no) {
-        if (no->op.dagger == dagger && no->op.block_index == block_index) ++i;
-        return i == n + 1;
-      });
-      try_delete(x);
-      return x->key;
+    // Find and mark as deleted the operator at time tau
+    void try_delete(time_pt const &tau) noexcept {
+      node x = tree.get(tau);
+      EXPECTS_WITH_MESSAGE(x, "Error: trying to delete a non-existing node at key " << tau);
+      removed_nodes.push_back(x);             // store the node
+      removed_keys.push_back(x->key);         // store the key
+      tree.set_modified_from_root_to(x->key); // mark all nodes on path from node to root as modified
+      x->delete_flag = true;                  // mark the node for deletion
+      tree_size--;
     }
 
     // Clean all the delete flags

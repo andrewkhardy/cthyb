@@ -61,9 +61,9 @@ namespace triqs_cthyb {
     std::cerr << num_c << "-th C(" << block_index << ",...)" << std::endl;
 #endif
 
-    // Get tau directly from the determinant (only contains hybridization operators)
-    tau1 = det.get_y(num_c).first;      // c operator
-    tau2 = det.get_x(num_c_dag).first;  // c_dag operator
+    // The times come from the det, since the trace also holds the dynamical vertices' operators
+    tau1 = det.get_y(num_c).first;
+    tau2 = det.get_x(num_c_dag).first;
 
     // now mark 2 nodes for deletion
     data.imp_trace.try_delete(tau1);
@@ -78,8 +78,6 @@ namespace triqs_cthyb {
     // proposition probability
     auto t_ratio = std::pow(block_size * config.beta() / double(det_size), 2); // Size of the det before the try_delete!
 
-    // The removed operators exactly as stored in the configuration: the Lang-Firsov kernel is
-    // indexed by their linear_index, so a rebuilt op_desc must not leave it at a default
     auto const &op1          = config.find(tau1)->second;
     auto const &op2          = config.find(tau2)->second;
     double lang_firsov_ratio = data.compute_lang_firsov_ratio({}, {{tau1, op1}, {tau2, op2}});

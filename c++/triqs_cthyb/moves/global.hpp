@@ -45,16 +45,14 @@ namespace triqs_cthyb {
     // Indices of blocks potentially affected by this move
     std::set<int> affected_blocks;
 
-    // Substitute every mapped operator rather than a random subset (solve parameter move_global_full)
+    // Substitute every mapped operator, not a random subset of them
     bool full;
 
-    // Operators to be updated: hybridization operators (in config), and all trace operators
-    // including those of the stochastic dynamical vertices (which are not in config)
+    // Hybridization operators to be updated, and all trace operators to be updated when dynamical vertices change too
     configuration::oplist_t updated_ops, updated_trace_ops;
 
-    // Proposed dynamical vertices, and whether any of them changed
+    // Proposed dynamical vertices
     configuration::dyn_oplist_t new_dyn_oplist;
-    bool dyn_changed = false;
 
     // Proposed arguments of the dets
     std::vector<std::vector<det_type::x_type>> x;
@@ -64,8 +62,7 @@ namespace triqs_cthyb {
     h_scalar_t new_atomic_reweighting; // Proposed value of the reweighting
 
     public:
-    move_global(std::string const &name, indices_map_t const &substitution_map, qmc_data &data, mc_tools::random_generator &rng,
-                bool full = false);
+    move_global(std::string const &name, indices_map_t const &substitution_map, qmc_data &data, mc_tools::random_generator &rng, bool full);
 
     mc_weight_t attempt();
     mc_weight_t accept();

@@ -24,24 +24,17 @@
 
 namespace triqs_cthyb {
 
-  // Insertion of C, C^dagger operator (dynamic version)
+  // Insertion of a stochastic dynamical vertex
   class move_insert_dyn {
 
     qmc_data &data;
     configuration &config;
     mc_tools::random_generator &rng;
-    //int block_index, block_size;
-    //histogram *histo_proposed, *histo_accepted; // Analysis histograms
-    // double dtau;
-    bosonic_op_pair_t dyn_pair;
+    configuration::dyn_bosonic_pair_t vertex;
     h_scalar_t new_atomic_weight, new_atomic_reweighting;
-    time_pt tau1, tau2;
-    op_desc op1, op2;
-
-    //histogram *add_histo(std::string const &name, histo_map_t *histos);
 
     public:
-    move_insert_dyn(qmc_data &data, mc_tools::random_generator &rng, histo_map_t *histos);
+    move_insert_dyn(qmc_data &data, mc_tools::random_generator &rng);
 
     mc_weight_t attempt();
     mc_weight_t accept();
