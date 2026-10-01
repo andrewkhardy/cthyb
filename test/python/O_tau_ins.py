@@ -1,73 +1,48 @@
-""" 
-Sampling of the density density correlator by operator insertion
-regression test derived from the benchmark ./benchmark/O_tau_ins/
+"""
+Sampling of the density-density correlator <n_up(tau) n_do(0)> by operator insertion,
+against exact diagonalization of the impurity and its discrete bath.
 
 Author: Hugo U.R. Strand (2018) hugo.strand@gmail.com
+"""
 
-Bit-reproducibility test (default seed, h5diff). The insertion count per measurement went from
-(perturbation order)^2 to the order itself, which changes the random stream, so
-O_tau_ins.ref.h5 was regenerated: run once, check O_tau against the old reference within its
-noise, then copy O_tau_ins.out.h5 -> O_tau_ins.ref.h5. """
-
-# ----------------------------------------------------------------------    
-
+from functools import reduce
 import numpy as np
 
-# ----------------------------------------------------------------------    
-
-from triqs.gfs import *
-from triqs.operators import *
-from h5 import HDFArchive
-
-from triqs.utility.h5diff import h5diff
-import triqs.utility.mpi as mpi
-
-# ----------------------------------------------------------------------    
-
+from triqs.gfs import inverse, iOmega_n
+from triqs.operators import n
 from triqs_cthyb import Solver
 
-# ----------------------------------------------------------------------
-if __name__ == '__main__':
+beta, mu, U = 2.1, 2.0, 5.0
+V, eps = [2.0, 5.0], [0.0, 4.0]  # one bath site per (V, eps) and spin
 
-    solv = Solver(
-        beta = 2.1,
-        gf_struct = [['up',1],['do',1]],
-        n_iw = 30,
-        n_tau = 2*30+1,
-        )
 
-    # -- Weiss field of the impurity
-    
-    V1 = 2.0
-    V2 = 5.0
-    epsilon1 = 0.0
-    epsilon2 = 4.0
-    mu = 2.0
-    
-    for name, g0 in solv.G0_iw:
-        g0 << inverse(iOmega_n + mu
-                      - V1**2*inverse(iOmega_n - epsilon1)
-                      - V2**2*inverse(iOmega_n - epsilon2)
-                     )
+def exact_O_tau(taus):
+    """<n_up(tau) n_do(0)> by exact diagonalization of the impurity and its bath sites."""
+    n_modes = 2 * (1 + len(V))  # 0, 1: impurity up, down; 2 + 2k + s: bath site k, spin s
+    a, z, one = np.array([[0.0, 1.0], [0.0, 0.0]]), np.diag([1.0, -1.0]), np.eye(2)
+    c = [reduce(np.kron, [z] * j + [a] + [one] * (n_modes - j - 1)) for j in range(n_modes)]  # Jordan-Wigner
+    num = [cj.T @ cj for cj in c]
+    H = U * num[0] @ num[1]
+    for s in range(2):
+        H -= mu * num[s]
+        for k, (Vk, ek) in enumerate(zip(V, eps)):
+            b = 2 + 2 * k + s
+            H += ek * num[b] + Vk * (c[s].T @ c[b] + c[b].T @ c[s])
+    E, W = np.linalg.eigh(H)
+    E -= E.min()
+    A, B = W.T @ num[0] @ W, W.T @ num[1] @ W
+    Z = np.exp(-beta * E).sum()
+    return np.array([np.exp(-(beta - t) * E) @ (A * B.T) @ np.exp(-t * E) for t in taus]) / Z
 
-    # -- Solve the impurity model
-    
-    solv.solve(
-        h_int = 5.0*n('up',0)*n('do',0),
-        measure_G_tau = True,
-        move_double = True,
-        # -- measurements
-        length_cycle = 20,
-        n_warmup_cycles = int(1e4),
-        n_cycles = int(1e4),
-        # -- measure density-density correlator
-        measure_O_tau = (n('up',0), n('do',0)),
-        )
 
-    # -- Store results
-    
-    filename = 'O_tau_ins.out.h5'
-    with HDFArchive(filename, 'w') as res:
-        res['O_tau'] = solv.O_tau
+S = Solver(beta=beta, gf_struct=[['up', 1], ['do', 1]], n_iw=30, n_tau=2 * 30 + 1)
+for _, g0 in S.G0_iw:
+    g0 << inverse(iOmega_n + mu - sum(Vk**2 * inverse(iOmega_n - ek) for Vk, ek in zip(V, eps)))
 
-    h5diff(filename, 'O_tau_ins.ref.h5')
+S.solve(h_int=U * n('up', 0) * n('do', 0), measure_G_tau=True, move_double=True,
+        length_cycle=20, n_warmup_cycles=int(1e4), n_cycles=int(1e5),
+        measure_O_tau=(n('up', 0), n('do', 0)))
+
+# The QMC noise is a few 1e-3 here (at most 0.012 over many seeds); the correlator is ~0.3
+taus = np.array([float(t) for t in S.O_tau.mesh])
+np.testing.assert_allclose(S.O_tau.data.real, exact_O_tau(taus), atol=0.03)
