@@ -9,6 +9,7 @@ Author: Hugo U.R. Strand (2018) hugo.strand@gmail.com """
 
 # ----------------------------------------------------------------------
 
+import os
 import itertools
 import numpy as np
 
@@ -26,8 +27,8 @@ def plot_g2(g, **kwargs):
 
     plt.figure(figsize=(10, 10))
     shape = g.target_shape
-    N = np.product(shape)
-    n = np.ceil(np.sqrt(N))
+    N = np.prod(shape)
+    n = int(np.ceil(np.sqrt(N)))
     subp = [n, n, 1]
 
     title = kwargs.pop('title')
@@ -78,11 +79,14 @@ def plot_g2_i(g, **kwargs):
 # ----------------------------------------------------------------------
 if __name__ == '__main__':
 
-    with HDFArchive('data_pomerol.h5', 'r') as A: 
-        pom = A['p']
+    pom, pomc = None, None # optional pomerol reference
+    if os.path.exists('data_pomerol.h5'):
+        with HDFArchive('data_pomerol.h5', 'r') as A:
+            pom = A['p']
 
-    with HDFArchive('data_pomerol_chi.h5', 'r') as A: 
-        pomc = A['p']
+    if os.path.exists('data_pomerol_chi.h5'):
+        with HDFArchive('data_pomerol_chi.h5', 'r') as A:
+            pomc = A['p']
         
     with HDFArchive('data_cthyb.h5', 'r') as A: 
         cthyb = A['p']
@@ -91,7 +95,7 @@ if __name__ == '__main__':
         cthybc = A['p']
 
     cut = 0.01
-    data = pom.g4_ph.data
+    data = pom.g4_ph.data if pom is not None else cthybc.g4_ph.data
     vmin_r = np.min(data.real) * cut
     vmax_r = np.max(data.real) * cut
     vmin_i = np.min(data.imag) * cut

@@ -1,13 +1,6 @@
-#!/bin/sh
-#$ -S /bin/sh
-#$ -N nonint
-#$ -pe mpi 64
-#$ -q amd
+#!/bin/bash
+#SBATCH --job-name=nonint
+#SBATCH --ntasks=64
+# Load the TRIQS environment before submitting; sbatch exports it to the job.
 
-if [ -n "${SGE_TASK_ID}" ]
-then
-    echo "Running the MPI version ..."
-    mpirun -machinefile $TMPDIR/machines -np ${NSLOTS} pytriqs nonint.py
-else
-	pytriqs nonint.py
-fi
+mpirun python nonint.py

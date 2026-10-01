@@ -4,7 +4,7 @@ import triqs.utility.mpi as mpi
 from triqs.gfs import Gf, MeshImFreq, iOmega_n, inverse
 from triqs.operators import n
 from h5 import HDFArchive
-from triqs_cthyb import SolverCore
+from triqs_cthyb import SolverCore, ConstrParametersT, SolveParametersT
 
 mpi.report("Welcome to asymm_bath test (1 band with a small asymmetric hybridization function).")
 mpi.report("This test helps to detect sampling problems.")
@@ -43,7 +43,7 @@ p["partition_method"] = "quantum_numbers"
 p["quantum_numbers"] = qn
 
 # Construct solver
-S = SolverCore(beta=beta, gf_struct=gf_struct, n_tau=n_tau, n_iw=n_iw)
+S = SolverCore(ConstrParametersT(beta=beta, gf_struct=gf_struct, n_tau=n_tau, n_iw=n_iw))
 
 def read_histo(f,type_of_col_1):
     histo = []
@@ -63,7 +63,7 @@ for e in epsilon:
     S.G0_iw["up"] << inverse(iOmega_n - ed - delta_w)
     S.G0_iw["dn"] << inverse(iOmega_n - ed - delta_w)
 
-    S.solve(h_int=H, **p)
+    S.solve(SolveParametersT(h_int=H, **p))
 
     if mpi.is_master_node():
         arch.create_group('epsilon_' + str(e))

@@ -8,6 +8,7 @@ Author: Hugo U.R. Strand (2018) hugo.strand@gmail.com """
   
 # ----------------------------------------------------------------------
 
+import os
 import copy
 import itertools
 import numpy as np
@@ -31,7 +32,9 @@ from pyed.GfUtils import g4_single_particle_transform
 if __name__ == '__main__':
     
     with HDFArchive('data_model.h5','r') as A: model = A["p"]
-    with HDFArchive('data_pomerol_chi.h5','r') as A: dynamic = A["p"]
+    dynamic = None # optional pomerol reference
+    if os.path.exists('data_pomerol_chi.h5'):
+        with HDFArchive('data_pomerol_chi.h5','r') as A: dynamic = A["p"]
     with HDFArchive('data_cthyb_chi.h5','r') as A: cthyb = A["p"]
     with HDFArchive('data_pyed_field.h5','r') as A: pyed = A["p"]
 
@@ -72,7 +75,7 @@ if __name__ == '__main__':
         (pyed.chi.real,
          r'PYED $\chi^{(PH)}_{\bar{a}b\bar{c}d} = \frac{1}{\beta}\int_0^\beta \tau \langle [\bar{a} b](\tau) [\bar{c} d] \rangle - \langle \bar{a} b \rangle \langle \bar{c} d \rangle$'),
 
-        (dynamic.chi,
+        (None if dynamic is None else dynamic.chi,
          r'Pomerol $\chi^{(PH)}_{abcd} = \frac{1}{\beta^2} \sum_{nm}\chi^{(PH)}_{\bar{a}b\bar{c}d}(0, \nu_n, \nu_m)$'),
 
         (cthyb.chi.real,
@@ -84,7 +87,7 @@ if __name__ == '__main__':
         (pyed.chi.real + pyed.chi.real.swapaxes(0, 1),
          r'PYED $R_{\bar{a}b\bar{c}d} = \chi^{(PH)}_{\bar{a}b\bar{c}d} + \chi^{(PH)}_{\bar{b}a\bar{c}d}$'),
         
-        (dynamic.chi + dynamic.chi.swapaxes(0, 1),
+        (None if dynamic is None else dynamic.chi + dynamic.chi.swapaxes(0, 1),
          r'Pomerol $R_{\bar{a}b\bar{c}d} = \chi^{(PH)}_{\bar{a}b\bar{c}d} + \chi^{(PH)}_{\bar{b}a\bar{c}d} $'),
 
         (cthyb.chi.real  + cthyb.chi.real.swapaxes(0, 1),
@@ -94,6 +97,9 @@ if __name__ == '__main__':
     plt.figure(figsize=(6, 10))
     subp = [4, 2, 1]
     for value, title in data:
+        if value is None: # skip missing pomerol panels
+            subp[-1] += 1
+            continue
         plt.subplot(*subp); subp[-1] += 1
         plot_chi(value, title)
 

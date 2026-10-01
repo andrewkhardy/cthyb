@@ -18,7 +18,7 @@ from triqs.operators import n, c, c_dag, Operator, dagger
 
 # ----------------------------------------------------------------------
 
-from triqs_cthyb import SolverCore
+from triqs_cthyb import SolverCore, ConstrParametersT, SolveParametersT
 
 # ----------------------------------------------------------------------
 
@@ -33,7 +33,7 @@ if __name__ == '__main__':
     else: p = None
     p = mpi.bcast(p)
     
-    S = SolverCore(beta=p.beta, gf_struct=p.gf_struct, n_tau=p.ntau, n_iw=p.nw)
+    S = SolverCore(ConstrParametersT(beta=p.beta, gf_struct=p.gf_struct, n_tau=p.ntau, n_iw=p.nw))
 
     S.G0_iw['0'] << p.g0t_iw
 
@@ -45,14 +45,14 @@ if __name__ == '__main__':
         length_cycle = 100,
         n_warmup_cycles = int(1e4),
         #n_cycles = int(1e9) / mpi.size,
-        n_cycles = int(1e7) / mpi.size,
+        n_cycles = int(1e7) // mpi.size,
         move_double = True,
         measure_G2_iw_ph = True,
         measure_G2_n_fermionic = 10,
         measure_G2_n_bosonic = 1,
         )
 
-    S.solve(**solve_parameters)
+    S.solve(SolveParametersT(**solve_parameters))
 
     if mpi.is_master_node():
         p.g_tau = S.G_tau

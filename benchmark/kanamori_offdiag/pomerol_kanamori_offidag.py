@@ -70,7 +70,7 @@ if __name__ == '__main__':
     print('T =\n', T)
 
     H_int = h_int_kanamori(
-        spin_names, imp_idxs,
+        spin_names, n_orb,
         np.array([[0,U-3*J],[U-3*J,0]]),
         np.array([[U,U-2*J],[U-2*J,U]]),
         J,off_diag=True)
@@ -96,12 +96,13 @@ if __name__ == '__main__':
     ed = PomerolED(index_converter, verbose=True)
     ed.diagonalize(H)
 
-    gf_struct_up = [[up, [0, 1]]]
-    gf_struct_do = [[do, [0, 1]]]
+    gf_struct_up = [[up, n_orb]]
+    gf_struct_do = [[do, n_orb]]
 
     G_tau_up = ed.G_tau(gf_struct_up, beta, n_tau=100)
     G_tau_do = ed.G_tau(gf_struct_do, beta, n_tau=100)
 
-    with HDFArchive('kanamori_offdiag.pomerol.h5', 'w') as Results:
-        Results['up'] = G_tau_up
-        Results['dn'] = G_tau_do
+    if mpi.is_master_node():
+        with HDFArchive('kanamori_offdiag.pomerol.h5', 'w') as Results:
+            Results['up'] = G_tau_up
+            Results['dn'] = G_tau_do

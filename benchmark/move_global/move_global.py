@@ -4,7 +4,7 @@ import triqs.utility.mpi as mpi
 from h5 import HDFArchive
 from triqs.operators import n
 from triqs.atom_diag import trace_rho_op
-from triqs_cthyb import SolverCore
+from triqs_cthyb import SolverCore, ConstrParametersT, SolveParametersT
 from triqs.gfs import GfImFreq, iOmega_n, inverse
 import numpy as np
 
@@ -39,14 +39,14 @@ move_global_prob = 0.05
 H = U*n(*mkind("up",0))*n(*mkind("dn",0)) + U*n(*mkind("up",1))*n(*mkind("dn",1))
 
 # Global moves
-gm_flip_spins_1   = {'flip_spins_0' :   {mkind("up",0) : mkind("dn",0), mkind("dn",0) : mkind("up",0)}}
+gm_flip_spins_0   = {'flip_spins_0' :   {mkind("up",0) : mkind("dn",0), mkind("dn",0) : mkind("up",0)}}
 gm_flip_spins_all = {'flip_spins_all' : {mkind("up",0) : mkind("dn",0), mkind("dn",0) : mkind("up",0),
                                          mkind("up",1) : mkind("dn",1), mkind("dn",1) : mkind("up",1)}}
 gm_swap_atoms     = {'swap_atoms' :     {mkind("up",0) : mkind("up",1), mkind("dn",0) : mkind("dn",1),
                                          mkind("up",1) : mkind("up",0), mkind("dn",1) : mkind("dn",0)}}
 
 # Construct the solver
-S = SolverCore(beta=beta, gf_struct=gf_struct, n_tau=n_tau, n_iw=n_iw)
+S = SolverCore(ConstrParametersT(beta=beta, gf_struct=gf_struct, n_tau=n_tau, n_iw=n_iw))
 
 # Set hybridization function
 delta_w = GfImFreq(beta=beta, target_shape=[2, 2])
@@ -75,7 +75,7 @@ for gm_name, gm in global_moves:
         p["move_global_prob"] = move_global_prob
 
     # Solve the problem
-    S.solve(h_int=H, **p)
+    S.solve(SolveParametersT(h_int=H, **p))
 
     if mpi.is_master_node():
         # Save the results

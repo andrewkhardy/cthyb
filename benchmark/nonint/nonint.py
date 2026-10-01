@@ -2,7 +2,7 @@
 
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
-from triqs_cthyb import SolverCore
+from triqs_cthyb import SolverCore, ConstrParametersT, SolveParametersT
 from triqs.operators import Operator, n
 from triqs.gfs import Gf, inverse, iOmega_n
 
@@ -42,7 +42,7 @@ for modes in range(1,N_max+1):
     mpi.report("Constructing the solver...")
 
     # Construct the solver
-    S = SolverCore(beta=beta, gf_struct=gf_struct, n_tau=n_tau, n_iw=n_iw)
+    S = SolverCore(ConstrParametersT(beta=beta, gf_struct=gf_struct, n_tau=n_tau, n_iw=n_iw))
 
     mpi.report("Preparing the hybridization function...")
 
@@ -56,7 +56,7 @@ for modes in range(1,N_max+1):
     mpi.report("Running the simulation...")
 
     # Solve the problem
-    S.solve(h_int=H, **p)
+    S.solve(SolveParametersT(h_int=H, **p))
 
     # Save results
     if mpi.is_master_node():

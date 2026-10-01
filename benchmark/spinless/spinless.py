@@ -4,7 +4,7 @@ import numpy as np
 
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
-from triqs_cthyb import SolverCore
+from triqs_cthyb import SolverCore, ConstrParametersT, SolveParametersT
 from triqs.operators import n
 from triqs.gfs import GfImFreq, iOmega_n, inverse
 
@@ -34,11 +34,11 @@ def run_calculation(use_qn=True):
 
     mpi.report("Welcome to spinless (spinless electrons on a correlated dimer) test.")
 
-    H = U*n("tot","A")*n("tot","B")
+    H = U*n("tot",0)*n("tot",1)
 
     QN = []
     if use_qn:
-        QN.append(n("tot","A")+n("tot","B"))
+        QN.append(n("tot",0)+n("tot",1))
         p["partition_method"] = "quantum_numbers"
         p["quantum_numbers"] = QN
 
@@ -47,7 +47,7 @@ def run_calculation(use_qn=True):
     mpi.report("Constructing the solver...")
 
     ## Construct the solver
-    S = SolverCore(beta=beta, gf_struct=gf_struct, n_iw = n_iw, n_tau = n_tau)
+    S = SolverCore(ConstrParametersT(beta=beta, gf_struct=gf_struct, n_iw = n_iw, n_tau = n_tau))
 
     mpi.report("Preparing the hybridization function...")
 
@@ -59,7 +59,7 @@ def run_calculation(use_qn=True):
     mpi.report("Running the simulation...")
 
     ## Solve the problem
-    S.solve(h_int=H, **p)
+    S.solve(SolveParametersT(h_int=H, **p))
 
     ## Save the results  
     if mpi.is_master_node():

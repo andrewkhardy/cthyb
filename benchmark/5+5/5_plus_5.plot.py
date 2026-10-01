@@ -60,7 +60,7 @@ for filename in ["5_plus_5.int.h5", "5_plus_5.h5"]:
         for nc, cn in enumerate(orb_names):
             plt.clf()
 
-            gf = rebinning_tau(arch['G_tau'][mkind(sn,cn)[0]],200)
+            gf = rebinning_tau(arch['G_tau'][mkind(sn,nc)[0]],200)
 
             # Plot the results
             oplot(gf, name="cthyb")
@@ -73,7 +73,7 @@ for filename in ["5_plus_5.int.h5", "5_plus_5.h5"]:
                 g0_tau << Fourier(g0_iw)
 
                 oplot(g_theor[nc,nc], name="Analytic")
-                oplot(g0_tau[sn + '_' + cn], name="G0")
+                oplot(g0_tau[mkind(sn,nc)[0]], name="G0")
 
             axes = plt.gca()
             axes.set_title('$' + sn + '$, $' + cn + '$')
@@ -84,4 +84,4 @@ for filename in ["5_plus_5.int.h5", "5_plus_5.h5"]:
 
             pp.savefig(plt.gcf())
 
-pp.close()
+    pp.close()

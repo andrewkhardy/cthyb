@@ -1,13 +1,6 @@
-#!/bin/sh
-#$ -S /bin/sh
-#$ -N _5+5.job 
-#$ -pe mpi 128
-#$ -q amd
+#!/bin/bash
+#SBATCH --job-name=5_plus_5
+#SBATCH --ntasks=128
+# Load the TRIQS environment before submitting; sbatch exports it to the job.
 
-if [ -n "${SGE_TASK_ID}" ]
-then
-	echo "Running the MPI version ..."
-	mpirun -machinefile $TMPDIR/machines -np ${NSLOTS} pytriqs 5_plus_5.py
-else
-	pytriqs 5_plus_5.py
-fi
+mpirun python 5_plus_5.py

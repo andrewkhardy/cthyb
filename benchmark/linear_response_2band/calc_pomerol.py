@@ -28,8 +28,6 @@ if __name__ == '__main__':
     else: p = None
     p = mpi.bcast(p)
 
-    p.convert_keys_from_string_to_python('index_converter')
-    
     pom = PomerolED(p.index_converter, verbose=True)
     pom.diagonalize(p.H)
 

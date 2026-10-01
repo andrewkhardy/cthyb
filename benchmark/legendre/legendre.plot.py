@@ -14,8 +14,8 @@ subp = [2, 1, 1]
 plt.subplot(*subp); subp[-1] += 1
 
 for spin in ("up","dn"):
-    plt.plot(arch['G_l'][spin].data.flatten(),label="cthyb," + {'up':"$\uparrow\uparrow$",'dn':"$\downarrow\downarrow$"}[spin])
-    plt.plot(ed_arch[spin].data.flatten(),label="ED," + {'up':"$\uparrow\uparrow$",'dn':"$\downarrow\downarrow$"}[spin])
+    plt.plot(arch['G_l'][spin].data.flatten(),label="cthyb," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
+    plt.plot(ed_arch[spin].data.flatten(),label="ED," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
 
 axes = plt.gca()
 axes.set_xlabel('$l$')
@@ -26,8 +26,8 @@ axes.legend(loc='lower center',prop={'size':10})
 plt.subplot(*subp); subp[-1] += 1
 
 for spin in ("up","dn"):
-    plt.plot(np.abs(arch['G_l'][spin].data.flatten()),label="cthyb," + {'up':"$\uparrow\uparrow$",'dn':"$\downarrow\downarrow$"}[spin])
-    plt.plot(np.abs(ed_arch[spin].data.flatten()),label="ED," + {'up':"$\uparrow\uparrow$",'dn':"$\downarrow\downarrow$"}[spin])
+    plt.plot(np.abs(arch['G_l'][spin].data.flatten()),label="cthyb," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
+    plt.plot(np.abs(ed_arch[spin].data.flatten()),label="ED," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
 
 axes = plt.gca()
 axes.set_xlabel('$l$')

@@ -5,9 +5,9 @@ import triqs.utility.mpi as mpi
 from h5 import HDFArchive
 from triqs.operators import *
 from triqs.operators.util.op_struct import set_operator_structure, get_mkind
-from triqs.operators.util.U_matrix import cubic_names, U_matrix
+from triqs.operators.util.U_matrix import cubic_names, U_matrix_slater
 from triqs.operators.util.hamiltonians import h_int_slater
-from triqs_cthyb import SolverCore
+from triqs_cthyb import SolverCore, ConstrParametersT, SolveParametersT
 import triqs_cthyb.version as version
 from triqs.gfs import Gf, MeshImFreq, iOmega_n, inverse
 from itertools import product
@@ -47,16 +47,17 @@ def five_plus_five(use_interaction=True):
                   "xz" : {'V':0.2,'e':0.05},
                   "x^2-y^2" : {'V':0.2,'e':0.4}}
 
-    atomic_levels = {('up_xy',0) :        -0.2,
-                     ('dn_xy',0) :        -0.2,
-                     ('up_yz',0) :        -0.15,
-                     ('dn_yz',0) :        -0.15,
-                     ('up_z^2',0) :       -0.1,
-                     ('dn_z^2',0) :       -0.1,
-                     ('up_xz',0) :        0.05,
-                     ('dn_xz',0) :        0.05,
-                     ('up_x^2-y^2',0) :   0.4,
-                     ('dn_x^2-y^2',0) :   0.4}
+    # Orbital index o of the GF blocks corresponds to the cubic harmonic orb_names[o]
+    atomic_levels = {('up_0',0) :        -0.2,  # xy
+                     ('dn_0',0) :        -0.2,
+                     ('up_1',0) :        -0.15, # yz
+                     ('dn_1',0) :        -0.15,
+                     ('up_2',0) :        -0.1,  # z^2
+                     ('dn_2',0) :        -0.1,
+                     ('up_3',0) :        0.05,  # xz
+                     ('dn_3',0) :        0.05,
+                     ('up_4',0) :        0.4,   # x^2-y^2
+                     ('dn_4',0) :        0.4}
 
     n_iw = 1025
     n_tau = 10001
@@ -66,10 +67,8 @@ def five_plus_five(use_interaction=True):
     p["random_name"] = ""
     p["random_seed"] = 123 * mpi.rank + 567
     p["length_cycle"] = 50
-    #p["n_warmup_cycles"] = 5000
-    p["n_warmup_cycles"] = 500
-    p["n_cycles"] = int(1.e1 / mpi.size)
-    #p["n_cycles"] = int(5.e5 / mpi.size)
+    p["n_warmup_cycles"] = 5000
+    p["n_cycles"] = int(5.e5 / mpi.size)
     #p["n_cycles"] = int(5.e6 / mpi.size)
     p["partition_method"] = "autopartition"
     p["measure_G_tau"] = True
@@ -89,7 +88,7 @@ def five_plus_five(use_interaction=True):
 
     if use_interaction:
         # Local Hamiltonian
-        U_mat = U_matrix(L,[F0,F2,F4],basis='cubic')
+        U_mat = U_matrix_slater(L,[F0,F2,F4],basis='cubic')
         H += h_int_slater(spin_names,n_orb,U_mat,False,H_dump=H_dump)
     else:
         mu = 0.
@@ -98,15 +97,15 @@ def five_plus_five(use_interaction=True):
 
     # Quantum numbers (N_up and N_down)
     QN=[Operator(),Operator()]
-    for cn in orb_names:
+    for o in range(n_orb):
         for i, sn in enumerate(spin_names):
-            QN[i] += n(*mkind(sn,cn))
+            QN[i] += n(*mkind(sn,o))
     if p["partition_method"] == "quantum_numbers": p["quantum_numbers"] = QN
 
     mpi.report("Constructing the solver...")
 
     # Construct the solver
-    S = SolverCore(beta=beta, gf_struct=gf_struct, n_tau=n_tau, n_iw=n_iw)
+    S = SolverCore(ConstrParametersT(beta=beta, gf_struct=gf_struct, n_tau=n_tau, n_iw=n_iw))
 
     mpi.report("Preparing the hybridization function...")
 
@@ -114,8 +113,8 @@ def five_plus_five(use_interaction=True):
 
     # Set hybridization function
     if Delta_dump: Delta_dump_file = open(Delta_dump,'w')
-    for sn, cn in product(spin_names,orb_names):
-        bn, i = mkind(sn,cn)
+    for sn, (o, cn) in product(spin_names,enumerate(orb_names)):
+        bn, i = mkind(sn,o)
         V = delta_params[cn]['V']
         e = delta_params[cn]['e']
 
@@ -125,8 +124,8 @@ def five_plus_five(use_interaction=True):
         S.G0_iw[bn][i,i] << inverse(iOmega_n +mu - atomic_levels[(bn,i)] - delta_w)
 
         cnb = cn + '_b' # bath level
-        a = sn + '_' + cn
-        b = sn + '_' + cn + '_b'
+        a = bn
+        b = bn + '_b'
         
         H_hyb += ( atomic_levels[(bn,i)] - mu ) * n(a, 0) + \
             n(b,0) * e + V * ( c(a,0) * c_dag(b,0) + c(b,0) * c_dag(a,0) )
@@ -147,7 +146,7 @@ def five_plus_five(use_interaction=True):
     mpi.report("Running the simulation...")
 
     # Solve the problem
-    S.solve(**p)
+    S.solve(SolveParametersT(**p))
 
     # Save the results
     if mpi.is_master_node():
@@ -164,7 +163,7 @@ def five_plus_five(use_interaction=True):
         log = Results["log"]
         log["version"] = version.version
         log["triqs_hash"] = version.triqs_hash
-        log["cthyb_hash"] = version.cthyb_hash
+        log["cthyb_hash"] = version.triqs_cthyb_hash
         log["script"] = inspect.getsource(__main__)
 
 if __name__ == '__main__':

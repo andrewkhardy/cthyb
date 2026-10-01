@@ -1,5 +1,6 @@
 #!/bin/env python
 
+import os
 from itertools import product
 from h5 import *
 from triqs.gfs import *
@@ -21,17 +22,18 @@ for use_qn in (False,True):
     file_name = "spinless"
     if use_qn: file_name += ".qn"
     file_name += ".h5"
+    if not os.path.exists(file_name): continue # (TRIQS 4 h5 raises RuntimeError, not IOError)
 
     try:
         arch = HDFArchive(file_name,'r')
         plt.clf()
 
         name = 'cthyb' + (' (QN)' if use_qn else '')
-        for i1,i2 in product(("A","B"),("A","B")):
+        for i1,i2 in product((0,1),(0,1)):
             #GF = rebinning_tau(arch['tot'][i1,i2],500)
             #oplot(GF, name=name + ",%s%s" % (i1,i2))
-            oplot(arch["tot"][i1,i2], name=name + ",%s%s" % (i1,i2))
-            oplot(ed_arch["tot"][i1,i2], name="ED, %s%s" % (i1,i2))
+            oplot(arch["tot"][i1,i2], name=name + ",%s%s" % ("AB"[i1],"AB"[i2]))
+            oplot(ed_arch["tot"][i1,i2], name="ED, %s%s" % ("AB"[i1],"AB"[i2]))
 
         setup_fig()
         pp.savefig(plt.gcf())

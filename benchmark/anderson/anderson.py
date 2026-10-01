@@ -4,14 +4,14 @@ import itertools
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
 from triqs.operators import *
-from triqs_cthyb import SolverCore
+from triqs_cthyb import SolverCore, ConstrParametersT, SolveParametersT
 from triqs.atom_diag import trace_rho_op
 from triqs.gfs import Gf, MeshImFreq, iOmega_n, inverse
 
 def anderson(use_qn=True, use_blocks=True):
 
     spin_names = ("up","dn")
-    mkind = lambda spin: (spin,0) if use_blocks else ("tot",spin)
+    mkind = lambda spin: (spin,0) if use_blocks else ("tot",spin_names.index(spin))
 
     # Input parameters
     beta = 10.0
@@ -55,7 +55,7 @@ def anderson(use_qn=True, use_blocks=True):
     mpi.report("Constructing the solver...")
 
     # Construct the solver
-    S = SolverCore(beta=beta, gf_struct=gf_struct, n_tau=n_tau, n_iw=n_iw)
+    S = SolverCore(ConstrParametersT(beta=beta, gf_struct=gf_struct, n_tau=n_tau, n_iw=n_iw))
 
     mpi.report("Preparing the hybridization function...")
 
@@ -69,14 +69,14 @@ def anderson(use_qn=True, use_blocks=True):
     mpi.report("Running the simulation...")
 
     # Solve the problem
-    S.solve(h_int=H, **p)
+    S.solve(SolveParametersT(h_int=H, **p))
 
     # Save the results
     if mpi.is_master_node():
         static_observables = {'Nup' : n(*mkind("up")), 'Ndn' : n(*mkind("dn")), 'unity' : Operator(1.0)}
         dm = S.density_matrix
         for oname in static_observables.keys():
-            print oname, trace_rho_op(dm,static_observables[oname],S.h_loc_diagonalization)
+            print(oname, trace_rho_op(dm,static_observables[oname],S.h_loc_diagonalization))
 
         with HDFArchive(results_file_name,'w') as Results:
             Results['G_tau'] = S.G_tau

@@ -87,7 +87,7 @@ def make_calc(beta=2.0, h_field=0.0):
 
     p.magnetization = ed.get_expectation_value(0.5 * mA)
 
-    p.O_tau = Gf(mesh=MeshImTime(beta, 'Fermion', 400), target_shape=[1,1])
+    p.O_tau = Gf(mesh=MeshImTime(beta, 'Fermion', 400), target_shape=[])
     ed.set_g2_tau(p.O_tau, n(up,0), n(do,0))
     p.O_tau.data[:] *= -1.
 

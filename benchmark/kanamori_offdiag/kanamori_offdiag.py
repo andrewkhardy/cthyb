@@ -5,7 +5,7 @@ from h5 import HDFArchive
 from triqs.operators import n, Operator
 from triqs.operators.util.op_struct import set_operator_structure, get_mkind
 from triqs.operators.util.hamiltonians import h_int_kanamori
-from triqs_cthyb import SolverCore
+from triqs_cthyb import SolverCore, ConstrParametersT, SolveParametersT
 from triqs.gfs import GfImFreq, iOmega_n, inverse
 import numpy as np
 
@@ -61,7 +61,7 @@ for use_qn in (True, False):
     mpi.report("Constructing the solver...")
 
     # Construct the solver
-    S = SolverCore(beta=beta, gf_struct=gf_struct, n_tau=n_tau, n_iw=n_iw)
+    S = SolverCore(ConstrParametersT(beta=beta, gf_struct=gf_struct, n_tau=n_tau, n_iw=n_iw))
 
     mpi.report("Preparing the hybridization function...")
 
@@ -78,7 +78,7 @@ for use_qn in (True, False):
     mpi.report("Running the simulation...")
 
     # Solve the problem
-    S.solve(h_int=H, **p)
+    S.solve(SolveParametersT(h_int=H, **p))
 
     # Save the results
     if mpi.is_master_node():

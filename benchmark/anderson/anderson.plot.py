@@ -1,5 +1,6 @@
 #!/bin/env python
 
+import os
 from h5 import *
 from triqs.gfs import *
 from triqs.gfs.gf_fnt import rebinning_tau
@@ -15,15 +16,17 @@ spin_names = ("up","dn")
 
 pp = PdfPages('G.pdf')
 ed_arch = HDFArchive('anderson.ed.h5','r')
-pyed_arch = HDFArchive('anderson.pyed.h5','r')
+# Optional reference produced by pyed_anderson.py
+pyed_arch = HDFArchive('anderson.pyed.h5','r') if os.path.exists('anderson.pyed.h5') else None
 
 for use_blocks, use_qn in ((False,False),(True,False),(False,True),(True,True)):
     file_name = "anderson"
     if use_blocks: file_name += ".block"
     if use_qn: file_name += ".qn"
     file_name += ".h5"
+    if not os.path.exists(file_name): continue # (TRIQS 4 h5 raises RuntimeError, not IOError)
 
-    mkind = lambda spin: (spin,0) if use_blocks else ("tot",spin)
+    mkind = lambda spin: (spin,0) if use_blocks else ("tot",spin_names.index(spin))
 
     try:
         arch = HDFArchive(file_name,'r')
@@ -40,10 +43,10 @@ for use_blocks, use_qn in ((False,False),(True,False),(False,True),(True,True)):
             if use_blocks:
                 oplot(GF, name=name + "," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
             else:
-                i = spin_names.index(i)
                 oplot(GF[i,i], name=name + "," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
             oplot(ed_arch[spin], name="ED," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
-            oplot(pyed_arch[spin], name="PYED," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
+            if pyed_arch is not None:
+                oplot(pyed_arch[spin], name="PYED," + {'up':r"$\uparrow\uparrow$",'dn':r"$\downarrow\downarrow$"}[spin])
 
         setup_fig()
         pp.savefig(plt.gcf())

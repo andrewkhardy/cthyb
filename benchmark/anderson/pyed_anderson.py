@@ -15,7 +15,9 @@ if __name__ == '__main__':
     n_orb = 3
     gf_struct = [ ['up',n_orb], ['do',n_orb] ]
     
-    fundamental_operators = fundamental_operators_from_gf_struct(gf_struct)
+    # pyed expects the block indices as lists
+    fundamental_operators = fundamental_operators_from_gf_struct(
+        [ [bn, list(range(n))] for bn, n in gf_struct ])
 
     beta = 10.0
     U = 2.0

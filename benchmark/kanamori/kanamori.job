@@ -1,13 +1,6 @@
-#!/bin/sh
-#$ -S /bin/sh
-#$ -N kanamori
-#$ -pe mpi 128
-#$ -q amd
+#!/bin/bash
+#SBATCH --job-name=kanamori
+#SBATCH --ntasks=128
+# Load the TRIQS environment before submitting; sbatch exports it to the job.
 
-if [ -n "${SGE_TASK_ID}" ]
-then
-    echo "Running the MPI version ..."
-    mpirun -machinefile $TMPDIR/machines -np ${NSLOTS} pytriqs kanamori.py
-else
-    pytriqs kanamori.py
-fi
+mpirun python kanamori.py

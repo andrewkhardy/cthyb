@@ -60,7 +60,7 @@ if __name__ == '__main__':
     work_list = np.array(index_list)
     work_list = mpi.slice_array(work_list)
 
-    for i1, i2 in work_list:
+    for i1, i2 in work_list.tolist(): # python ints, as used in the h5 dict keys below
 
         o1, o2 = m.op_imp[i1], m.op_imp[i2]
         O1 = dagger(o1) * o2
@@ -70,7 +70,9 @@ if __name__ == '__main__':
         ed_m = TriqsExactDiagonalization(m.H - F * O1, m.op_full, m.beta)
         
         p.g_tau_field[(i1, i2)] = g_tau.copy()
-        ed_p.set_g2_tau_matrix(p.g_tau_field[(i1, i2)], m.op_imp)
+        # component-wise, since pyed's set_g2_tau_matrix is MPI collective (work_list is rank local)
+        for j1, j2 in itertools.product(range(4), repeat=2):
+            ed_p.set_g2_tau(p.g_tau_field[(i1, i2)][j1, j2], m.op_imp[j1], dagger(m.op_imp[j2]))
 
         for i3, i4 in itertools.product(range(4), repeat=2):
 
@@ -95,7 +97,7 @@ if __name__ == '__main__':
                 print('chi_field = %+2.6f' % chi_field.real)
                 print('diff      = %+2.6E' % (chi_field.real - chi_tau.real))
 
-    p.chi_field = mpi.all_reduce(mpi.world, p.chi_field, lambda x, y : x + y)
+    p.chi_field = mpi.all_reduce(p.chi_field)
 
     chi = np.copy(p.chi).real
     chi = chi + chi.swapaxes(0, 1)

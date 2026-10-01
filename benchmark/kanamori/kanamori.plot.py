@@ -1,5 +1,6 @@
 #!/bin/env python
 
+import os
 from h5 import *
 from triqs.gfs import *
 from triqs.gfs.gf_fnt import rebinning_tau
@@ -22,6 +23,7 @@ for use_qn in (True,False):
     file_name = "kanamori"
     if use_qn: file_name += ".qn"
     file_name += ".h5"
+    if not os.path.exists(file_name): continue # (TRIQS 4 h5 raises RuntimeError, not IOError)
 
     try:
         arch = HDFArchive(file_name,'r')
@@ -29,10 +31,10 @@ for use_qn in (True,False):
 
         name = "cthyb (QN)" if use_qn else "cthyb"
         for o in range(n_orb):
-            oplot(rebinning_tau(arch['G_tau']['up_%i'%o],200), name=name+",$\uparrow%i$"%o)
-            oplot(rebinning_tau(arch['G_tau']['dn_%i'%o],200), name=name+",$\downarrow%i$"%o)
-            oplot(ed_arch['up-%i'%o], name="ED,$\uparrow%i$"%o)
-            oplot(ed_arch['dn-%i'%o], name="ED,$\downarrow%i$"%o)
+            oplot(rebinning_tau(arch['G_tau']['up_%i'%o],200), name=name+r",$\uparrow%i$"%o)
+            oplot(rebinning_tau(arch['G_tau']['dn_%i'%o],200), name=name+r",$\downarrow%i$"%o)
+            oplot(ed_arch['up-%i'%o], name=r"ED,$\uparrow%i$"%o)
+            oplot(ed_arch['dn-%i'%o], name=r"ED,$\downarrow%i$"%o)
 
         setup_fig()
         pp.savefig(plt.gcf())

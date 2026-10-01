@@ -25,7 +25,7 @@ from triqs.gfs import GfImTime, GfImFreq
 from triqs.operators import n, c, c_dag, Operator, dagger
 
 from triqs.operators.util.op_struct import set_operator_structure
-from triqs.operators.util.U_matrix import U_matrix_kanamori, U_matrix
+from triqs.operators.util.U_matrix import U_matrix_kanamori, U_matrix_slater
 from triqs.operators.util.hamiltonians import h_int_kanamori
 
 # ----------------------------------------------------------------------
@@ -63,7 +63,7 @@ def unitary_transf_4x4(t_vec):
     
     M = sum([t * A for t, A in zip(t_vec, As)])
     from scipy.linalg import expm as scipy_expm
-    T = np.mat(scipy_expm(M))
+    T = np.asmatrix(scipy_expm(M))
 
     np.testing.assert_array_almost_equal(T * T.H, np.eye(4))
 

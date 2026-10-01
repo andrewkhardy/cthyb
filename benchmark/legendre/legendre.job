@@ -1,13 +1,6 @@
-#!/bin/sh
-#$ -S /bin/sh
-#$ -N legendre
-#$ -pe mpi 128
-#$ -q amd
+#!/bin/bash
+#SBATCH --job-name=legendre
+#SBATCH --ntasks=128
+# Load the TRIQS environment before submitting; sbatch exports it to the job.
 
-if [ -n "${SGE_TASK_ID}" ]
-then
-    echo "Running the MPI version ..."
-    mpirun -machinefile $TMPDIR/machines -np ${NSLOTS} pytriqs legendre.py
-else
-    pytriqs legendre.py
-fi
+mpirun python legendre.py

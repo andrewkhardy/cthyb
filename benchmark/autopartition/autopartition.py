@@ -4,7 +4,7 @@ import time
 from triqs.gfs import iOmega_n, inverse
 from triqs.operators import *
 from triqs.operators.util.op_struct import set_operator_structure, get_mkind
-from triqs.operators.util.U_matrix import U_matrix
+from triqs.operators.util.U_matrix import U_matrix_slater
 from triqs.operators.util.hamiltonians import h_int_kanamori, h_int_slater
 from triqs_cthyb import *
 import numpy as np
@@ -25,12 +25,12 @@ def partition(h_int,h_k,gf_struct,QN=None):
         p['partition_method'] = "quantum_numbers"
         p['quantum_numbers'] = QN
 
-    S = SolverCore(beta=1, gf_struct=gf_struct)
+    S = SolverCore(ConstrParametersT(beta=1, gf_struct=gf_struct))
     S.G0_iw << inverse(iOmega_n - h_k)
 
-    start = time.clock()
-    S.solve(h_int=h_int,**p)
-    end = time.clock()
+    start = time.perf_counter()
+    S.solve(SolveParametersT(h_int=h_int,**p))
+    end = time.perf_counter()
 
     return S.h_loc_diagonalization, end-start
 
@@ -81,7 +81,7 @@ def run_slater(L,is_cubic):
 
         F = [3.0*(0.3**k) for k in range(l+1)]
 
-        U_mat = U_matrix(l,F,basis='cubic' if is_cubic else 'spherical')
+        U_mat = U_matrix_slater(l,F,basis='cubic' if is_cubic else 'spherical')
         h_int = h_int_slater(spin_names,n_orb,U_mat,True)
 
         h_k = np.zeros((n_orb,n_orb))

@@ -68,7 +68,7 @@ if __name__ == '__main__':
     print('T =\n', T)
 
     H_int = h_int_kanamori(
-        spin_names, imp_idxs,
+        spin_names, n_orb,
         np.array([[0,U-3*J],[U-3*J,0]]),
         np.array([[U,U-2*J],[U-2*J,U]]),
         J,off_diag=True)
