@@ -69,10 +69,10 @@ namespace triqs_cthyb {
     friend void h5_read(h5::group g, std::string const &name, op_desc &op) {
       h5::group gr = g.open_group(name);
       h5::assert_hdf5_format(gr, op);
-      h5::read(g, "block", op.block_index);
-      h5::read(g, "inner", op.inner_index);
-      h5::read(g, "dagger", op.dagger);
-      h5::read(g, "linear_index", op.linear_index);
+      h5::read(gr, "block", op.block_index);
+      h5::read(gr, "inner", op.inner_index);
+      h5::read(gr, "dagger", op.dagger);
+      h5::read(gr, "linear_index", op.linear_index);
     }
 
     bool operator==(op_desc const &op) const = default;
@@ -93,8 +93,8 @@ namespace triqs_cthyb {
     friend void h5_read(h5::group g, std::string const &name, op_desc_pair_t &op) {
       h5::group gr = g.open_group(name);
       h5::assert_hdf5_format(gr, op);
-      h5::read(g, "opL", op.opL);
-      h5::read(g, "opR", op.opR);
+      h5::read(gr, "opL", op.opL);
+      h5::read(gr, "opR", op.opR);
     }
   };
 
@@ -115,9 +115,9 @@ namespace triqs_cthyb {
     friend void h5_read(h5::group g, std::string const &name, bosonic_op_pair_t &op) {
       h5::group gr = g.open_group(name);
       h5::assert_hdf5_format(gr, op);
-      h5::read(g, "op1", op.op1);
-      h5::read(g, "op2", op.op2);
-      h5::read(g, "f_index", op.f_index);
+      h5::read(gr, "op1", op.op1);
+      h5::read(gr, "op2", op.op2);
+      h5::read(gr, "f_index", op.f_index);
     }
   };
 
@@ -168,9 +168,9 @@ namespace triqs_cthyb {
       friend void h5_read(h5::group g, std::string const &name, dyn_bosonic_pair_t &op) {
         h5::group gr = g.open_group(name);
         h5::assert_hdf5_format(gr, op);
-        h5::read(g, "ops", op.ops);
-        h5::read(g, "tau1", op.tau1);
-        h5::read(g, "tau2", op.tau2);
+        h5::read(gr, "ops", op.ops);
+        h5::read(gr, "tau1", op.tau1);
+        h5::read(gr, "tau2", op.tau2);
       }
     };
     using dyn_oplist_t = std::vector<dyn_bosonic_pair_t>;

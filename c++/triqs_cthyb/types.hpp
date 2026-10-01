@@ -101,9 +101,30 @@ namespace triqs_cthyb {
 namespace triqs {
   namespace gfs {
 
-    /// Function template for block2_gf initialization (matching CTSEG)
+    /// Function template for block2_gf initialization
     template <typename Var_t>
-    block2_gf<Var_t> make_block2_gf(Var_t const &m, triqs::hilbert_space::gf_struct_t const &gf_struct) {
+    block2_gf<Var_t, tensor_valued<4>> make_block2_gf(Var_t const &m, triqs::hilbert_space::gf_struct_t const &gf_struct,
+                                                      triqs_cthyb::block_order order) {
+
+      std::vector<std::vector<gf<Var_t, tensor_valued<4>>>> gf_vecvec;
+      std::vector<std::string> block_names;
+
+      for (auto const &[bl1, bl1_size] : gf_struct) {
+        block_names.push_back(bl1);
+        std::vector<gf<Var_t, tensor_valued<4>>> gf_vec;
+        for (auto const &[bl2, bl2_size] : gf_struct) {
+          switch (order) {
+            case triqs_cthyb::block_order::AABB: gf_vec.emplace_back(m, make_shape(bl1_size, bl1_size, bl2_size, bl2_size)); break;
+            case triqs_cthyb::block_order::ABBA: gf_vec.emplace_back(m, make_shape(bl1_size, bl2_size, bl2_size, bl1_size)); break;
+          }
+        }
+        gf_vecvec.emplace_back(std::move(gf_vec));
+      }
+      return make_block2_gf(block_names, block_names, std::move(gf_vecvec));
+    }
+
+    /// Matrix-valued block2_gf, block (bl1, bl2) of shape bl1_size x bl2_size
+    template <typename Var_t> block2_gf<Var_t> make_block2_gf(Var_t const &m, triqs::hilbert_space::gf_struct_t const &gf_struct) {
 
       std::vector<std::vector<gf<Var_t>>> gf_vecvec;
       std::vector<std::string> block_names;
@@ -111,9 +132,7 @@ namespace triqs {
       for (auto const &[bl1, bl1_size] : gf_struct) {
         block_names.push_back(bl1);
         std::vector<gf<Var_t>> gf_vec;
-        for (auto const &[bl2, bl2_size] : gf_struct) {
-          gf_vec.emplace_back(m, make_shape(bl1_size, bl2_size));
-        }
+        for (auto const &[bl2, bl2_size] : gf_struct) gf_vec.emplace_back(m, make_shape(bl1_size, bl2_size));
         gf_vecvec.emplace_back(std::move(gf_vec));
       }
       return make_block2_gf(block_names, block_names, std::move(gf_vecvec));

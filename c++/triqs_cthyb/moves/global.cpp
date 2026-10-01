@@ -112,7 +112,7 @@ namespace triqs_cthyb {
       op_desc_pair_t const op2{substitute(vertex.ops.op2.opL), substitute(vertex.ops.op2.opR)};
       if (op1 == vertex.ops.op1 && op2 == vertex.ops.op2) continue;
       int const type = data.find_dyn_type(op1, op2);
-      if (type == -1) return 0;
+      if (type == -1 || data.find_dyn_type(vertex.ops.op1, vertex.ops.op2) == -1) return 0; // unambiguous both ways, for detailed balance
       double const old_coupling = data.dyn_coupling(vertex);
       if (old_coupling == 0.0) return 0;
       auto const old_ops = data.dyn_vertex_ops(vertex);
