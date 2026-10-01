@@ -3,18 +3,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
 #
-# CTHYB, CTSEG and CTINT for the single-orbital Hubbard-Holstein benchmark.
-# Rows: G(tau), Re Sigma, Im Sigma, <N(tau)N(0)>, and that correlator's residual against the
-# reference. Columns: the temperatures present on disk, so the beta dependence is side by side.
-# One figure per filling in FILLINGS; a filling with no files on disk is skipped.
-#
-# The reference is the first of REFERENCE_ORDER that passes check_quality, so at G = 0.7,
-# where there is no CTINT, CTHYB is measured against CTSEG instead of leaving the panel empty.
-# A series that fails the check is still drawn, marked in the legend, but it is barred from
-# being the reference and from setting the y-limits, so a blown-up curve leaves the panel
-# rather than flattening everything else in it.
-#
-# Knobs hardcoded below so this pastes into a notebook; missing files are skipped.
+# CTHYB, CTSEG and CTINT for the Hubbard-Holstein benchmark, one figure per filling. Rows: G(tau),
+# Re/Im Sigma, <N(tau)N(0)> and its residual against the reference (the first of REFERENCE_ORDER
+# that passes check_quality); columns: beta. A series failing check_quality is drawn but neither
+# the reference nor used for the y-limits. Knobs below; missing files are skipped.
 import os
 
 import matplotlib.pyplot as plt
@@ -22,16 +14,15 @@ import numpy as np
 from h5 import HDFArchive
 
 # ---------------------------------------------------------------------------------- knobs
-DATA_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/hubbard_holstein"
-DATA_DIR = "/mnt/home/ahardy/ceph/CTHYB_Data/hubbard_holstein"  # on the cluster
+DATA_DIR = "/mnt/home/ahardy/ceph/CTHYB_Data/hubbard_holstein"
 
 BETAS = [10.0, 100.0]
 FILLINGS = [0.5, 0.75]  # one figure each: 0.5 = half filling, 0.75 = the doped runs
-U, G, OMEGA_0 = 4.0, 0.7, 1.0   # set G=0.3 for the weak-coupling point where CTINT is also available
-W_MAX = 15.0           # Sigma is plotted raw on the Matsubara points, never tail-fitted
-MIN_SIGN = 0.01        # below this a series is noise, not data -- see check_quality
-DENSITY_TOL = 0.01     # |<n> - filling| above this means a different model -- see check_quality
-REFERENCE_ORDER = ["CTINT", "CTSEG"]   # first one that passes check_quality is the reference
+U, G, OMEGA_0 = 4.0, 0.7, 1.0   # G = 0.3 for the weak-coupling point
+W_MAX = 15.0
+MIN_SIGN = 0.01        # see check_quality
+DENSITY_TOL = 0.01     # see check_quality
+REFERENCE_ORDER = ["CTINT", "CTSEG"]
 SAVE_AS = None         # e.g. "hubbard_holstein_g{g:g}_n{filling:g}.pdf"
 # -----------------------------------------------------------------------------------------
 
@@ -52,9 +43,7 @@ MARKER = {"CTINT": "o", "CTSEG": "s", "CTHYB": "^", "CTHYB lf=False": "v"}
 
 
 def matsubara_style(label, alt=False):
-    """Every Matsubara point marked, joined by a thin dotted line: the data are discrete, and
-    a solid curve would hide where the points actually are. The second estimator gets the
-    same marker, open."""
+    """Marked points on a thin dotted line; the second estimator gets the same marker, open."""
     color = STYLE[label]["color"]
     return dict(color=color, linestyle=":", linewidth=0.8, marker=MARKER[label], markersize=3.5,
                 markerfacecolor="none" if alt else color, markeredgewidth=0.9,
@@ -78,18 +67,8 @@ def same_grid(tau_a, tau_b):
 
 
 def check_quality(run, filling):
-    """`(ok, note)` -- is this series data for this model, or something else?
-
-      * the average sign. CT-INT measures <O s>/<s>, so a sign near zero blows the variance
-        of every observable up without bound.
-      * the anticommutator, -G(0) - G(beta) = 1 exactly, for any Hamiltonian and bath.
-      * the density. Away from half filling mu is pinned per coupling, so a run whose <n>
-        misses the filling in its filename solved a different model -- e.g. CTINT at
-        G = 0.3 run with the mu calibrated for G = 0.7, which lands at n = 0.65.
-
-    Failing any of them bars a series from being the reference and from setting the
-    y-limits, but NOT from being drawn.
-    """
+    """`(ok, note)`: average sign >= MIN_SIGN, -G(0) - G(beta) = 1, and <n> within DENSITY_TOL
+    of the filling in the file name (mu is pinned per coupling, so a miss is another model)."""
     sign = float(np.real(run.get("average_sign", 0.0)))
     if sign < MIN_SIGN:
         return False, f"sign {sign:.0e}"
@@ -118,8 +97,7 @@ def make_figure(filling):
         ref_label = next((label for label in REFERENCE_ORDER if label in trusted), None)
         ref = runs.get(ref_label)
 
-        # y-limits come from the trusted series only, so an off-scale curve is visible as
-        # "it leaves the panel" instead of compressing every other curve into a flat line.
+        # y-limits from the trusted series only
         span = {row: [np.inf, -np.inf] for row in range(4)}
 
         def note(row, values):
@@ -134,7 +112,6 @@ def make_figure(filling):
             style = STYLE[label]
             ok, why = quality[label]
             legend = label if ok else f"{label}  [{why}]"
-            # tau/beta on the x axis, so the two temperatures are directly comparable.
             axes[0][col].plot(run["tau_G"] / beta, run["G"], label=legend, **style)
             if ok:
                 note(0, run["G"])
@@ -160,16 +137,14 @@ def make_figure(filling):
                 if ok:
                     note(3, run["corr"])
                 if run.get("corr_alt") is not None:
-                    # Saved without its own tau. The mesh is uniform on [0, beta], which
-                    # linspace reproduces to 2e-15.
+                    # Saved without its own tau; the mesh is uniform on [0, beta].
                     alt = np.asarray(run["corr_alt"])
                     axes[3][col].plot(np.linspace(0.0, beta, len(alt)) / beta, alt,
                                       color=style["color"], **ALT_STYLE)
                     if ok:
                         note(3, alt)
                 if ref is not None and label != ref_label and ok:
-                    # Point by point: every solver writes its correlator on the grid of
-                    # common/grids.py. A file from before that is skipped, not resampled.
+                    # Point by point on the shared grid; files on another grid are skipped.
                     if same_grid(run["tau_corr"], ref["tau_corr"]):
                         axes[4][col].plot(run["tau_corr"] / beta, run["corr"] - ref["corr"],
                                           label=label, **{**style, "linewidth": 1.0})
@@ -193,7 +168,6 @@ def make_figure(filling):
                 pad = 0.08 * max(hi - lo, 1e-12)
                 axes[row][col].set_ylim(lo - pad, hi + pad)
 
-        # Say why the residual panel is empty rather than leave a blank box.
         if ref_label is None:
             why_empty = "no usable reference at this point\n(" + ", ".join(
                 f"{label}: {why}" for label, (ok, why) in quality.items() if not ok) + ")"
@@ -205,10 +179,9 @@ def make_figure(filling):
             axes[4][col].text(0.5, 0.5, why_empty, ha="center", va="center", fontsize=9,
                               color="#c1121f", transform=axes[4][col].transAxes)
         if ref_label is not None:
-            # As a title, not in-axes text: the panel's zero line sits where text would go.
             axes[4][col].set_title(f"reference: {ref_label}", fontsize=8, loc="left")
 
-        # Exact at half filling: Re Sigma = mu at every frequency (common/selfenergy.diagnose).
+        # Exact at half filling: Re Sigma = mu (common/selfenergy.diagnose).
         if abs(filling - 0.5) < 1e-12 and trusted:
             mu = float(np.atleast_1d(runs[trusted[0]]["mu"])[0])
             axes[1][col].axhline(mu, color="k", linewidth=0.9, linestyle=(0, (4, 3)),
@@ -230,7 +203,6 @@ def make_figure(filling):
     axes[3][0].set_ylabel(r"$\langle N(\tau)N(0)\rangle$")
     axes[4][0].set_ylabel(r"$\Delta\langle NN\rangle$ vs reference")
     for row in range(5):
-        # Only where something was actually drawn, else matplotlib warns about an empty legend.
         if axes[row][0].get_legend_handles_labels()[0]:
             axes[row][0].legend(fontsize=8)
 

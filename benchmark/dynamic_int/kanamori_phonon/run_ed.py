@@ -1,18 +1,11 @@
 # Exact-diagonalization reference for the model in model.py: impurity + one bath site per
-# spin-orbital + one phonon, solved directly as a Hamiltonian. Computes, exactly up to the
-# phonon truncation,
-#   chi_ab(tau) = <n_a(tau) n_b(0)>   for every pair of impurity spin-orbitals,
-#   G_a(tau)    = -<c_a(tau) c_a^dag(0)>,
-# to test CTHYB's estimators against (plot_kanamori_phonon.py). Nothing here uses Lang-Firsov,
-# the kink estimator or any CTHYB code; only the Kanamori operator is taken from TRIQS, so both
-# sides solve the same Hamiltonian.
+# spin-orbital + one phonon, solved as a Hamiltonian. Gives, exactly up to the phonon truncation,
+# chi_ab(tau) = <n_a(tau) n_b(0)>, G_a(tau) and G_a(iw) (Lehmann sums) and Sigma_a(iw); only the
+# Kanamori operator is taken from TRIQS.
 #
-# Self-tests, always run:
-#   - phonon truncation: solved again with n_ph + n_ph_check levels, max differences reported;
-#   - G_a(0) + G_a(beta) = -1 and chi_aa(0) = -G_a(beta) = <n_a>.
-# With --V 0 and equal g for both orbitals, sum_a g_a n_a commutes with H, so the Lang-Firsov
-# transform is exact and chi_ab(tau) must equal that of the fermions alone with the polaron
-# shift -(sum_a g_a n_a)^2 / (2 omega_0^2); this is checked too.
+# Self-tests: the phonon truncation (again with n_ph + n_ph_check levels), G_a(0) + G_a(beta) = -1,
+# chi_aa(0) = <n_a>, and for --V 0 with equal g the exact Lang-Firsov result (polaron shift
+# -(sum_a g_a n_a)^2 / (2 omega_0^2) on the fermions alone).
 
 import argparse
 import os
@@ -32,8 +25,6 @@ parser.add_argument('--n_ph_check', type=int, default=6, help='Also solve with n
 parser.add_argument('--n_tau', type=int, default=grids.N_TAU,
                     help='Imaginary-time points on [0, beta]; the default is the grid run_cthyb.py uses')
 parser.add_argument('--n_iw', type=int, default=grids.N_IW, help='Positive Matsubara frequencies for G(iw) and Sigma(iw)')
-# No --target_n here: the mu bisection lives in calibrate_mu.py, which drives this script
-# as a subprocess and reads the <n_a> line below. One implementation, not two.
 parser.add_argument('--out_dir', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))
 args = parser.parse_args()
 M = model_def.Model(args)
@@ -118,12 +109,8 @@ def correlators(blocks):
             C = U_m.T @ np.kron(c[a][np.ix_(idx_m, idx)], np.eye(n_ph)) @ U
             G[a] -= ((np.exp(-np.outer(M.beta - tau, E_m - E0)) @ C**2) * weight_right).sum(axis=1)
 
-            # Same Lehmann sum directly on the Matsubara axis:
-            #   G_a(iw) = (1/Z) sum_{m,n} |<m|c_a|n>|^2 (e^{-beta E_m} + e^{-beta E_n})
-            #                             / (iw + E_m - E_n)
-            # Doing this instead of Fourier-transforming G(tau) avoids any discretisation
-            # error, so the resulting Sigma is exact up to the phonon truncation -- which is
-            # the whole point of having an ED reference to compare Sigma against.
+            # G_a(iw) = (1/Z) sum_{m,n} |<m|c_a|n>|^2 (e^{-beta E_m} + e^{-beta E_n}) / (iw + E_m - E_n),
+            # directly on the Matsubara axis, so Sigma carries no Fourier discretisation error.
             dE = E_m[:, None] - E[None, :]                       # E_m - E_n
             w8 = np.exp(-M.beta * (E_m - E0))[:, None] + np.exp(-M.beta * (E - E0))[None, :]
             G_iw[a] += ((C**2 * w8)[None, :, :] / (iw[:, None, None] + dE[None, :, :])).sum(axis=(1, 2))
@@ -158,6 +145,7 @@ print(f"Phonon truncation: <N_ph> = {mean_phonons:.3f}, weight in top level = {t
       f"max|chi(n_ph) - chi(n_ph + {args.n_ph_check})| = {truncation_chi:.2e}, same for G: {truncation_G:.2e}")
 
 occupations = -G[:, -1]
+# calibrate_mu.py parses this line.
 print("<n_a> =", np.round(occupations, 5), "(0.5 at half filling)")
 print(f"max |G_a(0) + G_a(beta) + 1| = {np.abs(G[:, 0] + G[:, -1] + 1).max():.2e}, "
       f"max |chi_aa(0) - <n_a>| = {np.abs(np.diag(chi[:, :, 0]) - occupations).max():.2e}")
@@ -174,18 +162,8 @@ if M.V == 0 and M.g_orb[0] == M.g_orb[1]:
     lang_firsov_check = np.abs(chi - chi_shifted).max()
     print(f"V = 0 Lang-Firsov check: max |chi_ED - chi_shifted_fermions| = {lang_firsov_check:.2e}")
 
-# --------------------------------------------------------------------------- self-energy
-#
-# Sigma_a(iw) = G0_a(iw)^-1 - G_a(iw)^-1,   G0_a(iw)^-1 = iw + mu_a - Delta_a(iw)
-#
-# with Delta_a(iw) = V^2/(iw - eps_bath) -- the *same* hybridization the CTHYB side is
-# handed, since the whole point of this model is that both sides solve one Hamiltonian.
-# Everything here is diagonal in the spin-orbital index, so Sigma is a scalar per orbital.
-#
-# G_iw came from the Lehmann sum rather than from Fourier-transforming G(tau), so this
-# Sigma carries no discretisation error: it is exact up to the phonon truncation, which is
-# quoted above. That makes it a genuine reference curve for the QMC Sigma rather than
-# another approximation to argue with.
+# Sigma_a(iw) = iw + mu_a - Delta_a(iw) - G_a(iw)^-1 with the Delta CTHYB is given; everything
+# is diagonal in the spin-orbital index.
 delta_iw = M.V**2 / (iw - M.eps_bath)
 Sigma_iw = np.zeros_like(G_iw)
 for a in range(n_so):

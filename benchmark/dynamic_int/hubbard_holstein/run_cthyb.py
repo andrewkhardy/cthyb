@@ -2,45 +2,31 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-"""CTHYB run for the single-orbital Hubbard-Holstein benchmark (model: model.py).
+"""CTHYB run for the Hubbard-Holstein benchmark (model: model.py).
 
-The phonon couples to the total charge, so every D0_tau entry -- including the diagonal
-(s, s) self-terms -- carries g^2 Q(tau). That uniformity is what makes the coupling
-block-constant on the conserved densities, so with `lang_firsov=True` every vertex should
-be routed through the analytic Lang-Firsov path and the sign should stay at 1.0. Running
-with `lang_firsov=False` forces the same physics through the stochastic expansion, which is
-the independent internal cross-check; the two must agree.
-
-Saves two estimators of each key quantity, as in the spin-spin benchmark: Sigma from the
-Legendre G_l (preferred) and from G(tau) by Dyson, and <N(tau)N(0)> from the O_tau insertion
-measurement and from the Legendre kink estimator.
+Uniform g makes every D0 vertex Lang-Firsov eligible, so `--lang_firsov False` (all stochastic)
+is the internal cross-check. Saves Sigma from G_l and, as Sigma_alt, from G(tau); <N(tau)N(0)>
+from O_tau and, as corr_alt, from the Legendre kink estimator Q_tau.
 """
-import os
-import sys
-
 import numpy as np
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
 from triqs.gfs import Fourier
 from triqs_cthyb import Solver
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import model as M  # noqa: E402
-from common import kernels, selfenergy  # noqa: E402
+import model as M  # puts common/ on sys.path
+from common import kernels, selfenergy, str2bool
 
 
 def add_cthyb_args(parser):
-    parser.add_argument("--lang_firsov", type=lambda x: str(x).lower() in ("true", "1", "yes"), default=True,
+    parser.add_argument("--lang_firsov", type=str2bool, default=True,
                         help="Route the density coupling through Lang-Firsov (False: fully stochastic)")
     parser.add_argument("--dyn_n_l", type=int, default=50, help="Legendre coefficients for the Lang-Firsov kernel")
     parser.add_argument("--n_l", type=int, default=50, help="Legendre coefficients for G_l")
     parser.add_argument("--measure_O_tau_min_ins", type=int, default=50,
                         help="Minimum insertions for the O_tau measurement")
-    parser.add_argument("--density_matrix", type=lambda x: str(x).lower() in ("true", "1", "yes"), default=True,
-                        help="Measure the density matrix (implies use_norm_as_weight). Needed for the "
-                             "equal-time offset on Q_tau, so the Legendre kink estimator is only saved "
-                             "when this is on. Turn it off for local smoke tests if triqs' atom_diag "
-                             "and cthyb were built against different c2py versions")
+    parser.add_argument("--density_matrix", type=str2bool, default=True,
+                        help="Measure the density matrix (and use_norm_as_weight); corr_alt needs it")
 
 
 args = M.parse_args("CTHYB single-orbital Hubbard-Holstein benchmark", add_cthyb_args)
@@ -58,7 +44,7 @@ S = Solver(beta=model.beta, gf_struct=M.GF_STRUCT, n_iw=model.n_iw, n_tau=model.
            n_l=args.n_l, n_tau_bosonic=model.n_tau_bosonic, delta_interface=True)
 S.Delta_tau << Fourier(model.delta_iw())
 for (s1, s2), d in d0.items():
-    S.D0_tau[s1, s2] << kernels.as_gf(d, model.beta, target_shape=(1, 1))
+    S.D0_tau[s1, s2] << kernels.as_gf(d, model.beta)
 
 S.solve(h_int=model.h_int(), h_loc0=model.h_loc0(),
         length_cycle=args.length_cycle, n_warmup_cycles=args.n_warmup_cycles,
@@ -81,9 +67,8 @@ if mpi.is_master_node():
     G_up = S.G_tau["up"]
     density = selfenergy.density_from_G_iw(selfenergy.G_iw_from_G_l(S.G_l, model.n_iw))
 
-    # <N(tau)N(0)> = sum over all ordered spin pairs of <n_s(tau) n_s'(0)>. With
-    # measure_density_matrix=True the Python Solver has already added the equal-time part,
-    # so Q_tau is the full correlator -- do not add an offset again.
+    # <N(tau)N(0)> summed over ordered spin pairs. With the density matrix measured, the Python
+    # Solver has already added the equal-time part to Q_tau; without it Q_tau lacks it.
     Q = S.Q_tau
     nn_kink = None
     if args.density_matrix and Q is not None:
@@ -107,8 +92,7 @@ if mpi.is_master_node():
             A["corr_alt"] = nn_kink
         A["density"], A["average_sign"] = density, S.average_sign
         A["pert_order"] = S.perturbation_order_total.data
-        # The solver only counts the stochastic vertices, so this is None whenever lang_firsov=True:
-        # uniform g routes every vertex analytically. The plots read a missing key as NaN.
+        # Counts stochastic vertices only, so None when all are analytic; the plots read NaN.
         if S.perturbation_order_dyn is not None:
             A["pert_order_dyn"] = S.perturbation_order_dyn.data
         A["G_tau_gf"], A["G_l_gf"] = S.G_tau, S.G_l

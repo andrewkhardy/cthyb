@@ -3,22 +3,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
 #
-# CTHYB and CTSEG against a reference for the single-orbital retarded spin-spin benchmark.
-# Rows: G(tau), Re Sigma(iw_n), Im Sigma(iw_n), <Sz(tau)Sz(0)>, and that correlator's
-# residual against the reference. Columns: the coupling cases present on disk.
-#
-# One figure per (beta, filling) in GRID -- four of them as configured, which is the full
-# set the submit script produces. A combination with no files on disk is skipped with a
-# message rather than raising, so the other three still draw.
-#
-# Every series on disk is always drawn. CTINT's sign collapses away from (beta=10, n=0.5)
-# and what it returns there is not a Green function -- see check_quality -- so the y-limits
-# are set from the trustworthy series only and a blown-up curve is allowed to leave the
-# panel rather than flatten everything else in it. Such a series is also barred from being
-# the reference; REFERENCE_ORDER then falls through to CTSEG, which is sign-free here.
-#
-# Knobs are hardcoded below so this pastes straight into a notebook; missing files are
-# skipped, so a partially finished grid still plots.
+# CTHYB, CTSEG and CTINT for the spin-spin benchmark, one figure per (beta, filling) in GRID.
+# Rows: G(tau), Re/Im Sigma, <Sz(tau)Sz(0)> and its residual against the reference (the first
+# of REFERENCE_ORDER that passes check_quality); columns: the coupling cases. A series failing
+# check_quality is drawn but neither the reference nor used for the y-limits. Knobs below;
+# missing files are skipped.
 import os
 
 import matplotlib.pyplot as plt
@@ -26,21 +15,18 @@ import numpy as np
 from h5 import HDFArchive
 
 # ---------------------------------------------------------------------------------- knobs
-DATA_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/spin_spin"
-DATA_DIR = "/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin"  # on the cluster
-# (beta, filling) -> one figure each. 0.5 is half filling, 0.75 the doped runs.
+DATA_DIR = "/mnt/home/ahardy/ceph/CTHYB_Data/spin_spin"
 GRID = [(10.0, 0.5), (10.0, 0.75), (100.0, 0.5), (100.0, 0.75)]
 U, J = 4.0, 1.0
 CASES = [((1, 1), r"$\mathbf{S}\cdot\mathbf{S}$"),
          ((1, 0), r"$J_\perp$ only"),
          ((0, 1), r"$S_zS_z$ only")]
-W_MAX = 15.0           # Matsubara axis limit; Sigma is plotted raw, never tail-fitted
-MIN_SIGN = 0.01        # below this a series is noise, not data -- see check_quality
-REFERENCE_ORDER = ["CTINT", "CTSEG"]   # first one that passes check_quality is the reference
+W_MAX = 15.0
+MIN_SIGN = 0.01        # see check_quality
+REFERENCE_ORDER = ["CTINT", "CTSEG"]
 SAVE_AS = None         # e.g. "spin_spin_b{beta:g}_n{filling:g}.pdf"
 # -----------------------------------------------------------------------------------------
 
-# series label -> (solver, filename tag).
 SERIES = {
     "CTINT": ("ctint", ""),
     "CTSEG": ("ctseg", ""),
@@ -58,9 +44,7 @@ MARKER = {"CTINT": "o", "CTSEG": "s", "CTHYB": "^", "CTHYB lf=False": "v"}
 
 
 def matsubara_style(label, alt=False):
-    """Every Matsubara point marked, joined by a thin dotted line: the data are discrete, and
-    a solid curve would hide where the points actually are. The second estimator gets the
-    same marker, open."""
+    """Marked points on a thin dotted line; the second estimator gets the same marker, open."""
     color = STYLE[label]["color"]
     return dict(color=color, linestyle=":", linewidth=0.8, marker=MARKER[label], markersize=3.5,
                 markerfacecolor="none" if alt else color, markeredgewidth=0.9,
@@ -84,23 +68,8 @@ def same_grid(tau_a, tau_b):
 
 
 def check_quality(run):
-    """`(ok, note)` -- is this series data, or is it noise wearing a solver's name?
-
-    Two independent tests, both cheap and both decisive:
-
-      * the average sign. CTINT's collapses both at beta = 100 and away from half filling
-        -- on these files 2.5e-4 at (beta=10, n=0.75) and 9.4e-5 at (beta=100, n=0.5),
-        against 0.365 at (beta=10, n=0.5). CT-INT measures <O s>/<s>, so a denominator
-        going to zero blows the variance of the ratio up without bound.
-
-      * the anticommutator, -G(0) - G(beta) = 1 exactly, for any Hamiltonian and any bath.
-        The two collapsed runs give 1.42 and 1.63, with max |G(tau)| of 1.23 and 14.14
-        where a fermionic G cannot exceed 1, and densities up to 16.2 per spin-orbital.
-
-    A merely noisy series passes both (sign 0.365, jump 1.0008) and is treated as data.
-    Failing either bars a series from being the reference and from setting the y-limits,
-    but NOT from being drawn -- see the module docstring.
-    """
+    """`(ok, note)`: average sign >= MIN_SIGN (CTINT measures <O s>/<s>) and
+    -G(0) - G(beta) = 1."""
     if run is None:
         return False, "absent"
     sign = float(run.get("average_sign", 0.0))
@@ -128,8 +97,7 @@ def make_figure(beta, filling):
         ref_label = next((lab for lab in REFERENCE_ORDER if lab in trusted), None)
         ref = runs.get(ref_label)
 
-        # y-limits come from the trusted series only, so an off-scale curve is visible as
-        # "it leaves the panel" instead of compressing every other curve into a flat line.
+        # y-limits from the trusted series only
         span = {row: [np.inf, -np.inf] for row in range(4)}
 
         def note(row, values):
@@ -155,7 +123,6 @@ def make_figure(beta, filling):
                 if ok:
                     note(1, sigma[keep].real)
                     note(2, sigma[keep].imag)
-                # Second, independent Sigma route -- the pair bounds the systematic.
                 if run.get("Sigma_alt") is not None:
                     alt = np.asarray(run["Sigma_alt"])
                     axes[1][col].plot(w[keep], alt[keep].real, **matsubara_style(label, alt=True))
@@ -169,16 +136,14 @@ def make_figure(beta, filling):
                 if ok:
                     note(3, run["corr"])
                 if run.get("corr_alt") is not None:
-                    # Saved without its own tau. The mesh is uniform on [0, beta], which
-                    # linspace reproduces to 2e-15.
+                    # Saved without its own tau; the mesh is uniform on [0, beta].
                     alt = np.asarray(run["corr_alt"])
                     axes[3][col].plot(np.linspace(0.0, run["beta"], len(alt)), alt,
                                       color=style["color"], **ALT_STYLE)
                     if ok:
                         note(3, alt)
                 if ref is not None and label != ref_label and ok:
-                    # Point by point: every solver writes its correlator on the grid of
-                    # common/grids.py. A file from before that is skipped, not resampled.
+                    # Point by point on the shared grid; files on another grid are skipped.
                     if same_grid(run["tau_corr"], ref["tau_corr"]):
                         axes[4][col].plot(run["tau_corr"], run["corr"] - ref["corr"], label=label,
                                           **{**style, "linewidth": 1.0})
@@ -207,7 +172,6 @@ def make_figure(beta, filling):
                               ha="center", va="center", fontsize=9, color="#c1121f",
                               transform=axes[4][col].transAxes)
         else:
-            # As a title, not in-axes text: the panel's zero line sits where text would go.
             axes[4][col].set_title(f"reference: {ref_label}", fontsize=8, loc="left")
 
         axes[0][col].set_title(f"{title}\n" + r"$\beta$"
@@ -220,8 +184,7 @@ def make_figure(beta, filling):
         for row in (1, 2):
             axes[row][col].set_xlabel(r"$\omega_n$")
 
-        # Exact identity at half filling: Re Sigma = mu at every frequency (see
-        # common/selfenergy.diagnose). Draw it as the target the curves should sit on.
+        # Exact at half filling: Re Sigma = mu (common/selfenergy.diagnose).
         if abs(filling - 0.5) < 1e-12 and trusted:
             mu = float(np.atleast_1d(runs[trusted[0]]["mu"])[0])
             axes[1][col].axhline(mu, color="k", linewidth=0.9, linestyle=(0, (4, 3)),
@@ -233,7 +196,6 @@ def make_figure(beta, filling):
     axes[3][0].set_ylabel(r"$\langle S_z(\tau)S_z(0)\rangle$")
     axes[4][0].set_ylabel(r"$\Delta\langle S_zS_z\rangle$ vs reference")
     for row in range(5):
-        # Only where something was actually drawn, else matplotlib warns about an empty legend.
         if axes[row][0].get_legend_handles_labels()[0]:
             axes[row][0].legend(fontsize=8)
 

@@ -3,61 +3,39 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
 #
-# Two-patch valence-bond dimer with a retarded real-space spin-spin interaction.
-# Rows: G(tau), Re Sigma, Im Sigma, chi^zz(tau), and the chi residual against the reference.
-# Columns: the temperatures present on disk. One figure per filling in FILLINGS.
-#
-# WHICH REFERENCE APPLIES DEPENDS ON THE COUPLING, and the distinction is physical, not a
-# convenience:
-#
-#   POINT = "ed"   (J_intra = -J_inter)  ED exists and is exact, so it is the reference and
-#                                        any CTHYB deviation is a CTHYB error.
-#   POINT = "dca"  (J_intra = 0)         NO ED can exist: integrating out harmonic bosons
-#                                        only ever gives -(psd) x |Q|, and -J is indefinite
-#                                        here. The reference is then CTHYB's own
-#                                        lang_firsov=True vs False pair -- two different
-#                                        routes to the same physics. Agreement is evidence,
-#                                        not proof.
-#
-# Knobs hardcoded below; missing files are skipped.
+# The vb_dimer benchmark, one figure per filling. Rows: G(tau), Re/Im Sigma, chi^zz(tau) and the
+# chi residual against the reference; columns: beta. The reference is the exact ED at
+# POINT = "ed" (J_intra = -J_inter) and CTHYB lang_firsov=True at POINT = "dca" (J_intra = 0),
+# where no ED exists (-J indefinite). Knobs below; missing files are skipped.
 import os
 import re
-import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
 from h5 import HDFArchive
 from triqs.gfs import Gf, BlockGf  # noqa: F401
 from triqs.stat.histograms import Histogram  # noqa: F401
-# Those imports only register h5 readers for the solver objects the run files
-# also carry. Nothing here uses them, but without them every load warns.
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Unused, but they register the h5 readers for the solver objects in the run files.
 
 # ---------------------------------------------------------------------------------- knobs
-DATA_DIR = "/home/andrewhardy/Documents/Data/CTHYB_Data/vb_dimer"
-DATA_DIR = "/mnt/home/ahardy/ceph/CTHYB_Data/vb_dimer"  # on the cluster
+DATA_DIR = "/mnt/home/ahardy/ceph/CTHYB_Data/vb_dimer"
 POINT = "ed"           # "ed" (J_intra=-J_inter, exact ED) or "dca" (J_intra=0, no ED)
 ROTATION = "site"      # "site" (the benchmark) or "none" (interaction local in the patch basis)
-SUBDIR = ""            # "" for the main runs, or a run_vb_dimer_tests.sh directory such as
-                       # "test_nl100_rot-site" / "test_nl100_rot-none" (set ROTATION to match)
 BETAS = [10.0, 100.0]
 FILLINGS = [0.5, 0.75]  # one figure each: 0.5 = half filling, 0.75 = the doped runs (see collect)
 T, TP, U, OMEGA_0 = 0.25, 0.0, 2.0, 1.0
 N_PH = 3
 ORBS = (0, 1)          # patch orbitals shown (spin up): K = 0 bonding, K = 1 antibonding
 W_MAX = 15.0
-SAVE_AS = None         # e.g. "vb_dimer_{point}_{subdir}_n{filling:g}.pdf"
+SAVE_AS = None         # e.g. "vb_dimer_{point}_n{filling:g}.pdf"
 # -----------------------------------------------------------------------------------------
-
-DATA = os.path.join(DATA_DIR, SUBDIR)
 
 if POINT == "ed":
     J_INTRA, J_INTER, BATH, V = -0.5, 0.5, "discrete", 0.5
 else:
     J_INTRA, J_INTER, BATH, V = 0.0, 0.5, "dca", 0.5
 
-# label -> (file prefix, extra name pieces). ED only exists at POINT = "ed", see the header.
+# label -> (file prefix, extra name pieces)
 SERIES = {"ED (exact)": ("ed_", (f"nph-{N_PH}",)),
           "CTHYB lf=True": ("cthyb_", ("lf-True",)),
           "CTHYB lf=False": ("cthyb_", ("lf-False",))}
@@ -71,24 +49,21 @@ PATCH_MARKER = {0: "o", 1: "s"}  # Sigma(iw): K = 0 filled circles, K = 1 open s
 
 
 def matsubara_style(st, K):
-    """Every Matsubara point marked, joined by a thin dotted line: the data are discrete, and
-    a solid curve would hide where the points actually are."""
+    """Marked points on a thin dotted line."""
     color = st.get("color", "k")
     return dict(color=color, linestyle=":", linewidth=0.8, marker=PATCH_MARKER[K], markersize=3.5,
                 markerfacecolor=color if K == 0 else "none", markeredgewidth=0.9)
 
 
 def candidates(prefix, beta, *extra):
-    """Every result file for this prefix and beta, matching on every piece of the model tag
-    that distinguishes the two coupling points. Matching on beta alone is not enough: the J_ED
-    and J_DCA runs sit in the same directory, and 'Jintra--0.5' sorts before 'Jintra-0.0',
-    so a loose match silently returns the wrong point's file."""
-    if not os.path.isdir(DATA):
+    """Every result file for this prefix and beta, matching every tag piece that tells the
+    J_ED and J_DCA files apart (they share a directory)."""
+    if not os.path.isdir(DATA_DIR):
         return []
     bath = f"bath-V-{V}" if BATH == "discrete" else "bath-dca"
     required = (f"beta-{beta}_", f"Jintra-{J_INTRA}_", f"Jinter-{J_INTER}_", bath,
                 f"rot-{ROTATION}") + extra
-    return [os.path.join(DATA, f) for f in sorted(os.listdir(DATA))
+    return [os.path.join(DATA_DIR, f) for f in sorted(os.listdir(DATA_DIR))
             if f.startswith(prefix) and "_seed-" not in f and all(s in f for s in required)]
 
 
@@ -103,13 +78,9 @@ def same_grid(tau_a, tau_b):
 
 
 def collect(beta):
-    """`{filling: (mu, {label: run})}` for everything on disk at this beta.
-
-    Files are grouped by the mu in their name, so every series in one column solved the same
-    Hamiltonian. Each group goes to the filling in FILLINGS nearest its <n> -- ED's when there
-    is one, since it is exact. Within a group the newest file wins, so a rerun with another
-    n_cycles replaces the old file rather than whichever sorts first.
-    """
+    """`{filling: (mu, {label: run})}` at this beta: files grouped by the mu in their name, each
+    group put at the filling nearest its <n> (ED's if present), newest file per group and per
+    filling."""
     groups = {}
     for label, (prefix, extra) in SERIES.items():
         for path in candidates(prefix, beta, *extra):
@@ -150,8 +121,7 @@ def make_figure(filling, columns):
         for name, r in runs.items():
             st = STYLE.get(name, dict())
 
-            # Both solvers write G[a, tau] against a shared `tau`, so there is one layout. One
-            # curve per patch: the dimer's bonding (K = 0) and antibonding (K = 1) orbitals.
+            # Both solvers write G[a, tau] on a shared `tau`; one curve per patch.
             for K in ORBS:
                 label = f"{name} K={K}"
                 if "G" in r:
@@ -165,8 +135,7 @@ def make_figure(filling, columns):
                     axes[1][col].plot(w[keep], sig[keep].real, label=label, **matsubara_style(st, K))
                     axes[2][col].plot(w[keep], sig[keep].imag, label=label, **matsubara_style(st, K))
 
-            # `corr` is <S^z_tot(tau) S^z_tot(0)> in both, the quantity the residual compares.
-            # ED's site-resolved chi^zz_ij are drawn thin underneath, for orientation.
+            # `corr` is <S^z_tot(tau) S^z_tot(0)> in both; ED's chi^zz_ij drawn thin underneath.
             if "corr" in r:
                 axes[3][col].plot(np.asarray(r["tau_corr"]) / beta, np.asarray(r["corr"]),
                                   label=f"{name} " + r"$\chi^{zz}_{\rm tot}$", **st)
@@ -181,8 +150,7 @@ def make_figure(filling, columns):
             if ref is not None and name != ref_name:
                 a = r.get("corr")
                 b = ref.get("corr")
-                # Point by point: CTHYB and ED both write on the grid of common/grids.py. A
-                # file from before that is skipped, not resampled.
+                # Point by point on the shared grid; files on another grid are skipped.
                 if a is not None and b is not None and same_grid(r["tau_corr"], ref["tau_corr"]):
                     axes[4][col].plot(np.asarray(r["tau_corr"]) / beta, np.asarray(a) - np.asarray(b),
                                       label=f"{name} - {ref_name}", **{**st, "linewidth": 1.0})
@@ -196,7 +164,6 @@ def make_figure(filling, columns):
                   + (f"sign={r['average_sign']:.3f}  " if "average_sign" in r else "")
                   + (f"<n>={np.mean(r['density']):.4f}" if "density" in r else ""))
 
-        # Say why the residual panel is empty rather than leave a blank box.
         if "ED (exact)" in runs:
             trunc = runs["ED (exact)"].get("ed_truncation", float("nan"))
             axes[4][col].text(0.02, 0.06, f"ED phonon truncation: {float(trunc):.1e}",
@@ -210,7 +177,7 @@ def make_figure(filling, columns):
                               transform=axes[4][col].transAxes, fontsize=8, va="center")
             why_empty = mismatch or f"only {', '.join(runs)} on disk:\nthe lf pair is incomplete"
         else:
-            # -J IS psd here, so an ED exists -- the file just is not there yet.
+            # An ED exists here; its file is missing.
             why_empty = "ED reference not found at this mu.\nRun:  sbatch run_vb_dimer.sh ed"
         if not residuals_drawn:
             axes[4][col].text(0.5, 0.45, why_empty, ha="center", va="center", fontsize=9,
@@ -235,12 +202,11 @@ def make_figure(filling, columns):
     axes[3][0].set_ylabel(r"$\chi^{zz}(\tau)$")
     axes[4][0].set_ylabel(r"$\Delta\chi^{zz}_{\rm tot}$ vs reference")
     for row in range(5):
-        # Only where something was actually drawn, else matplotlib warns about an empty legend.
         if axes[row][0].get_legend_handles_labels()[0]:
             axes[row][0].legend(fontsize=7)
 
-    title = (f"Valence-bond dimer, retarded real-space " + r"$\mathbf{S}\cdot\mathbf{S}$"
-             + f", n={filling:g}" + (f"  [{SUBDIR}]" if SUBDIR else "") + "\n"
+    title = ("Valence-bond dimer, retarded real-space " + r"$\mathbf{S}\cdot\mathbf{S}$"
+             + f", n={filling:g}" + "\n"
              + ("ED is exact at this coupling, so deviations are CTHYB errors"
                 if POINT == "ed" else
                 "No ED exists at this coupling (-J indefinite); reference is lf True vs False"))
@@ -254,16 +220,16 @@ drawn = 0
 for filling in FILLINGS:
     columns = [(beta, *by_beta[beta][filling]) for beta in BETAS if filling in by_beta[beta]]
     if not columns:
-        print(f"[{POINT} n={filling:g}] no files under {DATA} -- skipped")
+        print(f"[{POINT} n={filling:g}] no files under {DATA_DIR} -- skipped")
         continue
     fig = make_figure(filling, columns)
     drawn += 1
     if SAVE_AS:
-        name = SAVE_AS.format(point=POINT, filling=filling, rotation=ROTATION, subdir=SUBDIR or "main")
+        name = SAVE_AS.format(point=POINT, filling=filling, rotation=ROTATION)
         fig.savefig(name, dpi=150, bbox_inches="tight")
         print(f"wrote {name}")
 if not drawn:
-    raise SystemExit(f"No files under {DATA} for POINT={POINT!r}, ROTATION={ROTATION!r}.\n"
+    raise SystemExit(f"No files under {DATA_DIR} for POINT={POINT!r}, ROTATION={ROTATION!r}.\n"
                      "ED files come from:  sbatch run_vb_dimer.sh ed\n"
                      "(there is no ED for POINT='dca' -- see the header)")
 plt.show()

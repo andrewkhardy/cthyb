@@ -2,52 +2,39 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-r"""CTINT's auxiliary-spin alpha tensor, shared by every benchmark that runs CTINT.
+r"""What the run_ctint.py scripts share: CTINT's auxiliary-spin alpha tensor and the DLR
+conversions of its inputs and outputs.
 
 Each vertex contributes (n_a - alpha_a)(n_b - alpha_b), alpha = center +- delta over the two
-auxiliary spins. For a repulsive coupling the two shifts must go in *opposite* directions,
-for an attractive one in the *same* direction, or the vertex weights come out negative.
-
-The library's automatic alpha (Solver.find_alpha_from_HF_solver) gets two things wrong for
-these benchmarks:
-
-  * It gives every D0 channel the same-direction shift regardless of its sign. That is
-    right for an attractive D0 (Hubbard-Holstein, D0 < 0 in every channel) and wrong for a
-    repulsive one; the spin-spin D0_ss' = +-spin_kernel/8 has both, so one of the two was
-    always shifted the wrong way.
-  * It centres the shifts on the Hartree-Fock density with delta = 0.1, i.e. *inside*
-    [0, 1]. The equal-time factor n - alpha only has a definite sign when alpha lies
-    outside [0, 1], so the shifts belong just below 0 and just above 1: center 1/2,
-    delta = 1/2 + eta, at every filling. At beta = 100, n = 0.75, U only, centre 0.75 gave
-    sign 0.41 and the library's 0.90 +- 0.1 gave 0.00, against 1.00 for 0.5 +- 0.51.
-
-`signed_alpha` applies the static rule to each h_int term and each D0 channel alike.
+auxiliary spins. A repulsive coupling needs the two shifts in opposite directions, an
+attractive one in the same direction, or vertex weights come out negative, and n - alpha only
+has a definite sign for alpha outside [0, 1]. `signed_alpha` therefore sets the direction from
+the sign of every h_int term and every D0 channel, with center 1/2 and delta = 1/2 + eta at any
+filling. The library's automatic alpha (Solver.find_alpha_from_HF_solver) shifts every D0
+channel the same way whatever its sign, and centres delta = 0.1 on the Hartree-Fock density.
 """
 import numpy as np
+from triqs.gfs import (Gf, MeshDLRImFreq, MeshDLRImTime, fit_gf_dlr, inverse, make_gf_dlr, make_gf_dlr_imfreq,
+                       make_gf_from_fourier, make_gf_imtime)
+
+from . import kernels, selfenergy
 
 CENTER = 0.5
 DELTA = 0.51
 
 
 def add_alpha_args(parser):
-    """The alpha knobs, identical for every benchmark's run_ctint.py."""
     parser.add_argument("--alpha", choices=["signed", "library"], default="signed",
-                        help="'signed': explicit alpha tensor, each shift direction set by the sign of "
-                             "its coupling (common/ctint.py). 'library': triqs_ctint's automatic "
-                             "Hartree-Fock alpha")
-    parser.add_argument("--alpha_delta", type=float, default=DELTA,
-                        help="Auxiliary-spin shift delta. Larger improves the sign at the cost of a "
-                             "higher perturbation order (the library's own default is 0.1)")
-    parser.add_argument("--alpha_center", type=float, default=CENTER,
-                        help="Centre of the signed alpha shifts. Keep 0.5 at every filling: with "
-                             "delta = 0.5 + eta the shifts sit just outside [0, 1]")
+                        help="'signed': common/ctint.signed_alpha; 'library': triqs_ctint's Hartree-Fock alpha")
+    parser.add_argument("--alpha_delta", type=float, default=DELTA, help="Auxiliary-spin shift delta")
+    parser.add_argument("--alpha_center", type=float, default=CENTER, help="Centre of the signed shifts")
 
 
 def signed_alpha(h_int, d0_channels, center=CENTER, delta=DELTA):
     """alpha tensor, shape (n_terms + n_D0, 2, 2, n_s = 2), in triqs_ctint's layout.
 
-    `d0_channels` is the list of D0(tau) arrays in the library's own order -- (block1,
-    block2) over gf_struct, one orbital per block -- or empty when there is no D0.
+    `d0_channels` is the list of D0(tau) arrays in the library's (block1, block2) order over
+    gf_struct, one orbital per block, or empty when there is no D0.
     """
     terms = list(h_int)
     alpha = np.zeros((len(terms) + len(d0_channels), 2, 2, 2))
@@ -73,3 +60,47 @@ def alpha_kwargs(args, h_int, d0_channels):
     for s in range(2):
         lines.append(f"    s = {s}: " + "  ".join(f"({a[0, 0, s]:+.3f}, {a[1, 1, s]:+.3f})" for a in alpha))
     return dict(alpha=alpha, n_s=2), "\n".join(lines)
+
+
+def dlr_imfreq_from_tau(data, beta, w_max, eps):
+    """A tau-sampled retarded coupling as the DLR-imfreq Gf that CTINT takes."""
+    return make_gf_dlr_imfreq(fit_gf_dlr(kernels.as_gf(data, beta), w_max=w_max, eps=eps, symmetrize=True))
+
+
+def set_g0(S, mesh, mu, delta_iw, n_tau, w_max, eps):
+    """Hand every block of `S.G0_iw` the G0^-1 = iw + mu - Delta of common/selfenergy, DLR-fitted."""
+    g0_iw = Gf(mesh=mesh, target_shape=(1, 1))
+    g0_iw << inverse(selfenergy.g0_inverse_iw(mesh, mu, delta_iw))
+    g0_dlr = make_gf_dlr_imfreq(fit_gf_dlr(make_gf_from_fourier(g0_iw, n_tau), w_max=w_max, eps=eps, symmetrize=True))
+    for _, g0_block in S.G0_iw:
+        g0_block.data[:, 0, 0] = g0_dlr.data[:, 0, 0]
+
+
+def to_uniform_tau(g_iw, n_tau):
+    """CTINT's G(iw) (a DLR or a regular mesh, depending on the version) on `n_tau` points."""
+    if isinstance(g_iw.mesh, MeshDLRImFreq):
+        return make_gf_imtime(make_gf_dlr(g_iw), n_tau)
+    return make_gf_from_fourier(g_iw, n_tau)
+
+
+def to_regular_imfreq(g_iw, mesh):
+    """A possibly-DLR G(iw) on the regular Matsubara `mesh`."""
+    if not isinstance(g_iw.mesh, MeshDLRImFreq):
+        return g_iw
+    out = Gf(mesh=mesh, target_shape=g_iw.target_shape)
+    dlr = make_gf_dlr(g_iw)
+    for w in mesh:
+        out[w] = dlr(w)
+    return out
+
+
+def chi_on_uniform_tau(chi_tau, disconnected, n_tau):
+    """`(chi_tau, values)`: CTINT's chiAB_tau on `n_tau` points and its first component. A DLR
+    fit holds only the connected part, so `disconnected` (<A><B>) is taken out before it."""
+    shift = 0.0
+    if isinstance(chi_tau.mesh, MeshDLRImTime):
+        shift = disconnected
+        chi_connected = chi_tau.copy()
+        chi_connected.data[...] -= shift
+        chi_tau = make_gf_imtime(make_gf_dlr(chi_connected), n_tau)
+    return chi_tau, chi_tau.data.reshape(chi_tau.data.shape[0], -1)[:, 0].real + shift

@@ -4,7 +4,7 @@
 # See LICENSE in the root of this distribution for details.
 r"""
 Exact-diagonalization reference for the two-patch dimer with a retarded spin-spin
-interaction (model.py, run with --bath discrete so the model is ED-representable).
+interaction (model.py with --bath discrete, so the model is ED-representable).
 
     H = sum_{K s} (eps_K - mu) n_{K s}                       patch levels
       + U sum_i n_{i up} n_{i down}                          Hubbard, local on the SITES
@@ -12,37 +12,14 @@ interaction (model.py, run with --bath discrete so the model is ED-representable
       + sum_{m a} omega_0 d^dag_{m a} d_{m a}
       + sum_{m a} g_m T_m^a (d_{m a} + d^dag_{m a}) / sqrt(2 omega_0)
 
-Integrating out the boson triplets reproduces the retarded interaction the QMC samples,
-`sum_ij lambda_ij(tau) S_i(tau).S_j(0)` with `lambda_ij = -J_ij Q(tau)`.
+Integrating out the boson triplets gives the retarded interaction the QMC samples,
+`sum_ij lambda_ij(tau) S_i(tau).S_j(0)` with `lambda_ij = -J_ij Q(tau)`. Harmonic bosons coupled
+linearly to {T_m} only ever give `sum_m g_m^2 Q(tau) T_m(tau) T_m(0)`, so an ED exists iff -J is
+positive semidefinite (J_intra <= -|J_inter|); this script refuses any other J. At
+J_intra = -J_inter there is one channel, a boson triplet coupled to (S_1 - S_2)/sqrt(2).
 
-Which J are representable, and why that is a real constraint
-------------------------------------------------------------
-Integrating out harmonic bosons coupled linearly to operators {T_m} always gives
-`sum_m g_m^2 Q_m(tau) T_m(tau) T_m(0)`. Since `g_m^2 >= 0` and Q has a fixed sign, the
-reachable set of kernels is exactly `-(positive semidefinite) x |Q|`. So a boson-mode ED
-of this model exists **iff -J is positive semidefinite**, i.e. `J_intra <= -|J_inter|`.
-
-That is not a technicality to work around: the physically interesting DCA point
-`J_intra = 0, J_inter = 0.5` has eigenvalues +-0.5 and is therefore **not** representable
-by any real-boson Hamiltonian. CTHYB samples it perfectly well -- it is a well-defined
-action -- but there is nothing for ED to diagonalize. This script raises rather than
-silently building a non-Hermitian H, and names the offending eigenvalues.
-
-The nearest representable point is `J_intra = -J_inter`, where -J has rank 1 and the
-single channel is `u = (1, -1)/sqrt(2)`, i.e. one boson triplet coupled to
-`(S_1 - S_2)/sqrt(2)`. That is exactly how an antiferromagnetic `S_1.S_2` arises
-physically: `-g^2 (S_1 - S_2)^2` contains `+2 g^2 S_1.S_2` plus on-site `S_i^2` terms.
-
-Cost
-----
-8 fermion modes (4 impurity + 4 bath) = 256 states, blocked by total N (conserved: the
-boson coupling breaks S_z but not charge), so the largest block is C(8,4) = 70. The boson
-space is `(n_ph+1)^(3*rank)`. Rank 1 with n_ph = 3 gives 70*64 = 4480 -- a minute or two.
-Rank 2 needs `(n_ph+1)^6` and gets expensive fast; if it is ever needed, the route is to
-block additionally by `J_z = S_z + sum_m (n_{m,+1} - n_{m,-1})`, conserved for an
-SU(2)-covariant S.B coupling in a spherical boson basis. Not implemented.
-
-H is complex Hermitian because S^y is imaginary; `eigh` handles that directly.
+8 fermion modes, blocked by total N (the S.B coupling breaks S_z, not charge): the largest block
+is C(8,4) = 70 times the boson space (n_ph + 1)^(3 rank). H is complex Hermitian (S^y).
 """
 import argparse
 import os
@@ -168,9 +145,7 @@ block_keys = sorted(set(N_tot))
 tau = np.linspace(0.0, M.beta, args.n_tau)
 w_n = (2 * np.arange(args.n_iw) + 1) * np.pi / M.beta
 iw = 1j * w_n
-# Budget for one (frequency chunk, d_m, d) complex temporary in the Matsubara Lehmann sum.
-# Taking all n_iw frequencies at once built n_iw of them: a 23.6 GB peak at --n_ph 2, and
-# ~250 GB per temporary at the --n_ph 4 truncation check of the default --n_ph 3 run.
+# Memory budget of one (frequency chunk, d_m, d) complex temporary in the Matsubara Lehmann sum.
 IW_CHUNK_BYTES = 2 ** 30
 
 
@@ -239,7 +214,6 @@ def correlators(blocks, n_lev):
         # G_a(tau) and G_a(iw), m one particle fewer than n
         if key - 1 in blocks:
             idx_m, E_m, U_m, _ = blocks[key - 1]
-            # Independent of the orbital, so built once per block pair rather than per a.
             wl_m = np.exp(-np.outer(M.beta - tau, E_m - E0))
             dE = E_m[:, None] - E[None, :]
             w8 = np.exp(-M.beta * (E_m - E0))[:, None] + np.exp(-M.beta * (E - E0))[None, :]
@@ -271,6 +245,7 @@ if args.n_ph_check > 0:
     print(f"Phonon truncation: max|X(n_ph) - X(n_ph + {args.n_ph_check})| = {truncation:.2e}")
 
 occupations = -G[:, -1]
+# calibrate_mu.py parses this line.
 print("<n_a> =", np.round(occupations, 5))
 print(f"max |G_a(0) + G_a(beta) + 1| = {np.abs(G[:, 0] + G[:, -1] + 1).max():.2e}")
 
@@ -281,9 +256,7 @@ for a, (s, K) in enumerate(labels):
     Sigma_iw[a] = (iw + M.mu - M.eps_patch[K] - delta_iw) - 1.0 / G_iw[a]
 print(f"Sigma: Im<0 on the first 20 w_n for every orbital: {bool(np.all(Sigma_iw[:, :20].imag < 0))}")
 
-# S_tot.S_tot is basis independent, so for uniform J the total-spin channel must agree
-# between the site and patch bases -- the same identity check_rotation.py uses on the
-# vertex expander, here applied to the solved correlator.
+# sum_ij chi^zz_ij is <S^z_tot(tau) S^z_tot(0)>, what CTHYB measures as O_tau.
 chi_tot = chi_zz.sum(axis=(0, 1))
 print(f"sum_ij chi^zz_ij(0) = {chi_tot[0]:.6f}   (= <(S^z_tot)^2>)")
 
