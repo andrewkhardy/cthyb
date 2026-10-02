@@ -40,6 +40,8 @@ namespace triqs_cthyb {
     void collect_results(mpi::communicator const &c);
 
     private:
+    void accumulate_sweep(mc_weight_t s);
+
     qmc_data const &data;
     mc_weight_t average_sign;
     gf<imtime, scalar_valued>::view_type O_tau;
@@ -47,7 +49,12 @@ namespace triqs_cthyb {
     op_desc op1_d, op2_d;
     int min_ins;
     mc_tools::random_generator &rng;
-    
+
+    // Temporary switch while the two are compared: min_ins < 0 selects the exact sweep over the trace instead of
+    // random insertions
+    bool sweep;
+    atom_diag::op_block_mat_t op1_mat, op2_mat;   // O1 and O2 in the eigenbasis, by block of h_diag
+    std::vector<std::vector<double>> mesh_decay; // exp(-E dtau) by block and eigenstate, dtau the O_tau mesh spacing
   };
 
 } // namespace triqs_cthyb

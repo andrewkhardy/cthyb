@@ -39,10 +39,12 @@ S = Solver(beta=beta, gf_struct=[['up', 1], ['do', 1]], n_iw=30, n_tau=2 * 30 + 
 for _, g0 in S.G0_iw:
     g0 << inverse(iOmega_n + mu - sum(Vk**2 * inverse(iOmega_n - ek) for Vk, ek in zip(V, eps)))
 
-S.solve(h_int=U * n('up', 0) * n('do', 0), measure_G_tau=True, move_double=True,
-        length_cycle=20, n_warmup_cycles=int(1e4), n_cycles=int(1e5),
-        measure_O_tau=(n('up', 0), n('do', 0)))
+# Random insertions, then the exact sweep (min_ins < 0, a temporary switch)
+for min_ins in (10, -1):
+    S.solve(h_int=U * n('up', 0) * n('do', 0), measure_G_tau=True, move_double=True,
+            length_cycle=20, n_warmup_cycles=int(1e4), n_cycles=int(1e5),
+            measure_O_tau=(n('up', 0), n('do', 0)), measure_O_tau_min_ins=min_ins)
 
-# The QMC noise is a few 1e-3 here (at most 0.012 over many seeds); the correlator is ~0.3
-taus = np.array([float(t) for t in S.O_tau.mesh])
-np.testing.assert_allclose(S.O_tau.data.real, exact_O_tau(taus), atol=0.03)
+    # The QMC noise is a few 1e-3 here (at most 0.012 over many seeds); the correlator is ~0.3
+    taus = np.array([float(t) for t in S.O_tau.mesh])
+    np.testing.assert_allclose(S.O_tau.data.real, exact_O_tau(taus), atol=0.03)

@@ -31,6 +31,7 @@
 #include <triqs/mesh.hpp>
 #include <fstream>
 #include <variant>
+#include <algorithm>
 
 #include "./moves/insert.hpp"
 #include "./moves/remove.hpp"
@@ -437,17 +438,28 @@ namespace triqs_cthyb {
 
     if (params.measure_O_tau) {
 
-      const auto &[O1, O2] = *params.measure_O_tau;
-      auto comm_0          = O1 * O2 - O2 * O1;
-      auto comm_1          = O1 * _h_loc - _h_loc * O1;
-      auto comm_2          = O2 * _h_loc - _h_loc * O2;
+      // The inserted trace must run through the same blocks of h_diag as the bare one, and the inserted operators must
+      // leave the occupation kinks, hence the Lang-Firsov weight, alone. Operators diagonal in the occupation basis do
+      // both, since the blocks are spanned by Fock states. They need not commute with h_loc, and they commute with each
+      // other, which gives O(0) = O(beta).
+      auto is_occupation_diagonal = [](many_body_op_t const &op) {
+        for (auto const &[monomial, coeff] : op) {
+          std::vector<triqs::operators::indices_t> created, annihilated;
+          for (auto const &c_op : monomial) (c_op.dagger ? created : annihilated).push_back(c_op.indices);
+          std::sort(created.begin(), created.end());
+          std::sort(annihilated.begin(), annihilated.end());
+          if (created != annihilated) return false;
+        }
+        return true;
+      };
 
-      if (!comm_0.is_zero() || !comm_1.is_zero() || !comm_2.is_zero())
-        TRIQS_RUNTIME_ERROR << "measure_O_tau: the supplied operators must commute with each other and with the "
-                               "local Hamiltonian; the insertion estimator is only valid then.\n"
-                            << "[O1, O2] = " << comm_0 << "\n"
-                            << "[O1, H_loc] = " << comm_1 << "\n"
-                            << "[O2, H_loc] = " << comm_2 << "\n";
+      const auto &[O1, O2] = *params.measure_O_tau;
+      if (!is_occupation_diagonal(O1) || !is_occupation_diagonal(O2))
+        TRIQS_RUNTIME_ERROR << "measure_O_tau: O1 and O2 must be diagonal in the occupation basis, every term a product of "
+                               "number operators (n_a, N, S_z, n_a n_b, ...), so that the inserted and the bare trace share their blocks.\n"
+                            << "O1 = " << O1 << "\n"
+                            << "O2 = " << O2 << "\n";
+      // Temporary: measure_O_tau_min_ins < 0 selects the exact sweep estimator instead of random insertions
       qmc.add_measure(
          measure_O_tau_ins{O_tau, data, n_tau, O1, O2, params.measure_O_tau_min_ins, qmc.get_rng()},
          "O_tau insertion measure");

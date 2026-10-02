@@ -7,6 +7,7 @@
 
 import argparse
 import os
+import time
 import numpy as np
 import triqs.utility.mpi as mpi
 from triqs.gfs import Fourier
@@ -30,6 +31,10 @@ parser.add_argument('--dyn_n_l', type=int, default=50, help='Legendre coefficien
 parser.add_argument('--lang_firsov', type=str2bool, default=True, help='False forces every vertex stochastic')
 parser.add_argument('--density_matrix', type=str2bool, default=True,
                     help='Measure the density matrix, so the equal-time <O_i O_j> is added back to Q_conserved_tau')
+parser.add_argument('--measure_O_tau', type=int, nargs=2, default=None, metavar=('A', 'B'),
+                    help='Measure O_tau = <n_B(tau) n_A(0)>, A and B indices into model.labels (ED: chi[B, A])')
+parser.add_argument('--measure_O_tau_min_ins', type=int, default=50,
+                    help='Insertions per measurement at least; negative selects the exact sweep estimator (temporary)')
 parser.add_argument('--random_seed', type=int, default=None,
                     help='Base seed, rank r uses base + 928374 * r (default: the solver\'s fixed seed)')
 parser.add_argument('--out_dir', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))
@@ -49,6 +54,13 @@ for a, (s1, o1) in enumerate(M.labels):
     for b, (s2, o2) in enumerate(M.labels):
         S.D0_tau[s1, s2].data[:, o1, o2] = M.g[a] * M.g[b] * Q
 
+O_tau_args = {}
+if args.measure_O_tau is not None:
+    A_idx, B_idx = args.measure_O_tau
+    O_tau_args = dict(measure_O_tau=(n(*M.labels[A_idx]), n(*M.labels[B_idx])),
+                      measure_O_tau_min_ins=args.measure_O_tau_min_ins)
+
+solve_start = time.perf_counter()
 S.solve(h_int=M.h_int(),
         h_loc0=-sum(M.mu[a] * n(*M.labels[a]) for a in range(len(M.labels))),
         n_cycles=args.n_cycles,
@@ -63,7 +75,9 @@ S.solve(h_int=M.h_int(),
         measure_pert_order=True,
         measure_density_matrix=args.density_matrix,
         use_norm_as_weight=args.density_matrix,
+        **O_tau_args,
         **({} if args.random_seed is None else dict(random_seed=args.random_seed + 928374 * mpi.rank)))
+solve_seconds = time.perf_counter() - solve_start
 
 if mpi.is_master_node():
     # Conserved combinations as coefficient vectors in model.labels order, for the ED contraction
@@ -129,7 +143,11 @@ if mpi.is_master_node():
 
     os.makedirs(args.out_dir, exist_ok=True)
     seed_tag = '' if args.random_seed is None else f"_seed-{args.random_seed}"
-    filename = os.path.join(args.out_dir, f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}{seed_tag}.h5")
+    O_tau_tag = ''
+    if args.measure_O_tau is not None:
+        estimator = 'sweep' if args.measure_O_tau_min_ins < 0 else f'ins-{args.measure_O_tau_min_ins}'
+        O_tau_tag = f"_Otau-{args.measure_O_tau[0]}-{args.measure_O_tau[1]}-{estimator}"
+    filename = os.path.join(args.out_dir, f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}{O_tau_tag}{seed_tag}.h5")
     with HDFArchive(filename, 'w') as A:
         A['G_tau'] = S.G_tau
         A['G_l'] = S.G_l
@@ -158,6 +176,11 @@ if mpi.is_master_node():
         A['auto_corr_time'] = S.auto_corr_time
         A['auto_corr_time_converged'] = S.auto_corr_time_converged
         A['random_seed'] = -1 if args.random_seed is None else args.random_seed
+        A['solve_seconds'] = solve_seconds
+        if args.measure_O_tau is not None:
+            A['O_tau'] = S.O_tau
+            A['O_tau_pair'] = np.array(args.measure_O_tau)
+            A['O_tau_min_ins'] = args.measure_O_tau_min_ins
         if args.density_matrix:
             A['equal_time_conserved'] = A_equal_time
             A['orbital_occupations'] = A_occupations

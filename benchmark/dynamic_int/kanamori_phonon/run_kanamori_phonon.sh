@@ -9,15 +9,15 @@
 #SBATCH --time=23:00:00
 #
 # Two-orbital Hubbard-Kanamori + Holstein phonon: CTHYB against exact diagonalization (model: model.py).
-#   usage:  sbatch run_kanamori_phonon.sh cthyb|ed
+#   usage:  sbatch run_kanamori_phonon.sh cthyb|ed|otau
 # The ED is exact up to the phonon truncation (one bath site per spin-orbital by construction).
 # CTSEG and CTINT cannot take the spin-flip and pair-hopping terms. Plot with plot_kanamori_phonon.py.
 
 set -euo pipefail
 SOLVER="${1:-}"
 case "$SOLVER" in
-  cthyb|ed) ;;
-  *) echo "usage: sbatch $0 cthyb|ed" >&2; exit 2 ;;
+  cthyb|ed|otau) ;;
+  *) echo "usage: sbatch $0 cthyb|ed|otau" >&2; exit 2 ;;
 esac
 
 module load modules/2.5-beta1
@@ -68,6 +68,16 @@ run () {  # run <beta> <n_cycles> [extra...]
   mpirun -n "$NRANKS" python run_cthyb.py --beta "$beta" --n_cycles "$ncyc" \
       --n_warmup_cycles "$nwarm" --length_cycle "$lcyc" --max_time "$tmax" --out_dir "$OUT" "$@"
 }
+
+# <n_up,1(tau) n_up,0(0)>, not a conserved correlator, by random insertion and by the exact sweep, for
+# uniform g (all Lang-Firsov). Against ED (the ed mode writes it); plot with plot_O_tau.py. Same
+# n_cycles and no time cap, so solve_seconds compares the cost.
+if [ "$SOLVER" = otau ]; then
+  NC_OTAU=100000
+  run 10 "$NC_OTAU" $MODEL_UNIFORM --measure_O_tau 0 1 --measure_O_tau_min_ins 50 --max_time -1
+  run 10 "$NC_OTAU" $MODEL_UNIFORM --measure_O_tau 0 1 --measure_O_tau_min_ins -1 --max_time -1
+  exit 0
+fi
 
 run 100 "$NC_B100" $MODEL
 run 10  "$NC_B10"  $MODEL --mu "$MU_B10_N075"
