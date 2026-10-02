@@ -1,7 +1,9 @@
 #pragma once
 #include <nda/nda.hpp>
 #include <nda/linalg.hpp>
+#include <triqs/utility/exceptions.hpp>
 #include <triqs/utility/legendre.hpp>
+#include <algorithm>
 #include <functional>
 #include <vector>
 
@@ -23,20 +25,72 @@ namespace triqs_cthyb {
     return M;
   }
 
-  // Bosonic Legendre coefficients d_n = (2n+1)/beta int_0^beta D(tau) P_n(2 tau/beta - 1) dtau, by the trapezoidal rule on n_pt points
+  // Bosonic Legendre coefficients d_n = (2n+1)/beta int_0^beta D(tau) P_n(2 tau/beta - 1) dtau, n < N,
+  // of the piecewise-linear interpolant of D through n_pt equidistant samples (both end points
+  // included), computed exactly.
+  //
+  // In x = 2 tau/beta - 1, integrate by parts twice against the second antiderivative of P_n,
+  //   Pt_n(x) = [(P_{n+2} - P_n) / (2n+3) - (P_n - P_{n-2}) / (2n-1)] / (2n+1)    (n >= 2),
+  // which vanishes together with its derivative at x = -1 and x = 1. Only the jumps of the
+  // interpolant's slope s at the interior nodes are left:
+  //   int_{-1}^{1} D P_n dx = sum_i Pt_n(x_i) (s_i - s_{i-1}).
+  // n = 0 is the trapezoidal sum, exact for the interpolant; n = 1 has Pt_1 = (x^3/3 - x)/2 - 1/3
+  // and the boundary term -s_last Pt_1(1) = 2 s_last / 3.
+  //
+  // The only error is that of the interpolant, (w dtau)^2 / 12 relative in K for a boson of
+  // frequency w, independent of n. The trapezoidal sum of D P_n used before aliases once P_n
+  // oscillates faster than the grid near tau = 0 and beta, n > ~sqrt(beta / dtau): its d_n stop
+  // decaying and grow with n, so a larger dyn_n_l made K(tau) worse (a linear D got |d_n| ~ 3 at
+  // n = 2000 on 2001 points). See test/c++/reconstruct_K.cpp.
   inline nda::vector<double> fit_legendre_coeffs(int n_pt, double beta, std::function<double(double)> D0_eval, int N) {
     nda::vector<double> d_n = nda::zeros<double>(N);
-    double dtau             = beta / (n_pt - 1.0);
+    if (N <= 0) return d_n;
+    if (n_pt < 2) TRIQS_RUNTIME_ERROR << "fit_legendre_coeffs: need at least 2 tau points, got " << n_pt;
 
-    for (int i = 0; i < n_pt; ++i) {
-      double tau    = i * dtau;
-      double D      = D0_eval(tau);
-      double weight = (i == 0 || i == n_pt - 1) ? 0.5 : 1.0;
-      triqs::utility::legendre_generator gen;
-      gen.reset(2.0 * tau / beta - 1.0);
-      for (int n = 0; n < N; ++n) d_n(n) += weight * D * gen.next() * dtau;
+    double const h = 2.0 / (n_pt - 1); // grid step in x
+    std::vector<double> f(n_pt);
+    for (int i = 0; i < n_pt; ++i) f[i] = D0_eval(i * beta / (n_pt - 1.0));
+
+    int const m = n_pt - 2; // interior nodes x_1 .. x_{n_pt-2}, stored at k = i - 1
+    std::vector<double> x(m), jump(m);
+    for (int k = 0; k < m; ++k) {
+      x[k]    = -1.0 + (k + 1) * h;
+      jump[k] = ((f[k + 2] - f[k + 1]) - (f[k + 1] - f[k])) / h;
     }
-    for (int n = 0; n < N; ++n) d_n(n) *= (2.0 * n + 1.0) / beta;
+    double const s_last = (f[n_pt - 1] - f[n_pt - 2]) / h;
+
+    double sum = 0.5 * (f.front() + f.back());
+    for (int i = 1; i < n_pt - 1; ++i) sum += f[i];
+    d_n(0) = sum * h;
+
+    if (N > 1) {
+      double I1 = 2.0 / 3.0 * s_last;
+      for (int k = 0; k < m; ++k) I1 += ((x[k] * x[k] * x[k] / 3.0 - x[k]) / 2.0 - 1.0 / 3.0) * jump[k];
+      d_n(1) = I1;
+    }
+
+    if (N > 2) {
+      // P[j] holds P_{n-2+j} at the interior nodes, j = 0..4; start at n = 2 with P_0 .. P_4
+      std::vector<std::vector<double>> P(5, std::vector<double>(m));
+      for (int k = 0; k < m; ++k) {
+        P[0][k] = 1.0;
+        P[1][k] = x[k];
+        for (int l = 1; l < 4; ++l) P[l + 1][k] = ((2 * l + 1) * x[k] * P[l][k] - l * P[l - 1][k]) / (l + 1);
+      }
+      for (int n = 2; n < N; ++n) {
+        double const a = 1.0 / (2 * n + 3), b = 1.0 / (2 * n - 1);
+        double In      = 0.0;
+        for (int k = 0; k < m; ++k) In += ((P[4][k] - P[2][k]) * a - (P[2][k] - P[0][k]) * b) * jump[k];
+        d_n(n) = In / (2 * n + 1);
+        // Shift to n + 1: drop P_{n-2}, add P_{n+3} by the Bonnet recurrence from l = n + 2
+        std::rotate(P.begin(), P.begin() + 1, P.end());
+        int const l = n + 2;
+        for (int k = 0; k < m; ++k) P[4][k] = ((2 * l + 1) * x[k] * P[3][k] - l * P[2][k]) / (l + 1);
+      }
+    }
+
+    // d_n = (2n+1)/beta * (beta/2) int_{-1}^{1} D P_n dx
+    for (int n = 0; n < N; ++n) d_n(n) *= (2.0 * n + 1.0) / 2.0;
     return d_n;
   }
 
