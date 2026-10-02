@@ -37,7 +37,6 @@ parser.add_argument('--n_l', type=int, default=50, help='Legendre coefficients f
 parser.add_argument('--dyn_n_l', type=int, default=50, help='Legendre coefficients for the dynamical interaction')
 parser.add_argument('--lang_firsov', type=str2bool, default=True,
                     help='False samples every vertex stochastically, the cross-check of the analytic path')
-parser.add_argument('--measure_O_tau_min_ins', type=int, default=100)
 parser.add_argument('--density_matrix', type=str2bool, default=False,
                     help='Measure the atomic density matrix (and use_norm_as_weight); nothing here uses it')
 parser.add_argument('--random_seed', type=int, default=None,
@@ -87,7 +86,6 @@ S.solve(h_int=M.h_int(), h_loc0=M.h_loc0(),
         measure_pert_order=True,
         measure_D0_corr=True,
         measure_O_tau=(M.Sz_total, M.Sz_total),
-        measure_O_tau_min_ins=args.measure_O_tau_min_ins,
         measure_density_matrix=args.density_matrix,
         use_norm_as_weight=args.density_matrix,
         **({} if args.random_seed is None else dict(random_seed=args.random_seed + 928374 * mpi.rank)))

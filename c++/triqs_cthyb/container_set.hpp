@@ -44,8 +44,11 @@ namespace triqs_cthyb {
     /// Single-particle Green's function \f$ G_l \f$ in the Legendre representation.
     std::optional<G_l_t> G_l;
 
-    /// General operator Green's function \f$ O(\tau) \f$ in imaginary time.
+    /// :math:`\langle O_2(\tau) O_1(0) \rangle` for measure_O_tau = (O_1, O_2).
     std::optional<gf<imtime, scalar_valued>> O_tau;
+
+    /// :math:`\langle n_a(\tau) n_b(0) \rangle` for every pair of spin-orbitals, as nn_tau[bl_a, bl_b][tau](i_a, i_b).
+    std::optional<Q_tau_t> nn_tau;
 
     /// Density-density correlator :math:`Q(\tau) = \langle n(\tau) n(0) \rangle` in imaginary time.
     std::optional<Q_tau_t> Q_tau;

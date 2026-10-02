@@ -168,7 +168,7 @@ static int synth_constructor_167a5c32(PyObject *self, PyObject *args, PyObject *
   de("measure_G_tau", self_c.measure_G_tau, true);
   de("measure_G_l", self_c.measure_G_l, true);
   de("measure_O_tau", self_c.measure_O_tau, true);
-  de("measure_O_tau_min_ins", self_c.measure_O_tau_min_ins, true);
+  de("measure_nn_tau", self_c.measure_nn_tau, true);
   de("measure_D0_corr", self_c.measure_D0_corr, true);
   de("measure_G2_tau", self_c.measure_G2_tau, true);
   de("measure_G2_iw", self_c.measure_G2_iw, true);
@@ -255,7 +255,7 @@ measure_G_l : {par_18}, default=false
 
 measure_O_tau : {par_19}, default={}
 
-measure_O_tau_min_ins : {par_20}, default=10
+measure_nn_tau : {par_20}, default=false
 
 measure_D0_corr : {par_21}, default=false
 
@@ -349,7 +349,7 @@ h_loc0 : {par_55}, default={}
                        c2py::python_typename<bool>(),
                        c2py::python_typename<bool>(),
                        c2py::python_typename<std::optional<std::pair<triqs_cthyb::many_body_op_t, triqs_cthyb::many_body_op_t>>>(),
-                       c2py::python_typename<int>(),
+                       c2py::python_typename<bool>(),
                        c2py::python_typename<bool>(),
                        c2py::python_typename<bool>(),
                        c2py::python_typename<bool>(),
@@ -413,9 +413,13 @@ All other vertices, or all of them if false, are sampled stochastically.)DOC";
 constexpr auto _c2py_doc_member_b49d62c9 = R"DOC(Number of Legendre coefficients of the Lang-Firsov kernel and of the dynamical correlators.)DOC";
 constexpr auto _c2py_doc_member_19ebb74f = R"DOC(Measure :math:`G(\tau)`? Hermiticity :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` is enforced.)DOC";
 constexpr auto _c2py_doc_member_9fe4e2b9 = R"DOC(Measure :math:`G_l` (Legendre)? No hermiticity is enforced.)DOC";
-constexpr auto _c2py_doc_member_c478e947 = R"DOC(Measure :math:`O(\tau)` by insertion.)DOC";
-constexpr auto _c2py_doc_member_32a7d2a3 = R"DOC(Minimum number of operator insertions in the :math:`O(\tau)` insertion measure. Each
-measurement makes as many insertions as the perturbation order, or this many if more.)DOC";
+constexpr auto _c2py_doc_member_c478e947 =
+   R"DOC(Measure :math:`\langle O_2(\tau) O_1(0) \rangle` for measure_O_tau = (O_1, O_2), operators diagonal in the
+occupation basis (n_a, N, S_z, n_a n_b, ...). Each configuration is evaluated exactly at every point of the mesh.)DOC";
+constexpr auto _c2py_doc_member_bce605dc =
+   R"DOC(Measure :math:`\langle n_a(\tau) n_b(0) \rangle` for every pair of spin-orbitals (nn_tau), whether or not the
+n_a commute with h_loc. If they do and measure_D0_corr and measure_density_matrix are set, nn_tau is Q_tau from the
+occupation kinks; otherwise each configuration is evaluated exactly at every point of the mesh.)DOC";
 constexpr auto _c2py_doc_member_7bd1b214 =
    R"DOC(Measure density-density correlators from the occupation kinks: Q_conserved_tau for the density combinations that
 commute with h_loc, and Q_tau if every n_a does. The equal-time part is added by the Python Solver with the density matrix.)DOC";
@@ -479,7 +483,7 @@ static PyObject *prop_get_dict_167a5c32(PyObject *self, void *) {
   dic["measure_G_tau"]                 = self_c.measure_G_tau;
   dic["measure_G_l"]                   = self_c.measure_G_l;
   dic["measure_O_tau"]                 = self_c.measure_O_tau;
-  dic["measure_O_tau_min_ins"]         = self_c.measure_O_tau_min_ins;
+  dic["measure_nn_tau"]                = self_c.measure_nn_tau;
   dic["measure_D0_corr"]               = self_c.measure_D0_corr;
   dic["measure_G2_tau"]                = self_c.measure_G2_tau;
   dic["measure_G2_iw"]                 = self_c.measure_G2_iw;
@@ -542,7 +546,7 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_a2b1dce8>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_G_tau, _c2py_cls_a2b1dce8>("measure_G_tau", _c2py_doc_member_19ebb74f),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_G_l, _c2py_cls_a2b1dce8>("measure_G_l", _c2py_doc_member_9fe4e2b9),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_O_tau, _c2py_cls_a2b1dce8>("measure_O_tau", _c2py_doc_member_c478e947),
-   c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_O_tau_min_ins, _c2py_cls_a2b1dce8>("measure_O_tau_min_ins", _c2py_doc_member_32a7d2a3),
+   c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_nn_tau, _c2py_cls_a2b1dce8>("measure_nn_tau", _c2py_doc_member_bce605dc),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_D0_corr, _c2py_cls_a2b1dce8>("measure_D0_corr", _c2py_doc_member_7bd1b214),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_G2_tau, _c2py_cls_a2b1dce8>("measure_G2_tau", _c2py_doc_member_c35e2239),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_G2_iw, _c2py_cls_a2b1dce8>("measure_G2_iw", _c2py_doc_member_e514acd9),
@@ -654,7 +658,8 @@ constexpr auto _c2py_doc_member_a630495a = R"DOC(Single-particle Green's functio
 constexpr auto _c2py_doc_member_789d035e = R"DOC(Intermediate Green's function used to accumulate :math:`G(\tau)` (real or complex).)DOC";
 constexpr auto _c2py_doc_member_c4b4ab9c = R"DOC(Violation of the property :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` after the measurement.)DOC";
 constexpr auto _c2py_doc_member_bb9bd800 = R"DOC(Single-particle Green's function :math:`G_l` in the Legendre representation.)DOC";
-constexpr auto _c2py_doc_member_2fc3b9f2 = R"DOC(General operator Green's function :math:`O(\tau)` in imaginary time.)DOC";
+constexpr auto _c2py_doc_member_2fc3b9f2 = R"DOC(:math:` O_2() O_1(0) ` for measure_O_tau = (O_1, O_2).)DOC";
+constexpr auto _c2py_doc_member_0ce5333f = R"DOC(:math:` n_a() n_b(0) ` for every pair of spin-orbitals, as nn_tau[bl_a, bl_b][tau](i_a, i_b).)DOC";
 constexpr auto _c2py_doc_member_d13e3140 = R"DOC(Density-density correlator :math:`Q() =  n() n(0) ` in imaginary time.)DOC";
 constexpr auto _c2py_doc_member_7d53005e = R"DOC(Density-density correlator in Legendre representation.)DOC";
 constexpr auto _c2py_doc_member_39308cca =
@@ -718,6 +723,7 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_7e768e6a>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::asymmetry_G_tau, _c2py_cls_7e768e6a>("asymmetry_G_tau", _c2py_doc_member_c4b4ab9c),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::G_l, _c2py_cls_7e768e6a>("G_l", _c2py_doc_member_bb9bd800),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::O_tau, _c2py_cls_7e768e6a>("O_tau", _c2py_doc_member_2fc3b9f2),
+   c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::nn_tau, _c2py_cls_7e768e6a>("nn_tau", _c2py_doc_member_0ce5333f),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::Q_tau, _c2py_cls_7e768e6a>("Q_tau", _c2py_doc_member_d13e3140),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::Q_l, _c2py_cls_7e768e6a>("Q_l", _c2py_doc_member_7d53005e),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::Q_conserved_tau, _c2py_cls_7e768e6a>("Q_conserved_tau", _c2py_doc_member_39308cca),

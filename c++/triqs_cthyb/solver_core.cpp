@@ -31,7 +31,6 @@
 #include <triqs/mesh.hpp>
 #include <fstream>
 #include <variant>
-#include <algorithm>
 
 #include "./moves/insert.hpp"
 #include "./moves/remove.hpp"
@@ -45,6 +44,7 @@
 #include "./measures/G_tau.hpp"
 #include "./measures/G_l.hpp"
 #include "./measures/O_tau_ins.hpp"
+#include "./measures/nn_tau.hpp"
 #include "./measures/D0_corr.hpp"
 #include "./measures/dyn_vertex_corr.hpp"
 #include "./measures/perturbation_hist.hpp"
@@ -437,42 +437,23 @@ namespace triqs_cthyb {
     // Single-particle correlators
 
     if (params.measure_O_tau) {
-
-      // The inserted trace must run through the same blocks of h_diag as the bare one, and the inserted operators must
-      // leave the occupation kinks, hence the Lang-Firsov weight, alone. Operators diagonal in the occupation basis do
-      // both, since the blocks are spanned by Fock states. They need not commute with h_loc, and they commute with each
-      // other, which gives O(0) = O(beta).
-      auto is_occupation_diagonal = [](many_body_op_t const &op) {
-        for (auto const &[monomial, coeff] : op) {
-          std::vector<triqs::operators::indices_t> created, annihilated;
-          for (auto const &c_op : monomial) (c_op.dagger ? created : annihilated).push_back(c_op.indices);
-          std::sort(created.begin(), created.end());
-          std::sort(annihilated.begin(), annihilated.end());
-          if (created != annihilated) return false;
-        }
-        return true;
-      };
-
-      const auto &[O1, O2] = *params.measure_O_tau;
-      if (!is_occupation_diagonal(O1) || !is_occupation_diagonal(O2))
-        TRIQS_RUNTIME_ERROR << "measure_O_tau: O1 and O2 must be diagonal in the occupation basis, every term a product of "
-                               "number operators (n_a, N, S_z, n_a n_b, ...), so that the inserted and the bare trace share their blocks.\n"
-                            << "O1 = " << O1 << "\n"
-                            << "O2 = " << O2 << "\n";
-      // Temporary: measure_O_tau_min_ins < 0 selects the exact sweep estimator instead of random insertions
-      qmc.add_measure(
-         measure_O_tau_ins{O_tau, data, n_tau, O1, O2, params.measure_O_tau_min_ins, qmc.get_rng()},
-         "O_tau insertion measure");
+      auto const &[O1, O2] = *params.measure_O_tau;
+      qmc.add_measure(measure_O_tau_ins{O_tau, data, n_tau, O1, O2}, "O_tau measure");
     }
+
+    // With every n_a commuting with h_loc, the occupation kinks give <n_a(tau) n_b(0)> as Q_tau, which the Python Solver
+    // completes with the equal-time part from the density matrix and copies to nn_tau. The sweep is measured otherwise.
+    bool nn_tau_from_kinks = false;
 
     if (params.measure_D0_corr) {
       // The occupation kinks only determine correlators of the density combinations that commute with h_loc
       auto conserved              = conserved_densities(_h_loc, fops, linindex);
       conserved_density_operators = conserved.operators;
+      nn_tau_from_kinks           = params.measure_density_matrix && conserved.vectors.size() == linindex.size();
       if (conserved.vectors.size() < linindex.size() && params.verbosity >= 1) {
         std::cerr << "WARNING (measure_D0_corr): not every orbital density commutes with h_loc (e.g. spin-flip or\n"
                      "pair-hopping terms), so <n_a(tau) n_b(0)> cannot be measured from occupation kinks and\n"
-                     "Q_tau / Q_l are left empty. Measuring instead <O_i(tau) O_j(0)> in Q_conserved_tau / Q_conserved_l\n"
+                     "Q_tau / Q_l are left empty (measure_nn_tau measures it by the sweep). Measuring instead <O_i(tau) O_j(0)> in Q_conserved_tau / Q_conserved_l\n"
                      "for the "
                   << conserved.operators.size() << " density combination(s) that do commute with h_loc (conserved_density_operators):\n";
         for (size_t i = 0; i < conserved.operators.size(); ++i) std::cerr << "    O_" << i << " = " << conserved.operators[i] << "\n";
@@ -480,6 +461,15 @@ namespace triqs_cthyb {
       qmc.add_measure(measure_D0_corr{Q_l, Q_tau, Q_conserved_l, Q_conserved_tau, data, constr_parameters.n_tau_bosonic, params.dyn_n_l,
                                       gf_struct, conserved.vectors},
                       "D0 density-density correlator measure");
+    }
+
+    if (params.measure_nn_tau) {
+      if (nn_tau_from_kinks) {
+        nn_tau.reset();
+        if (params.verbosity >= 1)
+          std::cout << "measure_nn_tau: every orbital density commutes with h_loc, so nn_tau is Q_tau from the occupation kinks\n";
+      } else
+        qmc.add_measure(measure_nn_tau{nn_tau, data, constr_parameters.n_tau_bosonic, gf_struct}, "nn_tau measure");
     }
 
     if (params.measure_G_tau) {

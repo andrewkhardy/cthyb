@@ -33,8 +33,8 @@ parser.add_argument('--density_matrix', type=str2bool, default=True,
                     help='Measure the density matrix, so the equal-time <O_i O_j> is added back to Q_conserved_tau')
 parser.add_argument('--measure_O_tau', type=int, nargs=2, default=None, metavar=('A', 'B'),
                     help='Measure O_tau = <n_B(tau) n_A(0)>, A and B indices into model.labels (ED: chi[B, A])')
-parser.add_argument('--measure_O_tau_min_ins', type=int, default=50,
-                    help='Insertions per measurement at least; negative selects the exact sweep estimator (temporary)')
+parser.add_argument('--measure_nn_tau', type=str2bool, default=False,
+                    help='Measure nn_tau = <n_a(tau) n_b(0)> for every pair, saved in model.labels order (ED: chi[a, b])')
 parser.add_argument('--random_seed', type=int, default=None,
                     help='Base seed, rank r uses base + 928374 * r (default: the solver\'s fixed seed)')
 parser.add_argument('--out_dir', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))
@@ -57,8 +57,7 @@ for a, (s1, o1) in enumerate(M.labels):
 O_tau_args = {}
 if args.measure_O_tau is not None:
     A_idx, B_idx = args.measure_O_tau
-    O_tau_args = dict(measure_O_tau=(n(*M.labels[A_idx]), n(*M.labels[B_idx])),
-                      measure_O_tau_min_ins=args.measure_O_tau_min_ins)
+    O_tau_args = dict(measure_O_tau=(n(*M.labels[A_idx]), n(*M.labels[B_idx])))
 
 solve_start = time.perf_counter()
 S.solve(h_int=M.h_int(),
@@ -75,6 +74,7 @@ S.solve(h_int=M.h_int(),
         measure_pert_order=True,
         measure_density_matrix=args.density_matrix,
         use_norm_as_weight=args.density_matrix,
+        measure_nn_tau=args.measure_nn_tau,
         **O_tau_args,
         **({} if args.random_seed is None else dict(random_seed=args.random_seed + 928374 * mpi.rank)))
 solve_seconds = time.perf_counter() - solve_start
@@ -143,11 +143,9 @@ if mpi.is_master_node():
 
     os.makedirs(args.out_dir, exist_ok=True)
     seed_tag = '' if args.random_seed is None else f"_seed-{args.random_seed}"
-    O_tau_tag = ''
-    if args.measure_O_tau is not None:
-        estimator = 'sweep' if args.measure_O_tau_min_ins < 0 else f'ins-{args.measure_O_tau_min_ins}'
-        O_tau_tag = f"_Otau-{args.measure_O_tau[0]}-{args.measure_O_tau[1]}-{estimator}"
-    filename = os.path.join(args.out_dir, f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}{O_tau_tag}{seed_tag}.h5")
+    O_tau_tag = '' if args.measure_O_tau is None else f"_Otau-{args.measure_O_tau[0]}-{args.measure_O_tau[1]}"
+    nn_tau_tag = '_nntau' if args.measure_nn_tau else ''
+    filename = os.path.join(args.out_dir, f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}{O_tau_tag}{nn_tau_tag}{seed_tag}.h5")
     with HDFArchive(filename, 'w') as A:
         A['G_tau'] = S.G_tau
         A['G_l'] = S.G_l
@@ -180,7 +178,10 @@ if mpi.is_master_node():
         if args.measure_O_tau is not None:
             A['O_tau'] = S.O_tau
             A['O_tau_pair'] = np.array(args.measure_O_tau)
-            A['O_tau_min_ins'] = args.measure_O_tau_min_ins
+        if args.measure_nn_tau:
+            A['nn_tau'] = np.array([[S.nn_tau[s1, s2].data[:, o1, o2].real for s2, o2 in M.labels]
+                                    for s1, o1 in M.labels])
+            A['nn_tau_tau'] = np.array([float(t) for t in S.nn_tau[M.labels[0][0], M.labels[0][0]].mesh])
         if args.density_matrix:
             A['equal_time_conserved'] = A_equal_time
             A['orbital_occupations'] = A_occupations

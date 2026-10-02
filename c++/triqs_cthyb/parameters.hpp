@@ -126,12 +126,14 @@ namespace triqs_cthyb {
     /// Measure \f$ G_l \f$ (Legendre)? No hermiticity is enforced.
     bool measure_G_l = false;
 
-    /// Measure \f$ O(\tau) \f$ by insertion.
+    /// Measure \f$ \langle O_2(\tau) O_1(0) \rangle \f$ for measure_O_tau = (O_1, O_2), operators diagonal in the
+    /// occupation basis (n_a, N, S_z, n_a n_b, ...). Each configuration is evaluated exactly at every point of the mesh.
     std::optional<std::pair<many_body_op_t, many_body_op_t>> measure_O_tau = {};
 
-    /// Minimum number of operator insertions in the \f$ O(\tau) \f$ insertion measure. Each
-    /// measurement makes as many insertions as the perturbation order, or this many if more.
-    int measure_O_tau_min_ins = 10;
+    /// Measure \f$ \langle n_a(\tau) n_b(0) \rangle \f$ for every pair of spin-orbitals (nn_tau), whether or not the
+    /// n_a commute with h_loc. If they do and measure_D0_corr and measure_density_matrix are set, nn_tau is Q_tau from the
+    /// occupation kinks; otherwise each configuration is evaluated exactly at every point of the mesh.
+    bool measure_nn_tau = false;
 
     /// Measure density-density correlators from the occupation kinks: Q_conserved_tau for the density combinations that
     /// commute with h_loc, and Q_tau if every n_a does. The equal-time part is added by the Python Solver with the density matrix.

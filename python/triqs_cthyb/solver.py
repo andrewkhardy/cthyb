@@ -256,5 +256,8 @@ class Solver(SolverCore):
                     offset = np.array([[equal_time(n(bl1, i1) * n(bl2, i2)) for i2 in range(n2)] for i1 in range(n1)])
                     self.Q_l[bl1, bl2].data[0, :, :] += offset
                     self.Q_tau[bl1, bl2].data[:] += offset
+                # The C++ solver measures nn_tau by the sweep only where Q_tau cannot give it
+                if self.last_solve_parameters.measure_nn_tau:
+                    self.nn_tau = self.Q_tau.copy()
 
         return solve_status

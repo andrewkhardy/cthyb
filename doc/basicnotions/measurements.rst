@@ -57,11 +57,13 @@ Local susceptibility and other operator pairs
 Higher order response functions like local susceptibilities
 
 .. math::
-   \chi_{\hat{O}_1, \hat{O}_2}(\tau) \equiv \langle \hat{O}_1(\tau) \hat{O}_2 \rangle
+   \chi_{\hat{O}_1, \hat{O}_2}(\tau) \equiv \langle \hat{O}_2(\tau) \hat{O}_1(0) \rangle
 
-can be sampled (by insertion) in the trace. This approach is limited to operators :math:`\hat{O}_1` and :math:`\hat{O}_2` that commutes with each other and the local Hamiltonian, :math:`[\hat{O}_1, \hat{O}_2] = 0`, :math:`[\hat{O}_i, H_{loc}]=0`.
+are measured in the trace for operators diagonal in the occupation basis (:math:`\hat{n}_a`, :math:`\hat{N}`, :math:`\hat{S}_z`, :math:`\hat{n}_a \hat{n}_b`, ...); they need not commute with the local Hamiltonian. Each configuration is evaluated exactly at every point of the imaginary-time mesh.
 
-This measurement is controlled by the argument ``measure_O_tau``. To enable the measurement pass a tuple of the operators to be sampled, e.g. ``measure_O_tau = (n('up',0), n('do',0))`` will measure the response function :math:`\langle \hat{n}_\uparrow(\tau) \hat{n}_\downarrow \rangle`. The resulting response function is accessible as the ``O_tau`` attribute of the solver object. The number of operator insertions is by default taken to be the perturbation order of each configuration, however, for cases with perturbation order lower than the parameter ``measure_O_tau_min_ins`` the number of insertions is kept fixed to this minimum value, the default value is a minimum of 10 insertions.
+This measurement is controlled by the argument ``measure_O_tau``. To enable it pass a tuple of the two operators, e.g. ``measure_O_tau = (n('up',0), n('do',0))`` measures :math:`\langle \hat{n}_\downarrow(\tau) \hat{n}_\uparrow(0) \rangle`: ``(O_1, O_2)`` gives :math:`\langle \hat{O}_2(\tau) \hat{O}_1(0) \rangle`. The result is the ``O_tau`` attribute of the solver object.
+
+With ``measure_nn_tau = True`` the solver measures :math:`\langle \hat{n}_a(\tau) \hat{n}_b(0) \rangle` for every pair of spin-orbitals at once, as ``nn_tau[bl_a, bl_b][tau](i_a, i_b)`` on the ``n_tau_bosonic`` mesh. When every :math:`\hat{n}_a` commutes with the local Hamiltonian and ``measure_D0_corr`` and ``measure_density_matrix`` are set, ``nn_tau`` is ``Q_tau`` from the occupation kinks, and nothing more is measured.
 
 Two-particle Green's functions
 ------------------------------

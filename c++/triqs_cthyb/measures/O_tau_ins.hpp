@@ -25,36 +25,26 @@
 #include <triqs/mesh.hpp>
 
 #include "../qmc_data.hpp"
+#include "./occupation_sweep.hpp"
 
 namespace triqs_cthyb {
 
   using namespace triqs::gfs;
   using namespace triqs::mesh;
 
-  // Measure imaginary time Green's function (all blocks)
+  // <O2(tau) O1(0)> for measure_O_tau = (O1, O2), operators diagonal in the occupation basis
   class measure_O_tau_ins {
 
     public:
-    measure_O_tau_ins(std::optional<gf<imtime, scalar_valued>> &O_tau_opt, qmc_data const &data, int n_tau, many_body_op_t const &op1, many_body_op_t const &op2, int min_ins, mc_tools::random_generator &rng);
-    void accumulate(mc_weight_t s);
+    measure_O_tau_ins(std::optional<gf<imtime, scalar_valued>> &O_tau_opt, qmc_data const &data, int n_tau, many_body_op_t const &op1,
+                      many_body_op_t const &op2);
+    void accumulate(mc_weight_t s) { sweep.accumulate(s); }
     void collect_results(mpi::communicator const &c);
 
     private:
-    void accumulate_sweep(mc_weight_t s);
-
-    qmc_data const &data;
-    mc_weight_t average_sign;
+    occupation_sweep sweep;
+    bool symmetric; // O1 = O2, so that O(tau) = O(beta - tau)
     gf<imtime, scalar_valued>::view_type O_tau;
-    many_body_op_t op1, op2;
-    op_desc op1_d, op2_d;
-    int min_ins;
-    mc_tools::random_generator &rng;
-
-    // Temporary switch while the two are compared: min_ins < 0 selects the exact sweep over the trace instead of
-    // random insertions
-    bool sweep;
-    atom_diag::op_block_mat_t op1_mat, op2_mat;   // O1 and O2 in the eigenbasis, by block of h_diag
-    std::vector<std::vector<double>> mesh_decay; // exp(-E dtau) by block and eigenstate, dtau the O_tau mesh spacing
   };
 
 } // namespace triqs_cthyb

@@ -23,8 +23,6 @@ def add_cthyb_args(parser):
                         help="Route the density coupling through Lang-Firsov (False: fully stochastic)")
     parser.add_argument("--dyn_n_l", type=int, default=50, help="Legendre coefficients for the Lang-Firsov kernel")
     parser.add_argument("--n_l", type=int, default=50, help="Legendre coefficients for G_l")
-    parser.add_argument("--measure_O_tau_min_ins", type=int, default=50,
-                        help="Minimum insertions for the O_tau measurement")
     parser.add_argument("--density_matrix", type=str2bool, default=True,
                         help="Measure the density matrix (and use_norm_as_weight); corr_alt needs it")
 
@@ -51,7 +49,7 @@ S.solve(h_int=model.h_int(), h_loc0=model.h_loc0(),
         n_cycles=args.n_cycles, max_time=args.max_time,
         measure_G_tau=True, measure_G_l=True,
         measure_pert_order=True,
-        measure_O_tau=(M.N_TOT, M.N_TOT), measure_O_tau_min_ins=args.measure_O_tau_min_ins,
+        measure_O_tau=(M.N_TOT, M.N_TOT),
         measure_D0_corr=True,
         measure_density_matrix=args.density_matrix, use_norm_as_weight=args.density_matrix,
         lang_firsov=args.lang_firsov, dyn_n_l=args.dyn_n_l)
