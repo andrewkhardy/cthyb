@@ -64,6 +64,8 @@ namespace triqs_cthyb {
 
   /// Collect the full vertex list for a solve: the user's explicit vertices, plus
   /// D0_tau/Jperp_tau expanded into the same representation via the two functions above.
+  /// Vertices with the same op1, op2 and mesh are merged into one with the summed coupling,
+  /// and vertices whose coupling vanishes are dropped.
   std::vector<dyn_vertex_t> collect_dyn_vertices(std::vector<dyn_vertex_t> const &explicit_vertices, block2_gf_const_view<imtime> D0t,
                                                  gf_const_view<imtime, matrix_valued> Jperpt, gf_struct_t const &gf_struct);
 
@@ -197,5 +199,11 @@ namespace triqs_cthyb {
   };
   density_split_counts_t split_density_couplings(classified_dyn_vertices_t &classified, std::vector<nda::vector<double>> const &conserved_combinations,
                                                  fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex);
+
+  /// Print how the dynamical vertices are routed: how many are resummed analytically and in
+  /// terms of which conserved densities, and how many are sampled stochastically.
+  void print_dyn_routing(int n_vertices, classified_dyn_vertices_t const &classified, std::vector<many_body_op_t> const &conserved_operators,
+                         density_split_counts_t const &split, bool lang_firsov_requested, fundamental_operator_set const &fops,
+                         std::map<std::pair<int, int>, int> const &linindex);
 
 } // namespace triqs_cthyb

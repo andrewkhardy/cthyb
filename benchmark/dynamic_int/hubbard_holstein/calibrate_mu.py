@@ -2,13 +2,9 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-"""Find the mu giving a target density for the Hubbard-Holstein model, to pin in
-run_hubbard_holstein.sh so every solver runs the identical Hamiltonian.
+"""Find the mu giving a target density, to pin in run_hubbard_holstein.sh. The probe is a
+short CTSEG run (sign-free here, and much faster than CTHYB).
 
-CTSEG is the probe: sign-free for a retarded density-density interaction and much faster
-than CTHYB, so the whole scan costs less than one production point.
-
-    module load modules/2.5-beta1 && module load triqs/multiorbital
     python calibrate_mu.py --beta 10  --target_n 0.75
     python calibrate_mu.py --beta 100 --target_n 0.75
 """
@@ -29,8 +25,7 @@ from common import calibrate, kernels  # noqa: E402
 def add_calibration_args(parser):
     parser.add_argument("--target_n", type=float, default=0.75,
                         help="Target density per spin-orbital (0.5 is half filling)")
-    parser.add_argument("--probe_cycles", type=int, default=20000,
-                        help="MC cycles per probe; the bisection cannot resolve mu below its noise")
+    parser.add_argument("--probe_cycles", type=int, default=20000, help="MC cycles per probe")
     parser.add_argument("--tol", type=float, default=2e-3, help="Tolerance on the density")
 
 
@@ -41,7 +36,7 @@ mu_half = M.Model(args).mu
 if mpi.is_master_node():
     print(f"hubbard_holstein mu calibration: beta={args.beta:g} U={args.U:g} g={args.g:g} "
           f"omega_0={args.omega_0:g} bath={args.bath}")
-    print(f"  half filling is mu = {mu_half:.6f} (exact, = U/2 - g^2/omega_0^2); "
+    print(f"  half filling is mu = {mu_half:.6f} (U/2 - g^2/omega_0^2); "
           f"scanning for n = {args.target_n}")
 
 
@@ -63,8 +58,7 @@ def density(mu):
             measure_nn_tau=False, measure_F_tau=False, measure_pert_order=False,
             measure_densities=True)
 
-    # Direct time-average measurement: -G(beta) is far too noisy for a short probe and made
-    # an earlier version of this scan non-monotonic.
+    # The measured densities, since -G(beta) is too noisy for a short probe
     return float(np.mean([S.results.densities[bl][i]
                           for bl, size in M.GF_STRUCT for i in range(size)]))
 

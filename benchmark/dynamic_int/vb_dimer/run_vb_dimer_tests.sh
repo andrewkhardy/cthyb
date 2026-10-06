@@ -8,28 +8,17 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --time=06:00:00
 #
-# Isolating the CTHYB-vs-ED disagreement at the J_ED point (G off by ~8% at w ~ 2, beta = 10).
+# Diagnostics for the CTHYB-vs-ED disagreement at the J_ED point, beta = 10. Both use
+# n_l = 100, so Sigma from G_l is not Legendre-truncated.
 #
-#   usage:  sbatch run_vb_dimer_tests.sh cthyb
-#           sbatch run_vb_dimer_tests.sh ed
+#   sbatch run_vb_dimer_tests.sh cthyb
+#   sbatch run_vb_dimer_tests.sh ed
 #
-# Two tests, each in its own directory so nothing mixes with the main results or each other:
+#   test_nl100_rot-site   the benchmark itself; its ED is the main rot-site file, linked in.
+#   test_nl100_rot-none   --rotation none: no patch-off-diagonal vertices. Its own ED.
 #
-#   test_nl100_rot-site   the benchmark itself (--rotation site) with n_l = 100 instead of 50,
-#                         so Sigma from G_l is not Legendre-truncated below w ~ 20 at beta = 10.
-#                         ED reference: the main rot-site ED file, linked in (n_l is CTHYB-only,
-#                         so it is the same reference).
-#   test_nl100_rot-none   --rotation none: the interaction is local in the patch (working) basis,
-#                         so there are no patch-off-diagonal c^dag_K c_K' vertices. Its own ED.
-#
-# Reading them: if CTHYB matches ED at rot-none but not at rot-site, the fault is in the
-# off-diagonal (general 4-index) stochastic vertex path. If both disagree, it is elsewhere.
-#
-# Plot with plot_vb_dimer.py, SUBDIR = "test_nl100_rot-site" / "test_nl100_rot-none" and
-# ROTATION = "site" / "none" to match.
-#
-# Wall clock: cthyb is 2 runs x MAX_TIME = 1 h; ed is one --n_ph 3 solve plus the --n_ph 4
-# truncation check, ~2 h on the main run's timing.
+# If CTHYB matches ED at rot-none but not at rot-site, the off-diagonal vertex path is at fault.
+# Plot with plot_vb_dimer.py, SUBDIR and ROTATION set to match.
 
 set -euo pipefail
 SOLVER="${1:-}"
@@ -53,8 +42,7 @@ NC=500000
 dir_for () { echo "$OUT/test_nl${N_L}_rot-$1"; }
 mkdir -p "$(dir_for site)" "$(dir_for none)"
 
-# The rot-site ED reference is the main run's file. Linked, not copied, so a rerun of the
-# main ED is picked up; skipped with a note if it is not there yet.
+# Link the main rot-site ED file, if it exists yet
 for f in "$OUT"/ed_beta-${BETA}_*_Jintra--0.5_Jinter-0.5_*_mu-1.0_bath-V-0.5_rot-site_nph-3.h5; do
   if [ -e "$f" ]; then
     ln -sf "$f" "$(dir_for site)/"

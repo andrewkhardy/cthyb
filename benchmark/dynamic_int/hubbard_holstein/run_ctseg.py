@@ -2,14 +2,12 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-"""CTSEG run for the single-orbital Hubbard-Holstein benchmark (model: model.py).
+"""CTSEG run of the Hubbard-Holstein model in model.py, the same action as run_cthyb.py.
 
-Same action as CTHYB -- same D0_tau, both carrying the explicit 1/2 -- so a difference
-between the two is solver physics. Sigma comes from the improved estimator F(iw)/G(iw),
-which uses no G0, mu or Delta at all and is therefore an independent check on the
-chemical-potential bookkeeping; the Dyson inversion is saved alongside it.
+    mpirun -n <N> python run_ctseg.py --beta 10 --filling 0.5
 
-Run under `triqs/multiorbital`, which now carries cthyb, ctseg and ctint together.
+Sigma comes from the improved estimator F(iw)/G(iw), which needs no mu or Delta; the Dyson
+inversion is saved alongside it.
 """
 import os
 import sys
@@ -24,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import model as M  # noqa: E402
 from common import kernels, selfenergy  # noqa: E402
 
-args = M.parse_args("CTSEG single-orbital Hubbard-Holstein benchmark")
+args = M.parse_args("CTSEG: single-orbital Hubbard-Holstein")
 model = M.Model(args)
 if mpi.is_master_node():
     print(model.report())

@@ -3,32 +3,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
 r"""
-Chemical-potential calibration for the dynamic_int benchmarks.
-
-Away from half filling there is no closed form for mu, so it is found once by a scan and
-then *pinned* in the submit script, so every solver runs the identical model. That matters
-more than it might seem: if each solver found its own mu, differences in Sigma would mix
-solver disagreement with a different Hamiltonian, and the benchmark would measure nothing.
-
-`bisect_mu` takes any callable `density(mu) -> n`, so it works with a cheap QMC probe
-(CTSEG is the natural choice for the single-orbital models: sign-free here and ~14x faster
-than CTHYB) or with an exact diagonalization (for the multiorbital benchmarks, where ED
-gives `n(mu)` exactly in seconds).
-
-Monotonicity makes this well-posed: `n(mu)` is non-decreasing for any fermionic impurity
-model, so bracketing and bisecting is safe. With a stochastic `density` the bisection
-cannot converge below the noise, so `tol` should be set near the statistical error of the
-probe and `n_probe_cycles` kept small -- there is no point resolving mu to 1e-4 when the
-density is only known to 1e-3.
+Chemical-potential calibration. Away from half filling, mu is found once by bisection and pinned
+in the submit script, so every solver runs the identical model. `density(mu)` can be a short QMC
+probe or an exact ED; n(mu) is monotonic, so bracketing then bisecting is safe. With a noisy
+probe, set `tol` near its statistical error.
 """
 
 
 def bracket_mu(density, mu_guess, target_n, step=0.5, max_expand=8, verbose=True):
-    """Find `(mu_lo, mu_hi)` with `density(mu_lo) <= target_n <= density(mu_hi)`.
-
-    Expands outward from `mu_guess` geometrically. Returns the bracket and a dict of every
-    `(mu, n)` evaluated, so nothing is wasted and the scan can be inspected afterwards.
-    """
+    """`(mu_lo, mu_hi)` with density(mu_lo) <= target_n <= density(mu_hi), and every (mu, n) probed."""
     samples = {}
 
     def n_of(mu):
@@ -57,12 +40,7 @@ def bracket_mu(density, mu_guess, target_n, step=0.5, max_expand=8, verbose=True
 
 
 def bisect_mu(density, target_n, mu_guess=0.0, tol=2e-3, max_iter=20, step=0.5, verbose=True):
-    """Bisect `density(mu) = target_n`.
-
-    Returns `(mu, n_achieved, samples)`. `tol` is on the *density*, not on mu, which is the
-    quantity actually known; with a stochastic probe set it near the probe's statistical
-    error rather than smaller.
-    """
+    """Bisect density(mu) = target_n to within `tol` in the density. Returns (mu, n_achieved, samples)."""
     (mu_lo, mu_hi), samples = bracket_mu(density, mu_guess, target_n, step=step, verbose=verbose)
     if mu_lo == mu_hi:
         return mu_lo, samples[mu_lo], samples
@@ -89,7 +67,7 @@ def bisect_mu(density, target_n, mu_guess=0.0, tol=2e-3, max_iter=20, step=0.5, 
 
 
 def report(mu, n_achieved, target_n, label, variable):
-    """The block to paste into a submit script, so the calibration is recorded not retyped."""
+    """The line to paste into the submit script."""
     lines = [
         "",
         "=" * 74,
@@ -103,11 +81,3 @@ def report(mu, n_achieved, target_n, label, variable):
     ]
     return "\n".join(lines)
 
-
-# There used to be an `interpolate_from_samples` here that re-estimated mu by fitting all
-# the (mu, n) probes. It was deleted: `bisect_mu` already stops when |n - target| < tol, so
-# its endpoint is the answer, and the fit could only disagree with it by being wrong. It
-# was -- when a probe landed exactly on the target, the straddling-pair branch collapsed
-# (i == j) and it fell back to a straight-line fit over the whole bracket, where mu(n) is
-# distinctly nonlinear. On an exact ED probe that turned mu = 3.624982 (n = 0.750000) into
-# 3.670359, which is n = 0.7561. Report the bisection endpoint.

@@ -21,6 +21,7 @@
 #include "./dynamical_interactions.hpp"
 #include "./math_utils.hpp"
 #include <triqs/utility/exceptions.hpp>
+#include <algorithm>
 #include <limits>
 #include <set>
 
@@ -105,7 +106,7 @@ namespace triqs_cthyb {
     }
     if (n_terms != 1)
       TRIQS_RUNTIME_ERROR << op_name << " must be a single fermion bilinear (e.g. c_dag('up',0)*c('down',0)), but has " << n_terms
-                          << " terms.";
+                          << " terms. From Python, use Solver.add_dyn_int, which accepts any quadratic operator.";
     if (the_monomial.size() != 2)
       TRIQS_RUNTIME_ERROR << op_name << " must be a bilinear (exactly one creation and one annihilation operator), but has "
                           << the_monomial.size() << " operators.";
@@ -113,17 +114,12 @@ namespace triqs_cthyb {
       TRIQS_RUNTIME_ERROR << op_name << " must contain one creation and one annihilation operator, but has two "
                           << (the_monomial[0].dagger ? "creation" : "annihilation") << " operators.";
 
-    // A scalar prefactor on op1/op2 is redundant with the coupling -- D(tau) (a M1)(b M2) is the
-    // same vertex as (a b D(tau)) M1 M2 -- and only the coupling is ever read here, so a factor
-    // written on the operator would be dropped. Worse, it would be dropped *inconsistently*:
-    // apply_lang_firsov_shift uses op1/op2 as full expressions, coefficients included, so the
-    // analytic static shift and the sampled retarded part of the same vertex would disagree by
-    // that factor. Refuse it rather than pick one interpretation silently.
+    // Only the coupling is sampled, while apply_lang_firsov_shift uses op1/op2 with their
+    // coefficients, so a prefactor on the operator would be applied inconsistently.
     if (std::abs(the_coeff - 1.0) > 1.e-12)
       TRIQS_RUNTIME_ERROR << op_name << " carries the scalar coefficient " << the_coeff
-                          << ", but a dynamical vertex is coupling(tau) * op1(tau) * op2(0): every numeric factor "
-                             "belongs in the coupling, which is the only place it is read. Pass the bare bilinear "
-                             "(n('up',0), not 0.5*n('up',0)) and multiply the coupling by the factor instead.";
+                          << ", but add_dyn_vertex takes bare bilinears with every numeric factor in the coupling. "
+                             "From Python, use Solver.add_dyn_int, which accepts any quadratic operator.";
 
     // Reverse-lookup (block_index, inner_index) from the linear index fops already
     // assigns each fundamental operator -- exactly the same primitive the existing
@@ -214,7 +210,20 @@ namespace triqs_cthyb {
     std::vector<dyn_vertex_t> vertices = explicit_vertices;
     expand_D0_into_vertices(D0t, gf_struct, vertices);
     expand_Jperp_into_vertices(Jperpt, gf_struct, vertices);
-    return vertices;
+
+    // Vertices with the same op1, op2 and mesh are one vertex with the summed coupling.
+    // Expanding e.g. a rotated S_i.S_j over all (i, j) produces the same bilinear pair many
+    // times, often with opposite signs; sampling those separately would only add noise.
+    std::vector<dyn_vertex_t> merged;
+    for (auto const &v : vertices) {
+      auto same = [&v](dyn_vertex_t const &m) { return m.op1 == v.op1 && m.op2 == v.op2 && m.coupling.mesh() == v.coupling.mesh(); };
+      if (auto it = std::find_if(merged.begin(), merged.end(), same); it != merged.end())
+        it->coupling.data() += v.coupling.data();
+      else
+        merged.push_back(v);
+    }
+    std::erase_if(merged, [](dyn_vertex_t const &m) { return max_element(nda::abs(m.coupling.data())) < 1.e-13; });
+    return merged;
   }
 
   // -----------------------------------------------------------------------------------
@@ -304,7 +313,7 @@ namespace triqs_cthyb {
         U_renorm(lin2, lin1) -= 0.5 * Kprime_0;
       }
 
-      if (verbosity >= 2)
+      if (verbosity >= 4)
         std::cout << "Lang-Firsov K'(0) shift: K'(0)=" << Kprime_0 << " for vertex " << v.op1 << " -- " << v.op2 << std::endl;
     }
 
@@ -593,6 +602,41 @@ namespace triqs_cthyb {
     classified.stochastic = std::move(other_vertices);
     counts.n_stochastic   = add_vertices(residual, classified.stochastic);
     return counts;
+  }
+
+  // -----------------------------------------------------------------------------------
+
+  void print_dyn_routing(int n_vertices, classified_dyn_vertices_t const &classified, std::vector<many_body_op_t> const &conserved_operators,
+                         density_split_counts_t const &split, bool lang_firsov_requested, fundamental_operator_set const &fops,
+                         std::map<std::pair<int, int>, int> const &linindex) {
+    if (n_vertices == 0) return;
+    auto is_density_pair = [&](dyn_vertex_t const &v) {
+      return is_density_bilinear(extract_bilinear(v.op1, fops, linindex, "op1"))
+         && is_density_bilinear(extract_bilinear(v.op2, fops, linindex, "op2"));
+    };
+    auto n_lf      = classified.lang_firsov.size();
+    auto n_st      = classified.stochastic.size();
+    auto n_st_dens = std::count_if(classified.stochastic.begin(), classified.stochastic.end(), is_density_pair);
+
+    std::cout << "\nDynamical interaction: " << n_vertices << " vertices\n";
+    if (!lang_firsov_requested)
+      std::cout << "  Lang-Firsov (analytic): off (lang_firsov = false)\n";
+    else if (n_lf == 0)
+      std::cout << "  Lang-Firsov (analytic): 0 vertices\n";
+    else {
+      std::cout << "  Lang-Firsov (analytic): " << n_lf << " density-density vertices, coupling only the densities conserved by h_loc:\n";
+      for (size_t i = 0; i < conserved_operators.size(); ++i) std::cout << "      O_" << i << " = " << conserved_operators[i] << "\n";
+    }
+    std::cout << "  Stochastic (sampled):   " << n_st << " vertices";
+    if (n_st > 0) std::cout << " (" << n_st_dens << " density-density, " << n_st - n_st_dens << " other)";
+    std::cout << "\n";
+    if (split.n_input > 0 && split.block_structured)
+      std::cout << "  " << split.n_input << " density-density vertices with non-conserved densities were split into a Lang-Firsov part "
+                << "and a stochastic residual.\n";
+    else if (split.n_input > 0)
+      std::cout << "  " << split.n_input << " density-density vertices with non-conserved densities stay stochastic: the conserved "
+                << "combinations are not sums over disjoint sets of orbitals.\n";
+    std::cout << std::endl;
   }
 
 } // namespace triqs_cthyb

@@ -212,53 +212,24 @@ namespace triqs_cthyb {
     _h_loc  = params.h_int + _h_loc0;
 
     // ------------------------------------------------------------------
-    // Dynamical interactions: build the unified vertex list (the user's explicit
-    // add_dyn_vertex(...) calls, plus D0_tau/Jperp_tau expanded into the same
-    // representation), and classify each vertex as Lang-Firsov-eligible or
-    // stochastic-only purely by operator algebra against h_loc -- nothing here
-    // guesses a block layout, see dynamical_interactions.hpp for the full picture.
-    // When params.lang_firsov is false, every vertex is routed to the stochastic
-    // list unconditionally (classify_dyn_vertices never evaluates eligibility), so
-    // this flag remains the master on/off switch it always was.
-    //
-    // After the per-vertex classification, split the density vertices that failed it:
-    // classify_dyn_vertices requires each vertex's own n_a and n_b to *individually*
-    // commute with h_loc, which correctly rejects everything under a genuine
-    // Hubbard-Kanamori h_loc with spin-flip/pair-hopping. But combinations of densities
-    // are usually still conserved (total charge always; N_up, N_down whenever spin-rotation
-    // symmetry about z isn't broken) -- find_conserved_density_combinations finds them
-    // directly from h_loc, and split_density_couplings sends the part of the rejected
-    // coupling that only involves them to Lang-Firsov and the residual to the stochastic
-    // path (an exact identity, see doc/notes/dynamical_interactions.tex).
-    //
-    // Lang-Firsov's K'(0) static shift must be applied here, before h_diag is built
-    // below; the K_n kernel and the stochastic dyn_op_list/dyn_interactions catalog
-    // for the remaining vertices are built later, once n_inner/histo_map etc. are
-    // finalized.
+    // Dynamical interactions. Collect every vertex (add_dyn_vertex, D0_tau, Jperp_tau), then
+    // route each one: density-density couplings between densities conserved by h_loc are
+    // resummed analytically (Lang-Firsov), everything else is sampled stochastically. Density
+    // couplings between non-conserved densities are split into a conserved part and a
+    // residual (split_density_couplings). The Lang-Firsov static shift must be applied to
+    // h_loc before h_diag is built.
     // ------------------------------------------------------------------
     auto dyn_vertices = collect_dyn_vertices(inputs.dyn_vertices, inputs.D0t, inputs.Jperpt, gf_struct);
     bool dyn_audit               = params.verbosity >= 4 && !dyn_vertices.empty();
     auto classified_dyn_vertices = classify_dyn_vertices(dyn_vertices, _h_loc, fops, linindex, params.lang_firsov, dyn_audit);
+    conserved_densities_t conserved;
+    density_split_counts_t split;
     if (params.lang_firsov) {
-      auto conserved = conserved_densities(_h_loc, fops, linindex);
-      if (dyn_audit) {
-        std::cout << "[dyn_audit] h_loc has " << conserved.operators.size() << " conserved density combination(s); the projector\n"
-                  << "[dyn_audit] split can only route a density coupling analytically inside their span:\n";
-        for (size_t i = 0; i < conserved.operators.size(); ++i)
-          std::cout << "[dyn_audit]   O_" << i << " = " << conserved.operators[i] << "\n";
-      }
-      auto split = split_density_couplings(classified_dyn_vertices, conserved.vectors, fops, linindex);
-      if (params.verbosity >= 2 && split.n_input > 0) {
-        if (split.block_structured)
-          std::cout << "Found " << conserved.vectors.size() << " conserved density combination(s); split the coupling of " << split.n_input
-                    << " density vertex(es) not individually commuting with h_loc into " << split.n_lang_firsov << " Lang-Firsov and "
-                    << split.n_stochastic << " stochastic residual vertex(es)." << std::endl;
-        else
-          std::cout << "The " << conserved.vectors.size() << " conserved density combination(s) are not indicator vectors of disjoint "
-                    << "orbital sets; the " << split.n_input << " density vertex(es) not individually commuting with h_loc stay stochastic."
-                    << std::endl;
-      }
+      conserved = conserved_densities(_h_loc, fops, linindex);
+      split     = split_density_couplings(classified_dyn_vertices, conserved.vectors, fops, linindex);
     }
+    if (params.verbosity >= 2)
+      print_dyn_routing(dyn_vertices.size(), classified_dyn_vertices, conserved.operators, split, params.lang_firsov, fops, linindex);
     auto lang_firsov_shift = apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
     if (dyn_audit) {
       std::cout << "[dyn_audit] final routing: " << classified_dyn_vertices.lang_firsov.size() << " analytic, "
@@ -363,10 +334,13 @@ namespace triqs_cthyb {
       dyn_vertex_operators.emplace_back(v.op1, v.op2);
       dyn_vertex_couplings.push_back(v.coupling);
     }
+    lang_firsov_vertex_operators.clear();
+    lang_firsov_vertex_couplings.clear();
+    for (auto const &v : classified_dyn_vertices.lang_firsov) {
+      lang_firsov_vertex_operators.emplace_back(v.op1, v.op2);
+      lang_firsov_vertex_couplings.push_back(v.coupling);
+    }
 
-    if (params.verbosity >= 2)
-      std::cout << "Dynamical interaction vertices: " << classified_dyn_vertices.lang_firsov.size() << " analytic (Lang-Firsov), "
-                << dyn_op_list.size() << " stochastic (sampled by insert_dyn/remove_dyn)" << std::endl;
 
     // Automatically enable dynamical moves if any vertex was routed to the stochastic path.
     bool has_dyn_interactions = !dyn_op_list.empty();
@@ -443,9 +417,6 @@ namespace triqs_cthyb {
       qmc.add_move(move_remove_dyn(data, qmc.get_rng(), histo_map), "Remove dynamical interaction", 1.0);
       // Re-pairs vertices that insert/remove cannot reach on their own (crossing spin-flip pairings)
       qmc.add_move(move_swap_dyn(data, qmc.get_rng()), "Swap dynamical vertex partners", 1.0);
-      if (params.verbosity >= 2) {
-        std::cout << "Dynamical interaction moves enabled due to non-zero Jperp_tau or D0_tau" << std::endl;
-      }
     }
 
     // --------------------------------------------------------------------------

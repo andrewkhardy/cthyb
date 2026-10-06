@@ -2,19 +2,15 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-"""Find the mu that gives a target density for the single-orbital spin-spin model, so it
-can be pinned in run_spin_spin.sh and shared by every solver.
+#
+# Find the mu giving a target density, to pin in run_spin_spin.sh (MU_B10_N075, MU_B100_N075)
+# so that every solver runs the same Hamiltonian.
+#
+#   python calibrate_mu.py --beta 10 --target_n 0.75
+#   mpirun -n 16 python calibrate_mu.py --beta 100 --target_n 0.75
+#
+# The probe is a short CTSEG run: sign-free for this model and much faster than CTHYB.
 
-Uses CTSEG as the probe: sign-free for this model and ~14x faster than CTHYB, so a whole
-scan costs less than one production point. Any accurate solver would give the same n(mu) --
-the point of calibrating once is that all three then run the *same* Hamiltonian.
-
-    module load modules/2.5-beta1 && module load triqs/multiorbital
-    python calibrate_mu.py --beta 10  --target_n 0.75
-    mpirun -n 16 python calibrate_mu.py --beta 100 --target_n 0.75
-
-Paste the printed value into MU_B10_N075 / MU_B100_N075.
-"""
 import argparse
 import os
 import sys
@@ -33,14 +29,12 @@ def add_calibration_args(parser):
     parser.add_argument("--target_n", type=float, default=0.75,
                         help="Target density per spin-orbital (0.5 is half filling)")
     parser.add_argument("--probe_cycles", type=int, default=20000,
-                        help="MC cycles per probe. Keep small: the bisection cannot resolve mu "
-                             "below the probe's own noise, so precision here is wasted")
-    parser.add_argument("--tol", type=float, default=2e-3,
-                        help="Tolerance on the density, matched to the probe's statistical error")
+                        help="MC cycles per probe; more is wasted below the probe's own noise")
+    parser.add_argument("--tol", type=float, default=2e-3, help="Tolerance on the density")
 
 
 args = M.parse_args("Calibrate mu for the single-orbital spin-spin benchmark", add_calibration_args)
-# The scan sets mu itself, so the model must not demand one up front.
+# Start the scan from the half-filling mu
 args.filling = 0.5
 args.mu = None
 base = M.Model(args)
@@ -75,9 +69,8 @@ def density(mu):
             measure_nn_tau=False, measure_F_tau=False, measure_pert_order=False,
             measure_densities=True)
 
-    # CTSEG's direct density measurement: a plain time average, far lower variance than
-    # reading -G(beta). With -G(beta) a 20k-cycle probe scattered by +-0.15 and made the
-    # measured n(mu) non-monotonic, which broke the bisection.
+    # The direct density measurement: a short probe's -G(beta) is noisy enough to make n(mu)
+    # non-monotonic, which breaks the bisection.
     n_per_spin = [S.results.densities[bl][i] for bl, size in M.GF_STRUCT for i in range(size)]
     return float(np.mean(n_per_spin))
 
@@ -87,7 +80,6 @@ mu, n_achieved, samples = calibrate.bisect_mu(
     tol=args.tol, verbose=mpi.is_master_node())
 
 if mpi.is_master_node():
-    # Use every probe, not just the final bisection step -- the probe is stochastic.
     variable = f"MU_B{args.beta:g}_N{str(args.target_n).replace('.', '')}"
     print(calibrate.report(mu, n_achieved, args.target_n,
                            label=f"spin_spin, beta = {args.beta:g}, bath = {args.bath}",

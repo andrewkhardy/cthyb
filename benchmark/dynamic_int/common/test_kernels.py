@@ -2,30 +2,22 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-"""The one property of the tau-rescaled spin kernel that the beta = 100 runs depend on.
+"""Check that spin_kernel_Q keeps int Q dtau, K'(0) and its shape in tau/beta fixed as beta changes,
+which the beta = 100 runs and every half-filling mu rely on.
 
-Run directly:  python test_kernels.py     (pure numpy, no MC, under a second)
-
-`spin_kernel_Q` reaches beta = 100 by dividing every pole frequency by beta/beta_ref and
-multiplying the amplitude by beta_ref/beta. That combination is chosen to hold K'(0) fixed,
-because K'(0) is the static part of the retarded interaction and is what the half-filling
-mu closed forms in each model.py depend on. If it drifted, the beta = 100 runs would be
-solving a differently-coupled model and every mu would be silently wrong -- hence a test
-rather than a comment.
+    python test_kernels.py
 """
 import numpy as np
 
 from kernels import SPIN_KERNEL_BETA_REF, SPIN_KERNEL_POLES, spin_kernel_Q
 
-# From the pole table's provenance (see kernels.py): the values at the reference beta.
+# Sum rules of the stored beta = 10 kernel the poles were fitted to
 INT_Q_REF = 1.523985
 KPRIME_0_REF = -0.761992
 
 
 def sum_rules(beta, n_tau=20001):
-    """`(int Q dtau, K'(0))`. K'(0) = -int Q dtau / 2 for a kernel symmetric about beta/2,
-    which every single-pole term is, so the two are one check on the amplitude and one on
-    the convention relating them."""
+    """(int Q dtau, K'(0)), with K'(0) = -int Q dtau / 2 for a kernel symmetric about beta/2."""
     tau = np.linspace(0.0, beta, n_tau)
     integral = float(np.trapezoid(np.asarray(spin_kernel_Q(beta, n_tau)), tau))
     return integral, -0.5 * integral
@@ -47,10 +39,7 @@ if __name__ == "__main__":
         assert abs(got[1] - ref[1]) < 1e-4 * abs(ref[1]), \
             f"K'(0) drifted from {ref[1]} to {got[1]} at beta = {beta}"
 
-    # The kernel must also stay long-ranged in tau/beta -- that is the whole reason for
-    # rescaling the frequencies rather than keeping them fixed. Fixed frequencies would give
-    # Q(beta/2)/Q(0) ~ 3e-4 at beta = 100; rescaling keeps the shape, so the ratio is the
-    # same at every beta.
+    # The shape in tau/beta must not change (fixed frequencies would give Q(beta/2)/Q(0) ~ 3e-4 at beta = 100)
     shape = [spin_kernel_Q(b, 2001)[1000] / spin_kernel_Q(b, 2001)[0]
              for b in (SPIN_KERNEL_BETA_REF, 100.0)]
     print(f"Q(beta/2)/Q(0) = {shape[0]:.6f} at beta = 10, {shape[1]:.6f} at beta = 100")

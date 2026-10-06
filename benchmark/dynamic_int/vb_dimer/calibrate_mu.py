@@ -2,31 +2,20 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-"""Find the mu giving a target density, to pin in run_vb_dimer.sh so every run of a given
-point solves the identical Hamiltonian.
+"""Find the mu giving a target density, to pin in run_vb_dimer.sh.
 
-Two points, two probes, because only one of them has an ED:
+  ED point   python calibrate_mu.py --target_n 0.75 --J_intra -0.5 --J_inter 0.5 --bath discrete --V 0.5
+  DCA point  mpirun -n <N> python calibrate_mu.py --target_n 0.5 --J_intra 0 --J_inter 0.5 --bath dca
 
-  ED point   python calibrate_mu.py --target_n 0.75 \
-                    --J_intra -0.5 --J_inter 0.5 --bath discrete --V 0.5
-             Exact: run_ed.py carries no statistical error, so the bisection is limited
-             only by the phonon truncation. Submit it rather than running it locally --
-             each solve is a dense eigh on a ~2000-4500 dimensional block.
-
-  DCA point  mpirun -n <N> python calibrate_mu.py --target_n 0.5 \
-                    --J_intra 0 --J_inter 0.5 --bath dca
-             -J is indefinite here, so no ED exists (run_ed.py refuses it by design) and a
-             short low-statistics CTHYB run is the only probe. Note the DCA point needs
-             calibrating at HALF FILLING too: the coarse-grained hybridization is not
-             particle-hole symmetric (model.half_filling_is_exact() is False), so mu = U/2
-             is only approximate there -- unlike --bath discrete, where it is exact.
-
-Paste the printed value into MU_B10_N075 / MU_B100_N075.
+The ED probe is exact. The DCA point has no ED (-J is indefinite), so a short CTHYB run is
+the probe; it needs calibrating at half filling too, since the coarse-grained bath is not
+particle-hole symmetric.
 """
 import argparse
 import os
 import subprocess
 import sys
+from itertools import product
 
 import numpy as np
 import triqs.utility.mpi as mpi
@@ -37,6 +26,7 @@ from common import calibrate, selfenergy  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import model as model_def  # noqa: E402
+from model import N_PATCH  # noqa: E402
 
 parser = argparse.ArgumentParser(description='Calibrate mu for the vb_dimer benchmark')
 model_def.add_model_args(parser)
@@ -55,7 +45,7 @@ parser.add_argument('--dyn_n_l', type=int, default=50,
                     help='Legendre coefficients for the dynamical interaction')
 args = parser.parse_args()
 
-# -J psd is exactly the condition for a real-boson Hamiltonian, i.e. for an ED to exist.
+# An ED exists iff -J is positive semidefinite (see run_ed.py).
 J = np.array([[args.J_intra, args.J_inter], [args.J_inter, args.J_intra]])
 ed_exists = args.bath == 'discrete' and np.linalg.eigvalsh(-J).min() > -1e-12
 probe_name = args.probe if args.probe != 'auto' else ('ed' if ed_exists else 'cthyb')
@@ -73,11 +63,7 @@ BASE = ['--beta', str(args.beta), '--t', str(args.t), '--tp', str(args.tp), '--U
 
 
 def density_ed(mu):
-    """Mean density per spin-orbital from one exact ED solve.
-
-    run_ed.py builds its Hamiltonian at import time from argparse, so it is a script, not a
-    library: drive it as a subprocess and read the <n_a> line it already prints.
-    """
+    """Mean density per spin-orbital from one ED solve (run_ed.py as a subprocess)."""
     out = subprocess.run(
         [sys.executable, os.path.join(HERE, 'run_ed.py'), *BASE, '--mu', repr(float(mu)),
          '--n_ph', str(args.n_ph), '--n_ph_check', '0', '--n_tau', '101', '--n_iw', '64',
@@ -106,19 +92,20 @@ def density_cthyb(mu):
                n_tau_bosonic=n_tau_bosonic, delta_interface=True)
     for bl, delta in M.delta_iw(n_iw):
         S.Delta_tau[bl] << Fourier(delta)
-    M.register_vertices(S, n_tau_bosonic, basis='site')
+    Q = M.Q(np.linspace(0, M.beta, n_tau_bosonic))
+    for i, j in product(range(N_PATCH), repeat=2):
+        D = -M.J[i, j] * Q
+        S.add_dyn_int(D, M.Sz[i], M.Sz[j])
+        S.add_dyn_int(D / 2, M.Sp[i], M.Sm[j])
+        S.add_dyn_int(D / 2, M.Sm[i], M.Sp[j])
 
-    # lang_firsov=True unconditionally, whatever the production setting. The probe defines
-    # the ONE mu that both production runs share; letting it follow --lang_firsov would give
-    # the lf=True and lf=False runs different Hamiltonians and destroy the only cross-check
-    # available at the DCA point. It is also the cheaper, lower-variance route.
+    # Always lang_firsov=True, so the lf=True and lf=False production runs share one mu.
     S.solve(h_int=M.h_int(), h_loc0=M.h_loc0(), lang_firsov=True,
             n_cycles=args.probe_cycles, n_warmup_cycles=max(args.probe_cycles // 20, 500),
             length_cycle=args.length_cycle, dyn_n_l=args.dyn_n_l,
             measure_G_tau=True, measure_G_l=True)
 
-    # From G_l -> G(iw).density(), never from -G_tau.data[-1]: a 20k-cycle -G(beta) scatters
-    # enough to make n(mu) non-monotonic, which breaks the bisection outright.
+    # From G_l: a short run's -G(beta) is noisy enough to make n(mu) non-monotonic.
     return float(np.mean(selfenergy.density_from_G_iw(selfenergy.G_iw_from_G_l(S.G_l, n_iw))))
 
 

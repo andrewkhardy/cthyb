@@ -80,6 +80,55 @@ class Solver(SolverCore):
         self.Sigma_moments = None
         self.Sigma_Hartree = None
 
+    def add_dyn_int(self, D_tau, op1, op2):
+        r"""
+        Add a retarded interaction to the impurity action,
+
+        .. math:: S_\mathrm{dyn} \mathrel{+}= \frac{1}{2} \int_0^\beta d\tau \int_0^\beta d\tau'
+                  D(\tau - \tau') \, O_1(\tau) \, O_2(\tau').
+
+        Terms from repeated calls add up. For example, a retarded spin-spin interaction
+        :math:`\frac{1}{2} \int\int J(\tau - \tau') \, \mathbf{S}(\tau) \cdot \mathbf{S}(\tau')` is::
+
+            S.add_dyn_int(J_tau, Sz, Sz)
+            S.add_dyn_int(J_tau / 2, Sp, Sm)
+            S.add_dyn_int(J_tau / 2, Sm, Sp)
+
+        and a phonon coupled to :math:`X = \sum_a g_a n_a` is ``S.add_dyn_int(Q_tau, X, X)``.
+
+        ``solve()`` decides which terms to resum analytically (Lang-Firsov: couplings between
+        densities conserved by h_loc) and which to sample, and prints the split. Afterwards the
+        two sets are in ``lang_firsov_vertex_operators`` and ``dyn_vertex_operators``.
+
+        Parameters
+        ----------
+        D_tau : Gf or array
+            The real coupling :math:`D(\tau)` on :math:`[0, \beta]`: a scalar_valued or (1, 1) Gf
+            on a bosonic imaginary-time mesh, or an array of ``n_tau_bosonic`` values.
+        op1, op2 : Operator
+            Quadratic operators, i.e. any linear combination of ``c_dag(a) * c(b)``.
+        """
+        from .dynamical_interactions import _as_scalar_gf, bilinear, expand_dyn_int
+
+        if isinstance(D_tau, Gf):
+            D = _as_scalar_gf(D_tau)
+        else:
+            D = Gf(mesh=self.Jperp_tau.mesh, target_shape=[])
+            values = np.asarray(D_tau)
+            if values.shape != D.data.shape:
+                raise ValueError(f"add_dyn_int: expected {len(D.mesh)} values of D(tau) (n_tau_bosonic), got shape {values.shape}")
+            D.data[:] = values
+        if np.abs(D.data.imag).max() > 1e-12:
+            raise ValueError("add_dyn_int: the coupling D(tau) must be real")
+        if np.abs(D.data).max() == 0.0:
+            return
+
+        for (key1, key2), coeff in expand_dyn_int(op1, op2).items():
+            if abs(np.imag(coeff)) > 1e-12:
+                raise ValueError(f"add_dyn_int: complex coefficient {coeff} for "
+                                 f"{bilinear(key1)} (x) {bilinear(key2)}; the coupling must stay real")
+            self.add_dyn_vertex(bilinear(key1), bilinear(key2), np.real(coeff) * D)
+
     def solve(self, **params_kw):
         r"""
         Solve the impurity problem for a given G0_iw. If ``measure_G_tau``

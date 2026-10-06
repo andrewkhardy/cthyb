@@ -2,21 +2,14 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-"""CTSEG run for the single-orbital spin-spin benchmark (model and conventions: model.py).
+#
+# CTSEG run of the spin-spin model in model.py (Jperp and D0 in CTSEG's convention, see there).
+#
+#   mpirun -n <N> python run_ctseg.py --beta 10 --filling 0.5 --jperp 1 --szsz 1
+#
+# Sigma is the improved estimator F(iw)/G(iw), which uses no mu or Delta, so its agreement with
+# the Dyson Sigma_alt checks the chemical-potential bookkeeping.
 
-CTSEG takes exactly the same action as CTHYB -- same Jperp_tau, same D0_tau -- since both
-carry the explicit 1/2 (`half_prefactor_action=True`), so any difference between the two is
-solver physics.
-
-Two self-energies are saved:
-
-  Sigma       the improved estimator, Sigma = F(iw)/G(iw), from measure_F_tau. Note this
-              route uses no G0, mu or Delta whatsoever, so agreeing with the Dyson one is a
-              genuine check on the chemical-potential bookkeeping rather than a tautology.
-  Sigma_alt   the Dyson inversion, through the same shared code path every other solver uses.
-
-Run under `triqs/multiorbital`, which now carries cthyb, ctseg and ctint together.
-"""
 import os
 import sys
 
@@ -69,8 +62,7 @@ if mpi.is_master_node():
                    - nn["up", "down"].data[:, 0, 0] - nn["down", "up"].data[:, 0, 0]).real
 
     G_up = r.G_tau["up"]
-    # Direct time-average measurement, lower variance than -G(beta); see
-    # common/selfenergy.density_from_G_iw for why that matters.
+    # Direct measurement, much less noisy than -G(beta)
     density = np.array([r.densities[bl][i] for bl, size in M.GF_STRUCT for i in range(size)])
     diag = selfenergy.diagnose(sigma_up, w_n, mu=mu if abs(args.filling - 0.5) < 1e-12 else None)
     print("  " + diag["text"])

@@ -195,6 +195,7 @@ static int synth_constructor_167a5c32(PyObject *self, PyObject *args, PyObject *
   de("proposal_prob", self_c.proposal_prob, true);
   de("move_global", self_c.move_global, true);
   de("move_global_prob", self_c.move_global_prob, true);
+  de("move_global_full", self_c.move_global_full, true);
   de("imag_threshold", self_c.imag_threshold, true);
   de("det_init_size", self_c.det_init_size, true);
   de("det_n_operations_before_check", self_c.det_n_operations_before_check, true);
@@ -308,21 +309,23 @@ move_global : {par_45}, default={}
 
 move_global_prob : {par_46}, default=0.05
 
-imag_threshold : {par_47}, default=1.e-13
+move_global_full : {par_47}, default=false
 
-det_init_size : {par_48}, default=100
+imag_threshold : {par_48}, default=1.e-13
 
-det_n_operations_before_check : {par_49}, default=100
+det_init_size : {par_49}, default=100
 
-det_precision_warning : {par_50}, default=1.e-8
+det_n_operations_before_check : {par_50}, default=100
 
-det_precision_error : {par_51}, default=1.e-5
+det_precision_warning : {par_51}, default=1.e-8
 
-det_singular_threshold : {par_52}, default=-1
+det_precision_error : {par_52}, default=1.e-5
 
-off_diag_threshold : {par_53}, default=0.0
+det_singular_threshold : {par_53}, default=-1
 
-h_loc0 : {par_54}, default={}
+off_diag_threshold : {par_54}, default=0.0
+
+h_loc0 : {par_55}, default={}
 
 )DOC",
                       "par",
@@ -373,6 +376,7 @@ h_loc0 : {par_54}, default={}
                        c2py::python_typename<std::map<std::string, double>>(),
                        c2py::python_typename<std::map<std::string, triqs_cthyb::indices_map_t>>(),
                        c2py::python_typename<double>(),
+                       c2py::python_typename<bool>(),
                        c2py::python_typename<double>(),
                        c2py::python_typename<int>(),
                        c2py::python_typename<int>(),
@@ -423,7 +427,8 @@ constexpr auto _c2py_doc_member_b49d62c9 = R"DOC(Number of Legendre coefficients
 constexpr auto _c2py_doc_member_19ebb74f = R"DOC(Measure :math:`G(\tau)`? Hermiticity :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` is enforced.)DOC";
 constexpr auto _c2py_doc_member_9fe4e2b9 = R"DOC(Measure :math:`G_l` (Legendre)? No hermiticity is enforced.)DOC";
 constexpr auto _c2py_doc_member_c478e947 = R"DOC(Measure :math:`O(\tau)` by insertion.)DOC";
-constexpr auto _c2py_doc_member_32a7d2a3 = R"DOC(Minimum number of operator insertions in the :math:`O(\tau)` insertion measure.)DOC";
+constexpr auto _c2py_doc_member_32a7d2a3 = R"DOC(Minimum number of operator insertions in the :math:`O(\tau)` insertion measure. Each
+measurement makes as many insertions as the perturbation order, or this many if more.)DOC";
 constexpr auto _c2py_doc_member_7bd1b214 = R"DOC(Measure density-density correlators from the occupation kinks (dyn_n_l Legendre
 coefficients), for the density combinations O_i that commute with h_loc
 (conserved_density_operators): Q_conserved_tau_ij = <O_i(tau) O_j(0)> - <O_i O_j>, i.e.
@@ -457,6 +462,10 @@ constexpr auto _c2py_doc_member_9c443a14 = R"DOC(Operator insertion/removal prob
 constexpr auto _c2py_doc_member_86410015 =
    R"DOC(List of global moves (with their names). Each move is specified with an index substitution dictionary.)DOC";
 constexpr auto _c2py_doc_member_a5b369a5 = R"DOC(Overall probability of the global moves.)DOC";
+constexpr auto _c2py_doc_member_964a3627 = R"DOC(Apply a global move to every operator it maps at once? By default a random subset of
+them is substituted. For a symmetry such as a spin flip only the full substitution has a
+sizable weight at large perturbation order (a subset is chosen as the full one with
+probability ~ 1/order). Stochastic dynamical vertices are always substituted whole.)DOC";
 constexpr auto _c2py_doc_member_3eb4a96e =
    R"DOC(Threshold below which imaginary components of :math:`\Delta` and :math:`h_{loc}` are set to zero.)DOC";
 constexpr auto _c2py_doc_member_a4993264 = R"DOC(The maximum size of the determinant matrix before a resize.)DOC";
@@ -517,6 +526,7 @@ static PyObject *prop_get_dict_167a5c32(PyObject *self, void *) {
   dic["proposal_prob"]                 = self_c.proposal_prob;
   dic["move_global"]                   = self_c.move_global;
   dic["move_global_prob"]              = self_c.move_global_prob;
+  dic["move_global_full"]              = self_c.move_global_full;
   dic["imag_threshold"]                = self_c.imag_threshold;
   dic["det_init_size"]                 = self_c.det_init_size;
   dic["det_n_operations_before_check"] = self_c.det_n_operations_before_check;
@@ -580,6 +590,7 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_a2b1dce8>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::proposal_prob, _c2py_cls_a2b1dce8>("proposal_prob", _c2py_doc_member_9c443a14),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::move_global, _c2py_cls_a2b1dce8>("move_global", _c2py_doc_member_86410015),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::move_global_prob, _c2py_cls_a2b1dce8>("move_global_prob", _c2py_doc_member_a5b369a5),
+   c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::move_global_full, _c2py_cls_a2b1dce8>("move_global_full", _c2py_doc_member_964a3627),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::imag_threshold, _c2py_cls_a2b1dce8>("imag_threshold", _c2py_doc_member_3eb4a96e),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::det_init_size, _c2py_cls_a2b1dce8>("det_init_size", _c2py_doc_member_a4993264),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::det_n_operations_before_check, _c2py_cls_a2b1dce8>("det_n_operations_before_check",
@@ -666,6 +677,9 @@ constexpr auto _c2py_doc_member_1633453a = R"DOC(The two bilinears (op1, op2) of
 dyn_vertex_corr_tau / dyn_vertex_hist_l.)DOC";
 constexpr auto _c2py_doc_member_b1db761f = R"DOC(The retarded coupling each of those vertex types carries -- for a density pair this is the
 residual R_ab(tau) left by split_density_couplings, not the coupling as registered.)DOC";
+constexpr auto _c2py_doc_member_dc600ea1 = R"DOC(The two densities (n_a, n_b) of every dynamical vertex resummed analytically (Lang-Firsov).)DOC";
+constexpr auto _c2py_doc_member_94ebc9f4 = R"DOC(The retarded coupling of each Lang-Firsov vertex -- for a split density pair, its part that
+couples only conserved density combinations.)DOC";
 constexpr auto _c2py_doc_member_a630495a = R"DOC(Single-particle Green's function :math:`G(\tau)` in imaginary time.)DOC";
 constexpr auto _c2py_doc_member_789d035e = R"DOC(Intermediate Green's function used to accumulate :math:`G(\tau)` (real or complex).)DOC";
 constexpr auto _c2py_doc_member_c4b4ab9c = R"DOC(Violation of the property :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` after the measurement.)DOC";
@@ -731,6 +745,10 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_7e768e6a>[] = {
                                                                                                      _c2py_doc_member_52353366),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::dyn_vertex_operators, _c2py_cls_7e768e6a>("dyn_vertex_operators", _c2py_doc_member_1633453a),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::dyn_vertex_couplings, _c2py_cls_7e768e6a>("dyn_vertex_couplings", _c2py_doc_member_b1db761f),
+   c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::lang_firsov_vertex_operators, _c2py_cls_7e768e6a>("lang_firsov_vertex_operators",
+                                                                                                      _c2py_doc_member_dc600ea1),
+   c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::lang_firsov_vertex_couplings, _c2py_cls_7e768e6a>("lang_firsov_vertex_couplings",
+                                                                                                      _c2py_doc_member_94ebc9f4),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::G_tau, _c2py_cls_7e768e6a>("G_tau", _c2py_doc_member_a630495a),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::G_tau_accum, _c2py_cls_7e768e6a>("G_tau_accum", _c2py_doc_member_789d035e),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::asymmetry_G_tau, _c2py_cls_7e768e6a>("asymmetry_G_tau", _c2py_doc_member_c4b4ab9c),

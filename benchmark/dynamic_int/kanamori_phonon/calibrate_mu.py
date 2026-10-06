@@ -2,13 +2,8 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-"""Find the mu giving a target density for the Kanamori+phonon model, to pin in
-run_kanamori_phonon.sh so ED and CTHYB solve the identical Hamiltonian.
-
-Unlike the single-orbital benchmarks, the probe here is *exact*: the ED solves the model
-in a few seconds, so n(mu) carries no statistical error and the bisection converges to
-machine precision rather than to a noise floor. No tolerance fudging, and no question of
-whether a non-monotonic scan is physics or noise.
+"""Find the mu giving a target density, to pin in run_kanamori_phonon.sh. The probe is the
+exact ED, so the bisection converges to machine precision.
 
     python calibrate_mu.py --beta 10  --target_n 0.75
     python calibrate_mu.py --beta 100 --target_n 0.75
@@ -53,12 +48,7 @@ BASE = ['--beta', str(args.beta), '--U', str(args.U), '--J', str(args.J), '--V',
 
 
 def density(mu):
-    """Mean density per spin-orbital from one exact ED solve at this mu.
-
-    Runs run_ed.py as a subprocess and reads the <n_a> line it already prints, rather than
-    importing it -- run_ed.py builds its Hamiltonian at import time from argparse, so it is
-    a script, not a library. A solve is a few seconds, so the process overhead is irrelevant.
-    """
+    """Mean density per spin-orbital from one ED solve (run_ed.py as a subprocess)."""
     out = subprocess.run(
         [sys.executable, os.path.join(HERE, 'run_ed.py'), *BASE, '--mu', repr(float(mu)),
          '--n_ph_check', '0', '--n_tau', '101', '--n_iw', '64',
@@ -75,8 +65,7 @@ def density(mu):
 
 print(f"kanamori_phonon mu calibration (exact ED probe): beta={args.beta:g} U={args.U:g} "
       f"J={args.J:g} V={args.V:g} g={args.g} omega_0={args.omega_0:g}")
-# The half-filling mu is what model.py computes when --mu is not given; use it as the
-# starting guess, which is usually within ~1 of the answer.
+# Start from the half-filling mu that model.py uses by default
 sys.path.insert(0, HERE)
 import model as model_def  # noqa: E402
 guess_args = argparse.Namespace(beta=args.beta, U=args.U, J=args.J, V=args.V,

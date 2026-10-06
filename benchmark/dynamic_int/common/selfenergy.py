@@ -3,34 +3,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
 r"""
-One self-energy convention for every solver in the dynamic_int benchmarks.
+One self-energy convention for every solver, so differences between curves are physics:
 
-The point of this module is that `Sigma` is computed the *same* way from every solver's
-`G`, so that a difference between two curves is solver physics and not bookkeeping.
+    Sigma(iw) = G0(iw)^-1 - G(iw)^-1,    G0(iw)^-1 = iw + mu - eps - Delta(iw).
 
-    Sigma(iw) = G0(iw)^-1 - G(iw),    G0(iw)^-1 = iw + mu - eps - Delta(iw)
-
-Two traps this exists to avoid
-------------------------------
-1. **Build G0 from the inputs, never from solver internals.** `solve()` mutates `h_loc` in
-   place by the Lang-Firsov K'(0) shift, so after a dynamical solve
-   `S.h_loc() != h_int + h_loc0` and any mu read back out is route-dependent (it differs
-   between `lang_firsov=True` and `False` for the same physical model). The `Delta_iw` and
-   `mu` passed here must be the ones that went *in*.
-
-2. **Do not tail-fit.** `S.Sigma_moments` comes from
-   `sigma_high_frequency_moments(density_matrix, h_loc_diag, gf_struct, h_int)`, which sees
-   only the *static* `h_int` -- the retarded interaction's contribution to the Hartree and
-   first moment is simply absent, so a fit anchored on those moments is anchored on the
-   wrong asymptote. Compare Sigma on the Matsubara points directly instead (Re and Im
-   separately), and take `S.Sigma_iw_raw` if reading it off the solver.
-
-Which G to use
---------------
-At beta = 100 a Dyson inversion of a noisy `G(tau)` is unusable at high frequency. Prefer
-the Legendre `G_l` route (`sigma_from_G_l`, needing `measure_G_l=True`), which filters the
-noise before the inversion, and keep the `G_tau` route as a cross-check. `run_*.py` saves
-both under distinct keys so the plots can show the pair.
+Build G0 from the input mu and Delta, never from the solver's h_loc, which solve() shifts by the
+Lang-Firsov static part. Do not tail-fit: the solver's Sigma moments only see the static h_int.
+Prefer the Legendre route (sigma_from_G_l) at large beta; sigma_from_G_tau is the cross-check.
 """
 import numpy as np
 from triqs.gfs import BlockGf, Gf, MeshImFreq, Fourier, LegendreToMatsubara, inverse, iOmega_n
@@ -111,13 +90,7 @@ def _per_block(value, name):
 
 
 def G_iw_from_G_tau(G_tau, n_iw):
-    """Fourier transform `G(tau) -> G(iw)` on `n_iw` positive frequencies.
-
-    No tail/moment information is supplied, deliberately: the only moments available from
-    the solver ignore the retarded interaction (see the module docstring), so feeding them
-    in would impose a wrong asymptote. That makes the high-frequency end noisy -- which is
-    exactly why `sigma_from_G_l` is the preferred route at large beta.
-    """
+    """Fourier transform `G(tau) -> G(iw)`, without tail moments (they ignore the retarded interaction)."""
     beta = G_tau.mesh.beta
     blocks = []
     for _, g in G_tau:
@@ -128,12 +101,7 @@ def G_iw_from_G_tau(G_tau, n_iw):
 
 
 def G_iw_from_G_l(G_l, n_iw):
-    """`G_l -> G(iw)` via `LegendreToMatsubara`.
-
-    The Legendre coefficients are a smooth, noise-filtered representation of the same
-    measurement, so this is the route to prefer before a Dyson inversion, especially at
-    beta = 100. Needs `measure_G_l=True` in the solve.
-    """
+    """`G_l -> G(iw)` via `LegendreToMatsubara`. Needs `measure_G_l=True`."""
     beta = G_l.mesh.beta
     blocks = []
     for _, g in G_l:
@@ -154,18 +122,10 @@ def sigma_from_G_l(G_l, n_iw, mu, delta_iw=None, eps=None):
 
 
 def sigma_from_F_tau(F_tau, G_iw):
-    r"""CTSEG's improved estimator, `Sigma(iw) = F(iw) / G(iw)`.
+    r"""CTSEG's improved estimator, `Sigma(iw) = F(iw) / G(iw)` (needs `measure_F_tau=True`).
 
-    `F_tau` is the correlator `-<T c(tau) (interaction term) c^dag(0)>` that CTSEG
-    accumulates when `measure_F_tau=True`; dividing by `G` gives Sigma with far better
-    high-frequency behaviour than a Dyson inversion, because the noisy denominator cancels.
-
-    Worth noting for cross-solver comparison: this route involves **no** `G0`, `mu` or
-    `Delta` at all, so it is completely independent of the chemical-potential bookkeeping
-    that `sigma_from_G_iw` depends on. Agreement between the two is therefore a real check
-    on the conventions, not a tautology. Mirrors
-    `triqs_ctseg.postprocessing.postprocess_sigma`'s improved-estimator branch, but without
-    its tail fit (see the module docstring for why fitting is wrong here).
+    It uses no G0, mu or Delta, so agreement with the Dyson routes checks those conventions.
+    Like triqs_ctseg's postprocess_sigma, but without the tail fit.
     """
     from triqs.gfs import make_hermitian, make_zero_tail
 
@@ -181,18 +141,9 @@ def sigma_from_F_tau(F_tau, G_iw):
 
 
 def density_from_G_iw(G_iw):
-    r"""Diagonal densities per spin-orbital from `G(iw)`, as a flat array in block order.
+    r"""Diagonal densities per spin-orbital from `G(iw)`, flat, in block order.
 
-    Prefer this over `-G_tau.data[-1]`. Both are correct in the limit of infinite
-    statistics -- `-G(beta)` was verified against `G_iw.density()` to 1e-15 on an exactly
-    known non-interacting case -- but `-G(beta)` reads a *single* point of the tau grid,
-    the noisiest one, whereas `density()` uses the whole function plus its tail.
-
-    That difference is not academic: a 20k-cycle CTSEG probe gave densities from `-G(beta)`
-    scattered by +-0.15, enough to make the measured `n(mu)` non-monotonic (mu = 4.5 gave a
-    larger n than mu = 6.0), which no fermionic model permits and which broke a bisection.
-    Where a solver measures the density directly -- CTSEG's `measure_densities=True` ->
-    `results.densities` -- that is better still, being a plain time average.
+    Prefer this to `-G_tau.data[-1]`, which reads the single noisiest tau point.
     """
     out = []
     for _, g in G_iw:
@@ -201,32 +152,16 @@ def density_from_G_iw(G_iw):
 
 
 def diagnose(sigma_values, w_n, mu=None, w_lo=1.0, w_hi=8.0, w_max=20.0):
-    r"""Cheap physical checks on a computed `Sigma(iw_n)`, as a one-line report.
+    r"""Quick checks on `Sigma(iw_n)` for w_n <= w_max, as a one-line report.
 
-    `causal` counts frequencies with `Im Sigma >= 0`. Some violation at the top of the mesh
-    is normal for any Fourier-based route and is not a bug; a violation at *low* frequency
-    is. Observed hierarchy at beta = 10, 200k cycles, single-orbital spin-spin: the Legendre
-    route stayed causal over all 200 frequencies, CTSEG's improved estimator broke only
-    above w = 59, the Dyson routes from G(tau) above w = 27 and 20.
-
-    `re_mean` tests an exact identity available at half filling. Building `G0` with the bare
-    `mu` while the solver internally shifts to `mu_eff = U_eff/2` (the Lang-Firsov K'(0)
-    shift, which is what makes the effective model particle-hole symmetric) gives
-
-        Sigma = (mu - mu_eff) + Sigma_eff,   Re Sigma_eff = U_eff/2   at p-h symmetry
-              => Re Sigma(iw) = mu,   exactly, at every frequency.
-
-    So passing `mu` prints the deviation from it. This is a genuine convention check: it
-    fails if the static shift, the level shift's sign, or mu itself is wrong.
+    Counts non-causal points (Im Sigma >= 0; expected only near the top of a Fourier-based
+    mesh) and averages Re Sigma over w_lo < w < w_hi. At half filling Re Sigma = mu exactly at
+    every frequency, so passing `mu` prints that reference.
     """
     sigma_values = np.asarray(sigma_values)
     w_n = np.asarray(w_n)
 
-    # Only judge causality where Sigma is meaningful. A Legendre-derived Sigma is limited
-    # by the number of coefficients: with n_l = 30 the series has no support much beyond
-    # w ~ 5, so every frequency above that is truncation noise and flagging it says nothing
-    # about the solver. The plots use w <= 15, so w_max = 20 covers the range that matters
-    # with room to spare. Pass w_max=inf to inspect the whole mesh deliberately.
+    # Above ~w_max a Legendre-derived Sigma is truncation noise; pass w_max=inf to see the whole mesh
     keep = w_n <= w_max
     sigma_values, w_n = sigma_values[keep], w_n[keep]
 
@@ -251,11 +186,7 @@ def matsubara_frequencies(mesh):
 
 
 def positive_frequency_part(g_iw, orb=(0, 0)):
-    """One orbital component of a block on the positive Matsubara frequencies only.
-
-    Returns `(w_n, values)`, so a plot can show Re and Im against `w_n` without
-    re-deriving the mesh each time.
-    """
+    """`(w_n, values)` of one orbital component on the positive Matsubara frequencies."""
     n = len(g_iw.mesh) // 2
     values = g_iw.data[n:, orb[0], orb[1]]
     return matsubara_frequencies(g_iw.mesh), values

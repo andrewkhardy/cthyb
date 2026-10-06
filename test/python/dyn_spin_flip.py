@@ -24,7 +24,7 @@ from triqs_cthyb import Solver
 
 beta, U, l, w0 = 10.0, 2.0, 0.5, 1.0
 mu = U / 2.0 + 0.4   # off half filling
-n_iw, n_tau, n_tau_bosonic = 1025, 2001, 2001
+n_iw, n_tau, n_tau_bosonic = 1025, 4001, 4001  # Fourier needs n_tau >= 2 n_iw + 1
 gf_struct = [('down', 1), ('up', 1)]
 
 G_iw_init = GfImFreq(indices=[0], beta=beta, n_points=n_iw)

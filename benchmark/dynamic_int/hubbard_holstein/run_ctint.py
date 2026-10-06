@@ -2,25 +2,12 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-"""CTINT reference for the single-orbital Hubbard-Holstein benchmark (model: model.py).
+"""CTINT reference for the Hubbard-Holstein model in model.py.
 
-Written from `ctint_dens_dens.py` plus the DLR scaffolding of the spin-spin `run_ctint.py`,
-both of which already had everything needed:
+    mpirun -n <N> python run_ctint.py --beta 10 --filling 0.5
 
-  * `ctint_dens_dens.py` fed exactly this kernel in frequency space, as
-    `D0_iw << D**2*(inverse(iOmega_n - w0) - inverse(iOmega_n + w0))` = -2 D^2 w0/(nu^2+w0^2),
-    which is the Fourier transform of `g^2 Q(tau)` for `g = D`. Here the tau-space kernel is
-    fed through the DLR fit instead, so CTHYB, CTSEG and CTINT all consume the *same*
-    `common/kernels.boson_Q` array rather than two expressions that have to be trusted to
-    agree.
-  * CTINT's action carries no 1/2, so D0 is half of CTSEG's and CTHYB's.
-  * Unlike that example, every *ordered* pair is filled including the diagonal (up, up) and
-    (down, down): a Holstein phonon couples to the total charge, not just to n_up n_down.
-
-CTINT takes `G0_iw` rather than `Delta_tau`, and gets exactly the
-`G0^-1 = iw + mu - Delta` that `common/selfenergy.py` uses.
-
-Run under `triqs/multiorbital`, which now carries cthyb, ctseg and ctint together.
+CTINT's action has no 1/2, so D0 = g^2 Q / 2 on every ordered spin pair (model.d0). It takes
+G0^-1 = iw + mu - Delta instead of Delta_tau; G0 and the kernel go in as DLR fits.
 """
 import os
 import sys
@@ -43,7 +30,7 @@ def add_ctint_args(parser):
     ctint.add_alpha_args(parser)
 
 
-args = M.parse_args("CTINT single-orbital Hubbard-Holstein benchmark (reference)", add_ctint_args)
+args = M.parse_args("CTINT: single-orbital Hubbard-Holstein (reference)", add_ctint_args)
 model = M.Model(args)
 if mpi.is_master_node():
     print(model.report())
@@ -73,8 +60,7 @@ if use_d:
     for (s1, s2), d in d0.items():
         S.D0_iw[s1, s2].data[:] = dlr_imfreq_from_tau(d).data[:]
 
-# D0 < 0 in every channel (boson_Q is negative), so signed_alpha shifts all four the same
-# way, and opposite ways for the repulsive U. Same (block1, block2) order as the library.
+# The D0 channels in the library's (block1, block2) order, for the alpha shifts of common/ctint.py
 names = [bl for bl, _ in M.GF_STRUCT]
 d0_channels = [d0[bl1, bl2] for bl1 in names for bl2 in names] if use_d else []
 alpha_kwargs, alpha_report = ctint.alpha_kwargs(args, model.h_int(), d0_channels)
@@ -85,8 +71,7 @@ S.solve(h_int=model.h_int(), **alpha_kwargs,
         length_cycle=args.length_cycle,
         n_warmup_cycles=args.n_warmup_cycles, n_cycles=args.n_cycles, max_time=args.max_time,
         measure_M_iw=True, measure_M_tau=False,
-        # On the shared grid rather than the library's 201 points, so the correlator
-        # compares point by point with CTHYB's and CTSEG's (cost: common/grids.py).
+        # On the shared tau grid (library default 201 points), to compare point by point with CTHYB and CTSEG
         measure_chiAB_tau=True, chi_A_vec=[M.N_TOT], chi_B_vec=[M.N_TOT], n_tau_chi2=model.n_tau,
         post_process=True)
 
