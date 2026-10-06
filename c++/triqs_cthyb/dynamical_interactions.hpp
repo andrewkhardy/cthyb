@@ -29,7 +29,8 @@
 namespace triqs_cthyb {
 
   /// The user's vertices, then one density vertex per non-zero entry of D0_tau, then the two spin flips of Jperp_tau
-  /// (coupling Jperp/2 each; requires exactly two blocks of size 1)
+  /// (coupling Jperp/2 each; requires exactly two blocks of size 1). Vertices with the same op1, op2 and mesh are merged
+  /// into one with the summed coupling, and vertices whose coupling vanishes are dropped.
   std::vector<dyn_vertex_t> collect_dyn_vertices(std::vector<dyn_vertex_t> const &explicit_vertices, block2_gf_const_view<imtime> D0t,
                                                  gf_const_view<imtime, matrix_valued> Jperpt, gf_struct_t const &gf_struct);
 
@@ -58,6 +59,12 @@ namespace triqs_cthyb {
   };
   density_split_counts_t split_density_couplings(classified_dyn_vertices_t &classified, std::vector<nda::vector<double>> const &conserved_combinations,
                                                  fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex);
+
+  /// Print how the vertices are routed: how many are resummed analytically and in terms of which conserved densities,
+  /// and how many are sampled stochastically
+  void print_dyn_routing(int n_vertices, classified_dyn_vertices_t const &classified, std::vector<many_body_op_t> const &conserved_operators,
+                         density_split_counts_t const &split, bool lang_firsov_requested, fundamental_operator_set const &fops,
+                         std::map<std::pair<int, int>, int> const &linindex);
 
   /// Subtract the static part K'(0) of the Lang-Firsov vertices from h_loc, which must happen before h_diag is built
   void apply_lang_firsov_shift(many_body_op_t &h_loc, std::vector<dyn_vertex_t> const &lf_vertices, fundamental_operator_set const &fops,

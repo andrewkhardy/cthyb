@@ -1,7 +1,7 @@
 # CTHYB run of the model in model.py (same Hamiltonian as run_ed.py): the bath enters as
-# Delta_a(iw) = V^2 / (iw - eps_bath), the phonon as D_ab(tau) = g_a g_b Q(tau) on every ordered
-# pair of spin-orbitals, diagonal included. Equal g is a coupling to N_up and N_down and goes
-# entirely to Lang-Firsov; unequal g leaves a residual that is sampled stochastically.
+# Delta_a(iw) = V^2 / (iw - eps_bath), the phonon as S_dyn = 1/2 int int Q(tau - tau') X(tau) X(tau')
+# with X = sum_a g_a n_a. Equal g is a coupling to N_up and N_down and goes entirely to Lang-Firsov;
+# unequal g leaves a residual that is sampled stochastically.
 #
 #   mpirun -np <N> python run_cthyb.py --g 0.5 0.5 --n_cycles 1000000
 
@@ -49,10 +49,9 @@ S = Solver(beta=M.beta, gf_struct=M.gf_struct, n_iw=n_iw, n_tau=n_tau, n_l=args.
 for bl, delta in M.delta_iw(n_iw):
     S.Delta_tau[bl] << Fourier(delta)
 
+# Phonon: S_dyn = 1/2 int int Q(tau - tau') X(tau) X(tau'), with X = sum_a g_a n_a
 Q = M.Q(np.linspace(0, M.beta, n_tau_bosonic))
-for a, (s1, o1) in enumerate(M.labels):
-    for b, (s2, o2) in enumerate(M.labels):
-        S.D0_tau[s1, s2].data[:, o1, o2] = M.g[a] * M.g[b] * Q
+S.add_dyn_int(Q, M.X, M.X)
 
 O_tau_args = {}
 if args.measure_O_tau is not None:
@@ -61,7 +60,7 @@ if args.measure_O_tau is not None:
 
 solve_start = time.perf_counter()
 S.solve(h_int=M.h_int(),
-        h_loc0=-sum(M.mu[a] * n(*M.labels[a]) for a in range(len(M.labels))),
+        h_loc0=M.h_loc0(),
         n_cycles=args.n_cycles,
         n_warmup_cycles=args.n_warmup_cycles,
         length_cycle=args.length_cycle,
@@ -86,19 +85,6 @@ if mpi.is_master_node():
         for term, coeff in op:
             (_, (bl, idx)), _ = term
             conserved_vectors[i, M.labels.index((bl, idx))] = np.real(coeff)
-
-    # <n_a(tau) n_b(0)> per stochastic vertex (coupling-derivative estimator); dyn_vertex_pairs
-    # gives each vertex's (a, b) in model.labels, or -1 for a non-density operator.
-    dyn_vertex_pairs, dyn_vertex_corr = [], []
-    if S.dyn_vertex_corr_tau is not None:
-        def density_orbital(op):
-            (term, _), = list(op)
-            (_, indices_dag), (_, indices) = term[0], term[1]
-            return M.labels.index(tuple(indices_dag)) if list(indices_dag) == list(indices) else -1
-
-        for (op1, op2), g in zip(S.dyn_vertex_operators, S.dyn_vertex_corr_tau):
-            dyn_vertex_pairs.append([density_orbital(op1), density_orbital(op2)])
-            dyn_vertex_corr.append(g.data.real)
 
     # The equal-time constant solver.py adds to Q_conserved_l[0], and the occupations, both from
     # the density matrix: they let the l = 0 channel be checked against ED on its own.
@@ -159,10 +145,6 @@ if mpi.is_master_node():
         A['equal_time_added'] = args.density_matrix
         A['average_sign'] = S.average_sign
         A['average_order'] = S.average_order
-        if len(dyn_vertex_pairs) > 0:
-            A['dyn_vertex_pairs'] = np.array(dyn_vertex_pairs)
-            A['dyn_vertex_corr'] = np.array(dyn_vertex_corr)
-            A['dyn_vertex_tau'] = np.linspace(0, M.beta, n_tau_bosonic)
         if S.perturbation_order_dyn is not None:
             A['perturbation_order_dyn'] = S.perturbation_order_dyn
         A['params'] = M.params()

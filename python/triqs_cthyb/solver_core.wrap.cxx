@@ -654,6 +654,9 @@ constexpr auto _c2py_doc_member_52353366 = R"DOC(The density combinations O_i = 
 constexpr auto _c2py_doc_member_1633453a =
    R"DOC(The bilinears (op1, op2) of each stochastic dynamical vertex type, in the order of dyn_vertex_corr_tau.)DOC";
 constexpr auto _c2py_doc_member_b1db761f = R"DOC(The coupling of each stochastic dynamical vertex type (for a split density pair, the residual).)DOC";
+constexpr auto _c2py_doc_member_dc600ea1 = R"DOC(The densities (n_a, n_b) of each dynamical vertex resummed analytically (Lang-Firsov).)DOC";
+constexpr auto _c2py_doc_member_94ebc9f4 =
+   R"DOC(The coupling of each Lang-Firsov vertex (for a split density pair, the part coupling conserved densities).)DOC";
 constexpr auto _c2py_doc_member_a630495a = R"DOC(Single-particle Green's function :math:`G(\tau)` in imaginary time.)DOC";
 constexpr auto _c2py_doc_member_789d035e = R"DOC(Intermediate Green's function used to accumulate :math:`G(\tau)` (real or complex).)DOC";
 constexpr auto _c2py_doc_member_c4b4ab9c = R"DOC(Violation of the property :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` after the measurement.)DOC";
@@ -718,6 +721,10 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_7e768e6a>[] = {
                                                                                                      _c2py_doc_member_52353366),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::dyn_vertex_operators, _c2py_cls_7e768e6a>("dyn_vertex_operators", _c2py_doc_member_1633453a),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::dyn_vertex_couplings, _c2py_cls_7e768e6a>("dyn_vertex_couplings", _c2py_doc_member_b1db761f),
+   c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::lang_firsov_vertex_operators, _c2py_cls_7e768e6a>("lang_firsov_vertex_operators",
+                                                                                                      _c2py_doc_member_dc600ea1),
+   c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::lang_firsov_vertex_couplings, _c2py_cls_7e768e6a>("lang_firsov_vertex_couplings",
+                                                                                                      _c2py_doc_member_94ebc9f4),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::G_tau, _c2py_cls_7e768e6a>("G_tau", _c2py_doc_member_a630495a),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::G_tau_accum, _c2py_cls_7e768e6a>("G_tau_accum", _c2py_doc_member_789d035e),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::asymmetry_G_tau, _c2py_cls_7e768e6a>("asymmetry_G_tau", _c2py_doc_member_c4b4ab9c),

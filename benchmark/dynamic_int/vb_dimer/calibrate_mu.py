@@ -13,6 +13,7 @@
 import argparse
 import os
 import sys
+from itertools import product
 
 import numpy as np
 import triqs.utility.mpi as mpi
@@ -20,6 +21,7 @@ import triqs.utility.mpi as mpi
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common import calibrate, selfenergy  # noqa: E402
 import model as model_def  # noqa: E402
+from model import N_PATCH  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -67,7 +69,12 @@ def density_cthyb(mu):
                n_tau_bosonic=n_tau_bosonic, delta_interface=True)
     for bl, delta in M.delta_iw(n_iw):
         S.Delta_tau[bl] << Fourier(delta)
-    M.register_vertices(S, n_tau_bosonic, basis='site')
+    Q = M.Q(np.linspace(0, M.beta, n_tau_bosonic))
+    for i, j in product(range(N_PATCH), repeat=2):
+        D = -M.J[i, j] * Q
+        S.add_dyn_int(D, M.Sz[i], M.Sz[j])
+        S.add_dyn_int(D / 2, M.Sp[i], M.Sm[j])
+        S.add_dyn_int(D / 2, M.Sm[i], M.Sp[j])
 
     # lang_firsov=True whatever the production setting: the one mu that the lf=True and lf=False
     # runs share must not depend on the routing.

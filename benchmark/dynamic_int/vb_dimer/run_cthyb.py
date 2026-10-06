@@ -7,14 +7,12 @@
 # this exercises the general stochastic expansion; only the part of the density coupling in
 # span{N_up, N_down} can go to Lang-Firsov, and --lang_firsov False samples all of it.
 #
-# Saved: G, Sigma (from G_l) and Sigma_alt (from G(tau)) per patch orbital; corr = O_tau =
-# <S^z_tot(tau) S^z_tot(0)> (measure_O_tau needs [O, h_loc] = 0, which the site and patch spins
-# fail); and vertex_corr, the coupling-derivative estimator <op1(tau) op2(0)> of every stochastic
-# vertex, from which the site-resolved <S_i(tau).S_j(0)> can be rebuilt (complete only with
-# --lang_firsov False).
+# Saved: G, Sigma (from G_l) and Sigma_alt (from G(tau)) per patch orbital, and corr = O_tau =
+# <S^z_tot(tau) S^z_tot(0)> (measure_O_tau needs [O, h_loc] = 0, which the site and patch spins fail).
 
 import argparse
 import os
+from itertools import product
 import numpy as np
 import triqs.utility.mpi as mpi
 from triqs.gfs import Fourier
@@ -25,7 +23,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common import grids, selfenergy, str2bool  # noqa: E402
 import model as model_def
-from model import key_to_string, N_PATCH
+from model import N_PATCH
 
 parser = argparse.ArgumentParser(description='CTHYB: two-patch DCA with a real-space retarded S.S interaction.')
 model_def.add_model_args(parser)
@@ -41,8 +39,6 @@ parser.add_argument('--density_matrix', type=str2bool, default=False,
                     help='Measure the atomic density matrix (and use_norm_as_weight); nothing here uses it')
 parser.add_argument('--random_seed', type=int, default=None,
                     help='Base seed, rank r uses base + 928374 * r (default: the solver\'s fixed seed)')
-parser.add_argument('--dry_run', type=str2bool, default=False,
-                    help='Print the registered vertex list and stop before the Monte Carlo')
 parser.add_argument('--out_dir', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))
 args = parser.parse_args()
 M = model_def.Model(args)
@@ -57,22 +53,21 @@ delta_iw = M.delta_iw(n_iw)
 for bl, delta in delta_iw:
     S.Delta_tau[bl] << Fourier(delta)
 
-registered = M.register_vertices(S, n_tau_bosonic, basis='site')
-if mpi.is_master_node():
-    print(f"Registered {len(registered)} dynamical vertices from the site-basis S.S "
-          f"(J_intra = {M.J_intra}, J_inter = {M.J_inter}), patch levels {np.round(M.eps_patch, 5)}")
-
-if args.dry_run:
-    if mpi.is_master_node():
-        for op1, op2, coeff in registered:
-            print(f"  {coeff:+.5f}   ({op1}) (tau) * ({op2}) (0)")
-    raise SystemExit(0)
+# Retarded spin-spin interaction on the cluster sites,
+#   S_dyn = 1/2 sum_ij int int -J_ij Q(tau - tau') S_i(tau) . S_j(tau'),
+#   S_i . S_j = S^z_i S^z_j + (S^+_i S^-_j + S^-_i S^+_j) / 2.
+Q = M.Q(np.linspace(0, M.beta, n_tau_bosonic))
+for i, j in product(range(N_PATCH), repeat=2):
+    D = -M.J[i, j] * Q
+    S.add_dyn_int(D, M.Sz[i], M.Sz[j])
+    S.add_dyn_int(D / 2, M.Sp[i], M.Sm[j])
+    S.add_dyn_int(D / 2, M.Sm[i], M.Sp[j])
 
 # mu is never read back from the solver: what it routes analytically is route dependent, and the
 # lf=True and lf=False runs must solve one Hamiltonian. The retarded S.S has no static charge part.
 if not M.half_filling_is_exact() and mpi.is_master_node():
     print(f"NOTE: --bath {M.bath} breaks particle-hole symmetry (patch DOS variance ratio "
-          f"{M.params()['dos_variance_ratio']:.3f}), so mu = {M.mu} is only approximately half "
+          f"{M.dos_variance_ratio:.3f}), so mu = {M.mu} is only approximately half "
           f"filling; calibrate --mu (calibrate_mu.py).")
 
 S.solve(h_int=M.h_int(), h_loc0=M.h_loc0(),
@@ -113,19 +108,6 @@ if mpi.is_master_node():
     print("  " + selfenergy.diagnose(sigma_orb[0], w_n)["text"])
     print(f"  <n> = {np.round(density, 5)}")
 
-    # Vertex correlators labelled by their monomial pair, so they need no ordering convention.
-    def operator_key(op):
-        (mono, _), = list(op)
-        return tuple((bool(d), tuple(i)) for d, i in mono)
-
-    vertex_labels, vertex_corr = [], []
-    if S.dyn_vertex_corr_tau is not None:
-        for (op1, op2), g in zip(S.dyn_vertex_operators, S.dyn_vertex_corr_tau):
-            vertex_labels.append([key_to_string(operator_key(op1)), key_to_string(operator_key(op2))])
-            vertex_corr.append(g.data.real)
-        print(f"Measured {len(vertex_corr)} stochastic vertex correlators "
-              f"(of {len(registered)} registered)")
-
     os.makedirs(args.out_dir, exist_ok=True)
     seed_tag = '' if args.random_seed is None else f"_seed-{args.random_seed}"
     filename = os.path.join(args.out_dir,
@@ -139,8 +121,7 @@ if mpi.is_master_node():
         A['Sigma_alt'] = sigma_orb_alt
         A['density'] = density
         A['labels'] = [f"{s},{K}" for s, K in M.labels]
-        # <S^z_tot(tau) S^z_tot(0)> = sum_ij of run_ed.py's chi_zz. Not from vertex_corr, which
-        # divides by the coupling and is zeroed where it is negligible (most of tau at beta = 100).
+        # <S^z_tot(tau) S^z_tot(0)> = sum_ij of run_ed.py's chi_zz
         A['tau_corr'] = np.array([float(t) for t in S.O_tau.mesh])
         A['corr'] = np.asarray(S.O_tau.data).real.flatten()
         A['G_tau'] = S.G_tau
@@ -152,14 +133,6 @@ if mpi.is_master_node():
         A['average_order'] = S.average_order
         A['fillings'] = np.array([fillings[s] for s in model_def.SPIN_NAMES])
         A['total_filling'] = total_filling
-        # The registered expansion, so the analysis can rebuild any site-basis correlator
-        A['registered_labels'] = [[key_to_string(operator_key(o1)), key_to_string(operator_key(o2))]
-                                  for o1, o2, _ in registered]
-        A['registered_coeffs'] = np.array([coeff for _, _, coeff in registered])
-        if len(vertex_corr) > 0:
-            A['vertex_labels'] = vertex_labels
-            A['vertex_corr'] = np.array(vertex_corr)
-            A['vertex_tau'] = np.linspace(0, M.beta, n_tau_bosonic)
         if S.perturbation_order_dyn is not None:
             A['perturbation_order_dyn'] = S.perturbation_order_dyn
         A['perturbation_order'] = S.perturbation_order

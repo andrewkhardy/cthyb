@@ -94,6 +94,12 @@ namespace triqs_cthyb {
     /// The coupling of each stochastic dynamical vertex type (for a split density pair, the residual).
     std::vector<gf<imtime, scalar_valued>> dyn_vertex_couplings;
 
+    /// The densities (n_a, n_b) of each dynamical vertex resummed analytically (Lang-Firsov).
+    std::vector<std::pair<many_body_op_t, many_body_op_t>> lang_firsov_vertex_operators;
+
+    /// The coupling of each Lang-Firsov vertex (for a split density pair, the part coupling conserved densities).
+    std::vector<gf<imtime, scalar_valued>> lang_firsov_vertex_couplings;
+
     /**
      * Construct a CTHYB solver.
      *
@@ -232,6 +238,8 @@ namespace triqs_cthyb {
       h5_write(grp, "conserved_density_operators", s.conserved_density_operators);
       h5_write(grp, "dyn_vertex_operators", s.dyn_vertex_operators);
       h5_write(grp, "dyn_vertex_couplings", s.dyn_vertex_couplings);
+      h5_write(grp, "lang_firsov_vertex_operators", s.lang_firsov_vertex_operators);
+      h5_write(grp, "lang_firsov_vertex_couplings", s.lang_firsov_vertex_couplings);
     }
 
     // Function that read all containers to hdf5 file
@@ -260,6 +268,8 @@ namespace triqs_cthyb {
       h5::try_read(grp, "conserved_density_operators", s.conserved_density_operators);
       h5::try_read(grp, "dyn_vertex_operators", s.dyn_vertex_operators);
       h5::try_read(grp, "dyn_vertex_couplings", s.dyn_vertex_couplings);
+      h5::try_read(grp, "lang_firsov_vertex_operators", s.lang_firsov_vertex_operators);
+      h5::try_read(grp, "lang_firsov_vertex_couplings", s.lang_firsov_vertex_couplings);
 
       return s;
     }

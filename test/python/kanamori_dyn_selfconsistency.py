@@ -22,7 +22,6 @@ from triqs.operators.util.hamiltonians import h_int_kanamori
 from triqs.operators.util.op_struct import set_operator_structure
 from triqs.utility.comparison_tests import *
 from triqs_cthyb import Solver, kanamori_dynamical_vertices
-from triqs_cthyb.dynamical_interactions import _as_scalar_gf
 from itertools import product
 
 # H_loc parameters -- identical physical setup to kanamori_dyn.py.
@@ -63,7 +62,7 @@ def build_and_solve(lang_firsov, n_cycles, seed_offset):
     kanamori_dynamical_vertices(S, spin_names, list(range(n_orb)), U=Q_tau, Uprime=Q_tau, spin_flip=False)
     for s in spin_names:
         for a in range(n_orb):
-            S.add_dyn_vertex(n(s, a), n(s, a), _as_scalar_gf(Q_tau))
+            S.add_dyn_int(Q_tau, n(s, a), n(s, a))
     S.solve(h_int=H_int, h_loc0=mu * N, max_time=-1, random_name="",
             random_seed=seed_offset + 123 * mpi.rank + 567,
             length_cycle=50, n_warmup_cycles=max(50, n_cycles // 20), n_cycles=n_cycles,

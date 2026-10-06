@@ -4,8 +4,8 @@
 # See LICENSE in the root of this distribution for details.
 """CTHYB run for the spin-spin benchmark (model and conventions: model.py).
 
-Sz.Sz goes in through D0_tau (Lang-Firsov when lang_firsov=True), s+s- through Jperp_tau,
-which is always stochastic. Saves Sigma from G_l and, as Sigma_alt, from G(tau);
+The Sz.Sz part couples conserved densities and is resummed analytically (Lang-Firsov) when
+lang_firsov=True; the spin flips are always sampled stochastically. Saves Sigma from G_l and, as Sigma_alt, from G(tau);
 <Sz(tau)Sz(0)> from O_tau and, as corr_alt, from the Legendre kink estimator Q_tau.
 """
 import numpy as np
@@ -15,7 +15,7 @@ from triqs.gfs import Fourier
 from triqs_cthyb import Solver
 
 import model as M  # puts common/ on sys.path
-from common import kernels, selfenergy, str2bool
+from common import selfenergy, str2bool
 
 
 def add_cthyb_args(parser):
@@ -34,12 +34,6 @@ args = M.parse_args("CTHYB single-orbital spin-spin benchmark", add_cthyb_args)
 model = M.Model(args)
 if mpi.is_master_node():
     print(model.report())
-    if abs(args.filling - 0.5) < 1e-12 and args.mu is None:
-        info = model.check_half_filling_mu()
-        print(f"  mu = U/2 confirmed: W_shift_offdiag={info['W_shift'][0, 1]:+.6f} "
-              f"level_shift={info['level_shift'][0]:+.6f}")
-
-jperp_tau, d0 = model.spin_couplings(half_prefactor_action=True)
 
 spin_flip = {}
 if args.spin_flip_move:
@@ -50,9 +44,12 @@ if args.spin_flip_move:
 S = Solver(beta=model.beta, gf_struct=M.GF_STRUCT, n_iw=model.n_iw, n_tau=model.n_tau,
            n_l=args.n_l, n_tau_bosonic=model.n_tau_bosonic, delta_interface=True)
 S.Delta_tau << Fourier(model.delta_iw())
-S.Jperp_tau << kernels.as_gf(jperp_tau, model.beta)
-for (s1, s2), d in d0.items():
-    S.D0_tau[s1, s2] << kernels.as_gf(d, model.beta)
+
+# S_dyn = 1/2 int int lambda(tau - tau') [szsz Sz Sz + jperp (S+ S- + S- S+) / 2]
+lam = model.spin_kernel
+S.add_dyn_int(args.szsz * lam, M.SZ, M.SZ)
+S.add_dyn_int(args.jperp * lam / 2, M.SP, M.SM)
+S.add_dyn_int(args.jperp * lam / 2, M.SM, M.SP)
 
 S.solve(h_int=model.h_int(), h_loc0=model.h_loc0(),
         length_cycle=args.length_cycle, n_warmup_cycles=args.n_warmup_cycles, move_double=args.move_double,

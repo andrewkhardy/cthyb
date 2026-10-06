@@ -215,20 +215,14 @@ namespace triqs_cthyb {
     // of the Lang-Firsov vertices goes into h_loc before h_diag is built
     auto dyn_vertices            = collect_dyn_vertices(inputs.dyn_vertices, inputs.D0t, inputs.Jperpt, gf_struct);
     auto classified_dyn_vertices = classify_dyn_vertices(dyn_vertices, _h_loc, fops, linindex, params.lang_firsov);
+    conserved_densities_t conserved;
+    density_split_counts_t split;
     if (params.lang_firsov) {
-      auto conserved = conserved_densities(_h_loc, fops, linindex);
-      auto split     = split_density_couplings(classified_dyn_vertices, conserved.vectors, fops, linindex);
-      if (params.verbosity >= 2 && split.n_input > 0) {
-        if (split.block_structured)
-          std::cout << "Found " << conserved.vectors.size() << " conserved density combination(s); split the coupling of " << split.n_input
-                    << " density vertex(es) not individually commuting with h_loc into " << split.n_lang_firsov << " Lang-Firsov and "
-                    << split.n_stochastic << " stochastic residual vertex(es)." << std::endl;
-        else
-          std::cout << "The " << conserved.vectors.size() << " conserved density combination(s) are not indicator vectors of disjoint "
-                    << "orbital sets; the " << split.n_input << " density vertex(es) not individually commuting with h_loc stay stochastic."
-                    << std::endl;
-      }
+      conserved = conserved_densities(_h_loc, fops, linindex);
+      split     = split_density_couplings(classified_dyn_vertices, conserved.vectors, fops, linindex);
     }
+    if (params.verbosity >= 2)
+      print_dyn_routing(dyn_vertices.size(), classified_dyn_vertices, conserved.operators, split, params.lang_firsov, fops, linindex);
     apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
 
 #ifndef HYBRIDISATION_IS_COMPLEX
@@ -307,10 +301,13 @@ namespace triqs_cthyb {
       dyn_vertex_operators.emplace_back(v.op1, v.op2);
       dyn_vertex_couplings.push_back(v.coupling);
     }
+    lang_firsov_vertex_operators.clear();
+    lang_firsov_vertex_couplings.clear();
+    for (auto const &v : classified_dyn_vertices.lang_firsov) {
+      lang_firsov_vertex_operators.emplace_back(v.op1, v.op2);
+      lang_firsov_vertex_couplings.push_back(v.coupling);
+    }
 
-    if (params.verbosity >= 2)
-      std::cout << "Dynamical interaction vertices: " << classified_dyn_vertices.lang_firsov.size() << " analytic (Lang-Firsov), "
-                << dyn_op_list.size() << " stochastic (sampled by insert_dyn/remove_dyn)" << std::endl;
     bool has_dyn_interactions = !dyn_op_list.empty();
 
     // Initialise Monte Carlo quantities

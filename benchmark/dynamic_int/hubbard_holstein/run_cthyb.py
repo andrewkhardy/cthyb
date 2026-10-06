@@ -4,8 +4,8 @@
 # See LICENSE in the root of this distribution for details.
 """CTHYB run for the Hubbard-Holstein benchmark (model: model.py).
 
-Uniform g makes every D0 vertex Lang-Firsov eligible, so `--lang_firsov False` (all stochastic)
-is the internal cross-check. Saves Sigma from G_l and, as Sigma_alt, from G(tau); <N(tau)N(0)>
+The phonon couples to the total density N, which is conserved, so every vertex is resummed
+analytically; `--lang_firsov False` (all stochastic) is the internal cross-check. Saves Sigma from G_l and, as Sigma_alt, from G(tau); <N(tau)N(0)>
 from O_tau and, as corr_alt, from the Legendre kink estimator Q_tau.
 """
 import numpy as np
@@ -15,7 +15,7 @@ from triqs.gfs import Fourier
 from triqs_cthyb import Solver
 
 import model as M  # puts common/ on sys.path
-from common import kernels, selfenergy, str2bool
+from common import selfenergy, str2bool
 
 
 def add_cthyb_args(parser):
@@ -31,18 +31,13 @@ args = M.parse_args("CTHYB single-orbital Hubbard-Holstein benchmark", add_cthyb
 model = M.Model(args)
 if mpi.is_master_node():
     print(model.report())
-    if abs(args.filling - 0.5) < 1e-12 and args.mu is None:
-        info = model.check_half_filling_mu()
-        print(f"  mu = U/2 - g^2/omega_0^2 confirmed: {info['mu']:.8f} vs {info['expected']:.8f}; "
-              f"K'(0)={info['kprime_0']:.6f}")
-
-d0 = model.d0(half_prefactor_action=True)
 
 S = Solver(beta=model.beta, gf_struct=M.GF_STRUCT, n_iw=model.n_iw, n_tau=model.n_tau,
            n_l=args.n_l, n_tau_bosonic=model.n_tau_bosonic, delta_interface=True)
 S.Delta_tau << Fourier(model.delta_iw())
-for (s1, s2), d in d0.items():
-    S.D0_tau[s1, s2] << kernels.as_gf(d, model.beta)
+
+# Phonon: S_dyn = 1/2 int int g^2 Q(tau - tau') N(tau) N(tau'), N = n_up + n_down
+S.add_dyn_int(model.g ** 2 * model.Q, M.N_TOT, M.N_TOT)
 
 S.solve(h_int=model.h_int(), h_loc0=model.h_loc0(),
         length_cycle=args.length_cycle, n_warmup_cycles=args.n_warmup_cycles,

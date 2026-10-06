@@ -19,10 +19,11 @@
 #
 ################################################################################
 r"""
-Retarded generalization of the Hubbard-Kanamori interaction, and the static offset of a retarded coupling.
+Helpers for retarded interactions, S_dyn = 1/2 int int D(tau - tau') O1(tau) O2(tau') with O1, O2 quadratic.
 
-Every vertex is registered with solver.add_dyn_vertex; solve() decides per vertex whether it is resummed
-analytically (Lang-Firsov) or sampled stochastically.
+Register a term with Solver.add_dyn_int(D_tau, O1, O2), which splits it with expand_dyn_int into the single-bilinear
+vertices the solver samples; solve() decides per vertex whether it is resummed analytically (Lang-Firsov) or sampled
+stochastically. Also: the retarded Hubbard-Kanamori interaction, and the static offset of a retarded coupling.
 """
 from itertools import product
 import numpy as np
@@ -41,9 +42,36 @@ def _as_scalar_gf(g):
     return scalar_g
 
 
+def bilinear(key):
+    """The operator c^dag_a c_b for a key ((True, a), (False, b)) from expand_dyn_int."""
+    (_, a), (_, b) = key
+    return c_dag(*a) * c(*b)
+
+
+def _bilinear_terms(op, name):
+    for monomial, coeff in op:
+        if len(monomial) != 2 or monomial[0][0] == monomial[1][0]:
+            raise ValueError(f"{name} must be quadratic, a sum of c_dag(a)*c(b) terms, but contains the term {coeff} * {monomial}")
+        yield tuple((bool(dagger), tuple(indices)) for dagger, indices in monomial), coeff
+
+
+def expand_dyn_int(op1, op2):
+    r"""Expand op1 (x) op2 into products of single bilinears: {(key1, key2): coeff} with
+
+        op1(tau) op2(tau') = sum coeff * bilinear(key1)(tau) * bilinear(key2)(tau').
+
+    The operators act at different times, so each is expanded on its own; they are never multiplied together.
+    """
+    terms = {}
+    for key1, a in _bilinear_terms(op1, 'op1'):
+        for key2, b in _bilinear_terms(op2, 'op2'):
+            terms[key1, key2] = terms.get((key1, key2), 0.0) + a * b
+    return {k: v for k, v in terms.items() if abs(v) > 1e-14}
+
+
 def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=None, J_hund=None, spin_flip=True):
     r"""
-    Register the retarded Hubbard-Kanamori interaction on `solver` with add_dyn_vertex:
+    Register the retarded Hubbard-Kanamori interaction on `solver` with add_dyn_int:
 
         sum_{(a1,s1) != (a2,s2)} D^{s1 s2}_{a1 a2}(tau) n_{a1 s1}(tau) n_{a2 s2}(0)
           - sum_{a1 != a2, s} D^J_{a1 a2}(tau)/2 [c^dag_{a1 s} c_{a1 sbar}](tau) [c^dag_{a2 sbar} c_{a2 s}](0)
@@ -54,7 +82,7 @@ def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=No
 
     Parameters
     ----------
-    solver : Solver or SolverCore
+    solver : Solver
     spin_names : list of str
     orb_names : list
         Orbital labels, as in the solver's gf_struct.
@@ -80,7 +108,7 @@ def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=No
             coupling = coupling_for(table, a1, a2)
             if coupling is None:
                 continue
-            solver.add_dyn_vertex(n(s1, a1), n(s2, a2), _as_scalar_gf(coupling))
+            solver.add_dyn_int(coupling, n(s1, a1), n(s2, a2))
 
     if spin_flip:
         for s1, s2 in product(spin_names, spin_names):
@@ -92,7 +120,7 @@ def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=No
                 coupling = coupling_for(J_hund, a1, a2)
                 if coupling is None:
                     continue
-                solver.add_dyn_vertex(c_dag(s1, a1) * c(s2, a1), c_dag(s2, a2) * c(s1, a2), _as_scalar_gf(-0.5 * coupling))
+                solver.add_dyn_int(-0.5 * coupling, c_dag(s1, a1) * c(s2, a1), c_dag(s2, a2) * c(s1, a2))
 
 
 # The static offset of a retarded coupling D: K'' = D with K(0) = K(beta) = 0 gives

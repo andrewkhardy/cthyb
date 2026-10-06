@@ -7,7 +7,7 @@
 # many_body_operator terms, no vertex-shape restriction applies to h_int). On top of that,
 # a single boson couples uniformly to the total density across every spin-orbital: every
 # off-diagonal pair via kanamori_dynamical_vertices (U=Uprime=Q_tau), *and* every diagonal
-# (a==a) self-term explicitly via add_dyn_vertex, all sharing the same Q_tau coupling.
+# (a==a) self-term explicitly via add_dyn_int, all sharing the same Q_tau coupling.
 #
 # The diagonal self-terms are part of the interaction being asked for here, not bookkeeping:
 # find_conserved_density_combinations finds that individual orbital densities do not commute
@@ -32,7 +32,6 @@ from triqs.operators.util.op_struct import set_operator_structure
 from h5 import HDFArchive
 from triqs.utility.comparison_tests import *
 from triqs_cthyb import Solver, kanamori_dynamical_vertices
-from triqs_cthyb.dynamical_interactions import _as_scalar_gf
 from itertools import product
 
 # H_loc parameters (matches test/python/kanamori_py.py)
@@ -85,7 +84,7 @@ kanamori_dynamical_vertices(S, spin_names, list(range(n_orb)), U=Q_tau, Uprime=Q
 # docstring above for what they mean physically).
 for s in spin_names:
     for a in range(n_orb):
-        S.add_dyn_vertex(n(s, a), n(s, a), _as_scalar_gf(Q_tau))
+        S.add_dyn_int(Q_tau, n(s, a), n(s, a))
 
 # Solve parameters -- deterministic, small statistics (matches kanamori.cpp/kanamori_py.py).
 # lang_firsov defaults to True; this test never touches the stochastic dynamical path since
