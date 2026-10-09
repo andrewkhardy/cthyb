@@ -20,7 +20,7 @@ case "$SOLVER" in
   *) echo "usage: sbatch $0 cthyb|ctseg|ctint" >&2; exit 2 ;;
 esac
 
-module load modules/2.5-beta1
+module load modules/2.5-20261005
 module load triqs/multiorbital
 
 NRANKS=96

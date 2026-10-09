@@ -26,7 +26,7 @@ case "$SOLVER/$MODE" in
 esac
 L="${MODE%x*}"
 
-module load modules/2.5-beta1
+module load modules/2.5-20261005
 module load triqs/multiorbital
 
 NRANKS=96
