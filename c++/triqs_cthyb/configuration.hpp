@@ -190,26 +190,13 @@ namespace triqs_cthyb {
     C2PY_PROPERTY_GET(beta) double beta() const { return beta_; }
     auto size() const { return oplist_.size(); }
 
-    /**
-     * @brief Insert a given operator at a given imaginary time.
-     * 
-     * @param tau Imaginary time at which to insert the operator.
-     * @param op Description of the operator to insert.
-     */
+    /// Insert the operator op at imaginary time tau.
     void insert(time_pt tau, op_desc op) { oplist_.insert({tau, op}); }
 
-    /**
-     * @brief Replace an existing operator at a given imaginary time with a new one.
-     * 
-     * @param tau Imaginary time at which to replace the operator.
-     * @param op Description of the operator to insert.
-     */
+    /// Replace the operator at imaginary time tau with op.
     void replace(time_pt tau, op_desc op) { oplist_[tau] = op; }
 
-    /**
-     * @brief Erase the operator at a given imaginary time.
-     * @param tau Imaginary time at which to erase the operator.
-     */
+    /// Erase the operator at imaginary time t.
     void erase(time_pt const &t) { oplist_.erase(t); }
 
     /// Clear the configuration (remove all operators).
@@ -260,7 +247,7 @@ namespace triqs_cthyb {
     C2PY_IGNORE void finalize() {
       id_++;
 #ifdef SAVE_CONFIGS
-      if (id < NUM_CONFIGS_TO_SAVE) h5_write(configs_hfile, "c_" + std::to_string(id), *this);
+      if (id_ < NUM_CONFIGS_TO_SAVE) h5_write(configs_hfile, "c_" + std::to_string(id_), *this);
 #endif
     }
 

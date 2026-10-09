@@ -23,10 +23,12 @@
 #include <triqs/gfs.hpp>
 #include <triqs/mesh.hpp>
 #include <triqs/det_manip.hpp>
-#include <triqs/utility/legendre.hpp>
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <initializer_list>
 #include <iostream>
+#include <span>
 
 namespace triqs_cthyb {
   using namespace triqs::gfs;
@@ -34,7 +36,8 @@ namespace triqs_cthyb {
   using namespace nda;
 
   // Trace operators with their times
-  using timed_ops_t = std::vector<std::pair<time_pt, op_desc>>;
+  using timed_op_t  = std::pair<time_pt, op_desc>;
+  using timed_ops_t = std::vector<timed_op_t>;
 
   /************************
  * The Monte Carlo data
@@ -59,10 +62,10 @@ namespace triqs_cthyb {
       delta_block_adaptor &operator=(delta_block_adaptor const &) = delete;
       delta_block_adaptor &operator=(delta_block_adaptor &&)      = default;
 
+      // The difference of two time_pt wraps around beta, the sign does not
       det_scalar_t operator()(std::pair<time_pt, int> const &x, std::pair<time_pt, int> const &y) const {
         det_scalar_t res = delta_block[closest_mesh_pt(double(x.first - y.first))](x.second, y.second);
-        return (x.first >= y.first ? res : -res); // x,y first are time_pt, wrapping is automatic in the - operation, but need to
-                                                  // compute the sign
+        return (x.first >= y.first ? res : -res);
       }
 
       friend void swap(delta_block_adaptor &dba1, delta_block_adaptor &dba2) noexcept { std::swap(dba1.delta_block, dba2.delta_block); }
@@ -93,6 +96,7 @@ namespace triqs_cthyb {
          dyn_interactions(dyn_interactions) {
 
       if (!K_n.empty()) build_K_table(K_n, p.verbosity);
+      lang_firsov_K_n = K_n;
 
       std::vector<std::vector<std::pair<time_pt, int>>> X(delta.size()), Y(delta.size());
 
@@ -167,9 +171,9 @@ namespace triqs_cthyb {
     qmc_data &operator=(qmc_data const &) = delete;
 
     /// The trace operators of a dynamical vertex: op1 as opL(tau1) opR(tau1 - eps), op2 likewise at tau2
-    timed_ops_t dyn_vertex_ops(configuration::dyn_bosonic_pair_t const &v) const {
+    std::array<timed_op_t, 4> dyn_vertex_ops(configuration::dyn_bosonic_pair_t const &v) const {
       auto eps = tau_seg.get_epsilon();
-      return {{v.tau1, v.ops.op1.opL}, {v.tau1 - eps, v.ops.op1.opR}, {v.tau2, v.ops.op2.opL}, {v.tau2 - eps, v.ops.op2.opR}};
+      return {{{v.tau1, v.ops.op1.opL}, {v.tau1 - eps, v.ops.op1.opR}, {v.tau2, v.ops.op2.opL}, {v.tau2 - eps, v.ops.op2.opR}}};
     }
 
     /// The coupling D(tau1 - tau2) of a dynamical vertex
@@ -205,90 +209,166 @@ namespace triqs_cthyb {
       return ops;
     }
 
-    // Lang-Firsov kernel K_ab(tau) on [0, beta/2] (K(tau) = K(beta - tau)), linearly interpolated on a grid that is
-    // refined until it reproduces the Legendre series to K_TABLE_RTOL
-    static constexpr double K_TABLE_RTOL  = 1e-9;
-    static constexpr long K_TABLE_N_START = 4096;
-    static constexpr long K_TABLE_N_MAX   = 1L << 20;
+    // Lang-Firsov kernel K_ab(tau) on [0, beta/2] (K(tau) = K(beta - tau)): K and its slope on a grid, interpolated by
+    // cubic Hermite polynomials, the grid refined until they reproduce the Legendre series to K_TABLE_RTOL. One row per
+    // distinct K_ab.
+    static constexpr double K_TABLE_RTOL      = 1e-9;
+    static constexpr double K_TABLE_WARN_RTOL = 1e-4; // warn only when the table stops this far from the series
+    static constexpr long K_TABLE_N_START     = 64;
+    static constexpr long K_TABLE_N_MAX       = 1L << 20;
 
     long n_K_lin       = 0;    // number of linear indices
     long n_K_tab       = 0;    // number of grid intervals
     double K_tab_inv_h = 0.0;  // 1 / grid spacing
-    std::vector<double> K_tab; // n_K_lin * n_K_lin rows of n_K_tab + 1 points, empty without Lang-Firsov vertices
+    std::vector<long> K_row;   // the row of K_ab at a * n_K_lin + b, -1 where K_ab = 0
+    std::vector<double> K_tab; // rows of n_K_tab + 1 points, each K and h K', empty without Lang-Firsov vertices
+    std::vector<std::vector<std::vector<double>>> lang_firsov_K_n; // the Legendre coefficients K_n[a][b][n] of the table
+
+    /// Whether occupation kinks at one time, kinks[a] for linear index a (+1 per c^dagger_a, -1 per c_a), leave the
+    /// Lang-Firsov weight alone: they interact with a kink of b through sum_a kinks[a] K_ab, which must vanish for every b
+    bool lang_firsov_blind_to(std::vector<double> const &kinks) const {
+      double scale = 0.0;
+      for (auto const &row : lang_firsov_K_n)
+        for (auto const &k : row)
+          for (double k_n : k) scale = std::max(scale, std::abs(k_n));
+      for (size_t b = 0; b < lang_firsov_K_n.size(); ++b)
+        for (size_t n = 0; n < lang_firsov_K_n[b][b].size(); ++n) {
+          double sum = 0.0;
+          for (size_t a = 0; a < lang_firsov_K_n.size(); ++a) sum += kinks[a] * lang_firsov_K_n[a][b][n];
+          if (std::abs(sum) > 1e-12 * scale) return false;
+        }
+      return true;
+    }
+
+    // The cubic Hermite interpolant at u in [0, 1] of an interval, from p = {K_i, h K'_i, K_{i+1}, h K'_{i+1}}
+    static double hermite(double const *p, double u) {
+      double const v = 1.0 - u;
+      return v * v * ((1.0 + 2.0 * u) * p[0] + u * p[1]) + u * u * ((3.0 - 2.0 * u) * p[2] - v * p[3]);
+    }
 
     void build_K_table(std::vector<std::vector<std::vector<double>>> const &K_n, int verbosity) {
       double const beta = config.beta(), half = beta / 2.0;
-      auto K_legendre = [beta](std::vector<double> const &k, double t) {
-        triqs::utility::legendre_generator leg;
-        leg.reset(2.0 * t / beta - 1.0);
-        double val = 0.0;
-        for (double k_n : k) val += k_n * leg.next();
-        return val;
+
+      // K(t) and dK/dt from the Legendre series, with (n + 1) P_{n+1} = (2n + 1) x P_n - n P_{n-1}, P'_{n+1} = P'_{n-1} + (2n + 1) P_n
+      auto K_and_slope = [beta](std::vector<double> const &k, double t) {
+        double const x = 2.0 * t / beta - 1.0;
+        double P = 1.0, P_next = x, dP = 0.0, dP_next = 1.0, K = 0.0, dK = 0.0;
+        for (size_t n = 0; n < k.size(); ++n) {
+          K += k[n] * P;
+          dK += k[n] * dP;
+          double const P_after  = ((2.0 * n + 3.0) * x * P_next - (n + 1.0) * P) / (n + 2.0);
+          double const dP_after = dP + (2.0 * n + 3.0) * P_next;
+          P = P_next, P_next = P_after, dP = dP_next, dP_next = dP_after;
+        }
+        return std::pair{K, 2.0 / beta * dK};
       };
-      n_K_lin        = long(K_n.size());
+
+      // The distinct nonzero K_ab
+      n_K_lin = long(K_n.size());
+      std::vector<std::vector<double> const *> rows;
+      K_row.assign(n_K_lin * n_K_lin, -1);
+      for (long a = 0; a < n_K_lin; ++a)
+        for (long b = 0; b < n_K_lin; ++b) {
+          auto const &k = K_n[a][b];
+          if (std::all_of(k.begin(), k.end(), [](double x) { return x == 0.0; })) continue;
+          auto same = std::find_if(rows.begin(), rows.end(), [&](auto const *r) { return *r == k; });
+          K_row[a * n_K_lin + b] = same - rows.begin();
+          if (same == rows.end()) rows.push_back(&k);
+        }
+
       double max_err = 0.0, max_K = 0.0;
       for (n_K_tab = K_TABLE_N_START;; n_K_tab *= 2) {
         double const h = half / double(n_K_tab);
-        K_tab.assign(n_K_lin * n_K_lin * (n_K_tab + 1), 0.0);
+        K_tab.assign(rows.size() * (n_K_tab + 1) * 2, 0.0);
         max_err = max_K = 0.0;
-        for (long a = 0; a < n_K_lin; ++a)
-          for (long b = 0; b < n_K_lin; ++b) {
-            auto const &k = K_n[a][b];
-            if (std::all_of(k.begin(), k.end(), [](double x) { return x == 0.0; })) continue;
-            double *row = &K_tab[(a * n_K_lin + b) * (n_K_tab + 1)];
-            for (long i = 0; i <= n_K_tab; ++i) {
-              row[i] = K_legendre(k, double(i) * h);
-              max_K  = std::max(max_K, std::abs(row[i]));
-            }
-            for (long i = 0; i < n_K_tab; ++i)
-              max_err = std::max(max_err, std::abs(0.5 * (row[i] + row[i + 1]) - K_legendre(k, (double(i) + 0.5) * h)));
+        for (size_t r = 0; r < rows.size(); ++r) {
+          double *row = &K_tab[r * (n_K_tab + 1) * 2];
+          for (long i = 0; i <= n_K_tab; ++i) {
+            auto const [K, slope] = K_and_slope(*rows[r], double(i) * h);
+            row[2 * i]            = K;
+            row[2 * i + 1]        = h * slope;
+            max_K                 = std::max(max_K, std::abs(K));
           }
+          for (long i = 0; i < n_K_tab; ++i)
+            for (double u : {0.25, 0.5, 0.75})
+              max_err = std::max(max_err, std::abs(hermite(row + 2 * i, u) - K_and_slope(*rows[r], (double(i) + u) * h).first));
+        }
         if (max_err <= K_TABLE_RTOL * std::max(1.0, max_K) || n_K_tab >= K_TABLE_N_MAX) break;
       }
       K_tab_inv_h = double(n_K_tab) / half;
-      if (max_err > K_TABLE_RTOL * std::max(1.0, max_K))
+      if (max_err > K_TABLE_WARN_RTOL * std::max(1.0, max_K))
         std::cerr << "WARNING: Lang-Firsov K(tau) table did not reach its tolerance: max interpolation error " << max_err
                   << " at " << n_K_tab << " intervals (max|K| = " << max_K << ")\n";
       else if (verbosity >= 3)
-        std::cout << "Lang-Firsov K(tau) tabulated on " << n_K_tab << " intervals over [0, beta/2], max interpolation error "
-                  << max_err << " (max|K| = " << max_K << ")" << std::endl;
+        std::cout << "Lang-Firsov K(tau) tabulated in " << rows.size() << " distinct row(s) on " << n_K_tab
+                  << " intervals over [0, beta/2], max interpolation error " << max_err << " (max|K| = " << max_K << ")" << std::endl;
     }
 
-    /// s_1 s_2 K_{a(op1) b(op2)}(tau1 - tau2) from the table, s = +1 for c^dagger, -1 for c
-    double eval_K(op_desc const &op1, op_desc const &op2, time_pt const &tau1, time_pt const &tau2) const {
+    /// s_1 s_2 K_{a(op1) b(op2)}(tau1 - tau2) from the table, s = +1 for c^dagger, -1 for c, for dt = tau1 - tau2 in (-beta, beta)
+    /// (a double, cheaper than the difference of two time_pt in this inner loop of every move)
+    double eval_K(op_desc const &op1, op_desc const &op2, double dt) const {
+      long const row = K_row[op1.linear_index * n_K_lin + op2.linear_index];
+      if (row < 0) return 0.0;
       double const beta = config.beta();
-      double t          = double(tau1 - tau2); // cyclic difference, in [0, beta)
+      double t          = (dt < 0) ? dt + beta : dt; // cyclic difference, in [0, beta)
       if (t > beta / 2.0) t = beta - t;
-      double const x    = t * K_tab_inv_h;
-      long const i      = std::min(long(x), n_K_tab - 1);
-      double const *row = &K_tab[(op1.linear_index * n_K_lin + op2.linear_index) * (n_K_tab + 1)];
-      double const val  = row[i] + (x - double(i)) * (row[i + 1] - row[i]);
+      double const x   = t * K_tab_inv_h;
+      long const i     = std::min(long(x), n_K_tab - 1);
+      double const val = hermite(&K_tab[(row * (n_K_tab + 1) + i) * 2], x - double(i));
       return (op1.dagger == op2.dagger) ? val : -val;
     }
 
     /// Ratio exp(sum s s' K(tau - tau')) of the Lang-Firsov weights for inserting and removing these trace operators
-    double compute_lang_firsov_ratio(timed_ops_t const &inserted, timed_ops_t const &removed) const {
+    double compute_lang_firsov_ratio(std::span<timed_op_t const> inserted, std::span<timed_op_t const> removed) const {
       if (K_tab.empty()) return 1.0;
       double delta_W = 0.0;
 
-      // with every trace operator that stays (trace times are unique)
-      auto background_interaction = [&](op_desc const &op, time_pt const &t, double sign) {
-        for_each_trace_op([&](time_pt const &t_bg, op_desc const &op_bg) {
-          bool is_removed = std::any_of(removed.begin(), removed.end(), [&](auto const &r) { return r.first == t_bg; });
-          if (!is_removed) delta_W += sign * eval_K(op, op_bg, t, t_bg);
-        });
-      };
-      for (auto const &[t, op] : inserted) background_interaction(op, t, +1.0);
-      for (auto const &[t, op] : removed) background_interaction(op, t, -1.0);
+      // Every moved operator with every trace operator that stays (trace times are unique), in one pass over the trace
+      for_each_trace_op([&](time_pt const &tau_bg, op_desc const &op_bg) {
+        for (auto const &r : removed)
+          if (r.first == tau_bg) return;
+        double const t_bg = double(tau_bg);
+        for (auto const &[t, op] : inserted) delta_W += eval_K(op, op_bg, double(t) - t_bg);
+        for (auto const &[t, op] : removed) delta_W -= eval_K(op, op_bg, double(t) - t_bg);
+      });
 
       // within the inserted and within the removed operators, each pair once (K(0) = 0)
-      auto cross = [&](timed_ops_t const &ops, double sign) {
+      auto cross = [&](std::span<timed_op_t const> ops, double sign) {
         for (size_t i = 0; i < ops.size(); ++i)
-          for (size_t j = i + 1; j < ops.size(); ++j) delta_W += sign * eval_K(ops[i].second, ops[j].second, ops[i].first, ops[j].first);
+          for (size_t j = i + 1; j < ops.size(); ++j)
+            delta_W += sign * eval_K(ops[i].second, ops[j].second, double(ops[i].first) - double(ops[j].first));
       };
       cross(inserted, +1.0);
       cross(removed, -1.0);
       return std::exp(delta_W);
+    }
+
+    /// The same for operators listed in place, compute_lang_firsov_ratio({{tau1, op1}, {tau2, op2}}, {})
+    double compute_lang_firsov_ratio(std::initializer_list<timed_op_t> inserted, std::initializer_list<timed_op_t> removed) const {
+      return compute_lang_firsov_ratio(std::span(inserted.begin(), inserted.size()), std::span(removed.begin(), removed.size()));
+    }
+
+    // Occupation kinks at one time, as (linear index a, +1 per c^dagger_a and -1 per c_a)
+    using kinks_t = std::vector<std::pair<long, double>>;
+
+    /// The exponent of the Lang-Firsov weight of kinks put at time t in the configuration: their interaction with every
+    /// trace operator, sum_a kinks[a] s K_{a b}(t - t') over the operators (t', b, s)
+    double lang_firsov_potential(kinks_t const &kinks, double t) const {
+      if (K_tab.empty()) return 0.0;
+      double phi = 0.0;
+      for_each_trace_op([&](time_pt const &tau, op_desc const &op) {
+        for (auto const &[a, n] : kinks) phi += n * eval_K(op_desc{0, 0, true, int(a)}, op, t - double(tau));
+      });
+      return phi;
+    }
+
+    /// The exponent of the Lang-Firsov weight between kinks at times dt apart, sum_ab kinks1[a] kinks2[b] K_ab(dt)
+    double lang_firsov_interaction(kinks_t const &kinks1, kinks_t const &kinks2, double dt) const {
+      if (K_tab.empty()) return 0.0;
+      double phi = 0.0;
+      for (auto const &[a, n] : kinks1)
+        for (auto const &[b, m] : kinks2) phi += n * m * eval_K(op_desc{0, 0, true, int(a)}, op_desc{0, 0, true, int(b)}, dt);
+      return phi;
     }
 
     void update_sign() {
@@ -330,31 +410,10 @@ namespace triqs_cthyb {
 
   using det_type = det_manip::det_manip<qmc_data::delta_block_adaptor>;
 
-  // Print taus of operator sequence in dets
-  inline void print_det_sequence(qmc_data const &data) {
-    int i;
-    int block_index;
-    for (block_index = 0; block_index < data.dets.size(); ++block_index) {
-      auto det = data.dets[block_index];
-      if (det.size() == 0) return;
-      std::cout << "BLOCK = " << block_index << std::endl;
-      for (i = 0; i < det.size(); ++i) { // c_dag
-        std::cout << " ic_dag = " << i << ": tau = " << det.get_x(i).first << std::endl;
-      }
-      for (i = 0; i < det.size(); ++i) { // c
-        std::cout << " ic     = " << i << ": tau = " << det.get_y(i).first << std::endl;
-      }
-    }
-  }
-
+  // Print the taus of the c_dag and c of a det
   inline void print_det_sequence(det_type const &det) {
-    int i;
-    for (i = 0; i < det.size(); ++i) { // c_dag
-      std::cout << " ic_dag = " << i << ": tau = " << det.get_x(i).first << std::endl;
-    }
-    for (i = 0; i < det.size(); ++i) { // c
-      std::cout << " ic     = " << i << ": tau = " << det.get_y(i).first << std::endl;
-    }
+    for (int i = 0; i < det.size(); ++i) std::cout << " ic_dag = " << i << ": tau = " << det.get_x(i).first << std::endl;
+    for (int i = 0; i < det.size(); ++i) std::cout << " ic     = " << i << ": tau = " << det.get_y(i).first << std::endl;
   }
 
   // Check if dets are correctly ordered, otherwise complain

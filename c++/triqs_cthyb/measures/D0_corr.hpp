@@ -5,6 +5,7 @@
 #include <triqs/gfs.hpp>
 #include <triqs/mesh.hpp>
 
+#include "../math_utils.hpp"
 #include "../qmc_data.hpp"
 #include "../types.hpp"
 
@@ -31,12 +32,23 @@ namespace triqs_cthyb {
     Q_tau_t::view_type Q_tau;
     Q_conserved_l_t::view_type Q_conserved_l;
     Q_conserved_tau_t::view_type Q_conserved_tau;
-    nda::array<mc_weight_t, 3> alpha_n;
+    nda::array<mc_weight_t, 3> alpha_n; // (a, b, n): each pair of kinks once, in one of its two orderings
     int n_leg;
     int n_lin;
     std::vector<nda::vector<double>> conserved_vectors;
     int n_conserved;
     bool orbital_resolved;
+
+    // Work space, kept between measurements
+    struct kink_t {
+      double tau;
+      long a;   // linear index
+      double s; // +1 for c^dagger, -1 for c
+    };
+    std::vector<kink_t> kinks;
+    std::vector<std::vector<double>> pair_x;      // by a * n_lin + b: the Legendre arguments of the pairs
+    std::vector<std::vector<mc_weight_t>> pair_w; // and their weights
+    legendre_sums moments;
   };
 
 } // namespace triqs_cthyb

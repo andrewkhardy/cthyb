@@ -32,14 +32,14 @@ def _comm(A,B): return A*B - B*A
 def _anticomm(A,B): return A*B + B*A
 
 def sigma_high_frequency_moments(density_matrix,
-                           ad_imp, 
-                           gf_struct, 
+                           ad_imp,
+                           gf_struct,
                            h_int):
     """
     Calculate the first and second high frequency moment of Sigma_iw
     following Rev. Mod. Phys. 83, 349 (2011). They read
     (0) Sigma_0       = -<{[Hint,c],c+}> (Hartree shift)
-    (1) Sigma_1       =  <{[Hint,[Hint,c]],c+}> - Sigma_0^2,
+    (1) Sigma_1       =  <{[Hint,[Hint,c]],c+}> - Sigma_0 Sigma_0 (matrix product within a block),
     where Hint is the interaction Hamiltonian
 
     Parameters
@@ -57,9 +57,8 @@ def sigma_high_frequency_moments(density_matrix,
     -------
     sigma_moments  : dict, np.ndarray
                      first and second moments in a dict with the
-                     same block strucutre of the TRIQS Gf object.
+                     same block structure of the TRIQS Gf object.
     """
-
 
     sigma_moments = {bl : np.zeros((2, bl_size, bl_size),dtype=complex) for bl, bl_size in gf_struct}
     for bl, bl_size in gf_struct:
@@ -70,19 +69,21 @@ def sigma_high_frequency_moments(density_matrix,
                 op_HF = -_anticomm(_comm(h_int, c(bl,orb1)), c_dag(bl,orb2))
                 sigma_moments[bl][0,orb1,orb2] = trace_rho_op(density_matrix, op_HF, ad_imp)
 
-                # Sigma_1/iwn term
+                # Sigma_1/iwn term, before subtracting Sigma_0^2
                 op_iw = _anticomm(_comm(h_int, _comm(h_int, c(bl,orb1))), c_dag(bl,orb2))
-                sigma_moments[bl][1,orb1,orb2] = trace_rho_op(density_matrix, op_iw, ad_imp) - sigma_moments[bl][0,orb1,orb2]**2
+                sigma_moments[bl][1,orb1,orb2] = trace_rho_op(density_matrix, op_iw, ad_imp)
+
+        sigma_moments[bl][1] -= sigma_moments[bl][0] @ sigma_moments[bl][0]
 
     return sigma_moments
 
 
 def green_high_frequency_moments(density_matrix,
-                           ad_imp, 
-                           gf_struct, 
+                           ad_imp,
+                           gf_struct,
                            h_imp):
     """
-    Calculate the first and second high frequency moment of G_iw
+    Calculate the first three high frequency moments of G_iw
     following Rev. Mod. Phys. 83, 349 (2011). They read
     (0) G_0           =    0
     (1) G_1           =  <{c,c+}>
@@ -98,22 +99,22 @@ def green_high_frequency_moments(density_matrix,
     gf_struct      : List of pairs (str,int)
                      Block structure of Green's function.
     h_imp          : triqs.operators.Operator
-                     impurity Hamiltonian   
+                     impurity Hamiltonian
 
     Returns
     -------
     green_moments  : dict, np.ndarray
-                     first and second moments in a dict with the
-                     same block strucutre of the TRIQS Gf object.
+                     G_0, G_1 and G_2 in a dict with the
+                     same block structure of the TRIQS Gf object.
     """
 
     green_moments = {bl : np.zeros((3, bl_size, bl_size),dtype=complex) for bl, bl_size in gf_struct}
     for bl, bl_size in gf_struct:
-        # G_0/iwn = 1/iwn
+        # G_1/iwn = 1/iwn
         green_moments[bl][1] = np.eye(bl_size)
         for orb1 in range(bl_size):
             for orb2 in range(bl_size):
-                # G_1/iwn**2 term
+                # G_2/iwn**2 term
                 op = -_anticomm(_comm(h_imp, c(bl,orb1)), c_dag(bl,orb2))
                 green_moments[bl][2,orb1,orb2] = trace_rho_op(density_matrix, op, ad_imp)
 

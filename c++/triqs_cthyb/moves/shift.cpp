@@ -23,18 +23,12 @@
 
 namespace triqs_cthyb {
 
-  histogram *move_shift_operator::add_histo(std::string const &name, histo_map_t *histos) {
-    if (!histos) return nullptr;
-    auto new_histo = histos->insert({name, {.0, config.beta(), 100}});
-    return &(new_histo.first->second);
-  }
-
   move_shift_operator::move_shift_operator(qmc_data &data, mc_tools::random_generator &rng, histo_map_t *histos)
      : data(data),
        config(data.config),
        rng(rng),
-       histo_proposed(add_histo("shift_length_proposed", histos)),
-       histo_accepted(add_histo("shift_length_accepted", histos)),
+       histo_proposed(add_histo("shift_length_proposed", histos, data.config.beta())),
+       histo_accepted(add_histo("shift_length_accepted", histos, data.config.beta())),
        block_index(0) {}
 
   mc_weight_t move_shift_operator::attempt() {
@@ -46,7 +40,7 @@ namespace triqs_cthyb {
 #endif
 
     // --- Choose an operator in configuration to shift at random
-    // By choosing an *operator* in config directly, not bias based on det size introduced
+    // Choosing an *operator* in config directly introduces no bias based on the det size
     auto config_size = config.size();
     if (config_size == 0) {
 #ifdef EXT_DEBUG
@@ -76,7 +70,7 @@ namespace triqs_cthyb {
     if (det_size == 0) return 0; // nothing to shift
 
     // Construct new operator
-    // Choose a new inner index (this is done here for compatibility)
+    // Choose a new inner index (drawn here to keep the random number sequence)
     auto inner_new = rng(data.n_inner[block_index]);
     op_new         = op_desc{block_index, inner_new, is_dagger, data.linindex[std::make_pair(block_index, inner_new)]};
 
@@ -107,10 +101,10 @@ namespace triqs_cthyb {
       // Find the times of the operator at the right of op_old with cyclicity
       auto tRdag   = (ic_dag != det_size ? det.get_x(ic_dag).first : det.get_x(0).first);
       auto tRnodag = (ic != det_size ? det.get_y(ic).first : det.get_y(0).first);
-      // Then deduce the closest one and put its distance to op_old in tR
+      // Then deduce the closest one, tR
       tR = ((tau_old - tRdag) > (tau_old - tRnodag) ? tRnodag : tRdag);
 
-      // Reset iterator to op_old position
+      // Step back to the position of op_old
       if (is_dagger)
         --ic_dag;
       else
@@ -119,7 +113,7 @@ namespace triqs_cthyb {
       // Find the times of the operator at the left of op_old with cyclicity
       auto tLdag   = (ic_dag != 0 ? det.get_x(--ic_dag).first : det.get_x(det_size - 1).first);
       auto tLnodag = (ic != 0 ? det.get_y(--ic).first : det.get_y(det_size - 1).first);
-      // Then deduce the closest one and put its distance to op_old in tL
+      // Then deduce the closest one, tL
       tL = ((tLdag - tau_old) > (tLnodag - tau_old) ? tLnodag : tLdag);
       // Choose new random time
       tau_new = tR + data.tau_seg.get_random_pt(rng, tL - tR);
@@ -240,7 +234,7 @@ namespace triqs_cthyb {
 
     config.finalize();
     data.imp_trace.cancel_shift();
-    data.dets[block_index].reject_last_try();
+    if (block_index != -1) data.dets[block_index].reject_last_try();
 
 #ifdef EXT_DEBUG
     std::cerr << "* Move move_shift_operator rejected" << std::endl;

@@ -43,10 +43,10 @@ target_compile_definitions(${PROJECT_NAME}_c PUBLIC
 install(TARGETS ${PROJECT_NAME}_c EXPORT ${PROJECT_NAME}-targets DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} DESTINATION include FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h")
 
-# ========= Addtional Dependencies ==========
+# ========= Additional Dependencies ==========
 
 # 2-particle GF measurement requires NFFT
-if(MeasureG2) 
+if(MeasureG2)
  find_package(NFFT REQUIRED)
  target_link_libraries(${PROJECT_NAME}_c PUBLIC nfft)
  install(TARGETS nfft EXPORT ${PROJECT_NAME}-targets)

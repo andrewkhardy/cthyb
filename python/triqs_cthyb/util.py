@@ -28,26 +28,18 @@ import numpy as np
 from triqs.operators import c, c_dag
 from triqs.atom_diag import trace_rho_op
 
-def block_size_from_gf_struct(block_name, gf_struct):
-    bns, idxs = list(zip(*gf_struct))
-    bidx = bns.index(block_name)
-    block_size = len(idxs[bidx])
-    return block_size
-
 def estimate_nfft_buf_size(gf_struct, pert_order_histograms):
     buf_sizes = {}
-    for bn, idxs in gf_struct:
-        if not bn in pert_order_histograms:
-            raise RuntimeError("estimate_nfft_buf_size: no histogram for block '%s' is provided" % bn)
-        else:
-            max_order = argmax(pert_order_histograms[bn].data)
-            block_size = block_size_from_gf_struct(bn, gf_struct)
-            buf_sizes[bn] = int(max(ceil((max_order * max_order) / (block_size * block_size)), 1))
+    for bn, block_size in gf_struct:
+        if bn not in pert_order_histograms:
+            raise RuntimeError(f"estimate_nfft_buf_size: no histogram for block '{bn}' is provided")
+        most_likely_order = argmax(pert_order_histograms[bn].data)
+        buf_sizes[bn] = int(max(ceil((most_likely_order * most_likely_order) / (block_size * block_size)), 1))
 
     return buf_sizes
 
 def orbital_occupations(density_matrix, gf_struct, h_loc_diag):
-    
+
     dtype=density_matrix[0].dtype
     occ_mat = {bl: np.zeros((bl_size,bl_size), dtype=dtype) for bl, bl_size in gf_struct}
 

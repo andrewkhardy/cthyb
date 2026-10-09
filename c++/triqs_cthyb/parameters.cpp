@@ -36,7 +36,7 @@ namespace triqs_cthyb {
 
   inline void h5_read(h5::group h5group, std::string name, std::pair<std::string, std::string> &pair) {
     h5::group grp = name.empty() ? h5group : h5group.open_group(name);
-    assert(grp.get_all_subgroup_names().size() == 2);
+    assert(grp.get_all_dataset_names().size() == 2);
     h5_read(grp, "0", pair.first);
     h5_read(grp, "1", pair.second);
   }
@@ -100,6 +100,7 @@ namespace triqs_cthyb {
 
     h5_write(grp, "move_shift", sp.move_shift);
     h5_write(grp, "move_double", sp.move_double);
+    h5_write(grp, "pauli_prob", sp.pauli_prob);
     h5_write(grp, "use_trace_estimator", sp.use_trace_estimator);
     h5_write(grp, "lang_firsov", sp.lang_firsov);
     h5_write(grp, "dyn_n_l", sp.dyn_n_l);
@@ -109,6 +110,8 @@ namespace triqs_cthyb {
     h5_write(grp, "measure_G_l", sp.measure_G_l);
     h5_write(grp, "measure_O_tau", sp.measure_O_tau);
     h5_write(grp, "measure_nn_tau", sp.measure_nn_tau);
+    h5_write(grp, "dlr_w_max", sp.dlr_w_max);
+    h5_write(grp, "dlr_eps", sp.dlr_eps);
     h5_write(grp, "measure_G2_tau", sp.measure_G2_tau);
     h5_write(grp, "measure_G2_iw", sp.measure_G2_iw);
     h5_write(grp, "measure_G2_iw_nfft", sp.measure_G2_iw_nfft);
@@ -135,9 +138,8 @@ namespace triqs_cthyb {
     h5_write(grp, "performance_analysis", sp.performance_analysis);
     h5_write(grp, "proposal_prob", sp.proposal_prob);
 
-    //h5_write(grp, "move_global", sp.move_global);
     if( sp.move_global.size() != 0 )
-      TRIQS_RUNTIME_ERROR << "Error serailizing: CTHYB solve_parameters, can not serialize the global moves data type.";
+      TRIQS_RUNTIME_ERROR << "Error serializing: CTHYB solve_parameters, can not serialize the global moves data type.";
     h5_write(grp, "move_global_prob", sp.move_global_prob);
     h5_write(grp, "move_global_full", sp.move_global_full);
 
@@ -171,6 +173,7 @@ namespace triqs_cthyb {
 
     h5_read(grp, "move_shift", sp.move_shift);
     h5_read(grp, "move_double", sp.move_double);
+    h5::try_read(grp, "pauli_prob", sp.pauli_prob);
     h5_read(grp, "use_trace_estimator", sp.use_trace_estimator);
     h5::try_read(grp, "lang_firsov", sp.lang_firsov);
     h5::try_read(grp, "dyn_n_l", sp.dyn_n_l);
@@ -180,6 +183,8 @@ namespace triqs_cthyb {
     h5_read(grp, "measure_G_l", sp.measure_G_l);
     if( grp.has_key("measure_O_tau") ) h5_read(grp, "measure_O_tau", sp.measure_O_tau);
     h5::try_read(grp, "measure_nn_tau", sp.measure_nn_tau);
+    h5::try_read(grp, "dlr_w_max", sp.dlr_w_max);
+    h5::try_read(grp, "dlr_eps", sp.dlr_eps);
     h5_read(grp, "measure_G2_tau", sp.measure_G2_tau);
     h5_read(grp, "measure_G2_iw", sp.measure_G2_iw);
     h5_read(grp, "measure_G2_iw_nfft", sp.measure_G2_iw_nfft);
@@ -206,7 +211,6 @@ namespace triqs_cthyb {
     h5_read(grp, "performance_analysis", sp.performance_analysis);
     h5_read(grp, "proposal_prob", sp.proposal_prob);
 
-    //h5_read(grp, "move_global", sp.move_global);
     if( grp.has_key("move_global") )
       TRIQS_RUNTIME_ERROR << "Error reading: CTHYB solve_parameters, can not de-serialize the global moves data type.";
     h5_read(grp, "move_global_prob", sp.move_global_prob);

@@ -18,6 +18,13 @@ into the configuration.
 
 Probability of choosing a particular block index :math:`A` can be adjusted through the parameter ``proposal_prob``.
 
+With probability ``pauli_prob``, the pair is instead proposed by the *Pauli* proposal: :math:`c^\dagger_{Ai}(\tau)` as
+above, then :math:`c_{Ai}(\tau')` with the same inner index, :math:`\tau'` uniform in the interval that keeps the
+operators of index :math:`(A, i)` alternating between creation and annihilation. The interval runs from :math:`\tau` to
+the nearest operator of that index at an earlier time if that operator is a creation operator (an antisegment), and to
+the nearest one at a later time otherwise (a segment). Without any creation or any annihilation operator of the index,
+:math:`\tau'` is uniform on :math:`[0, \beta)`.
+
 This move is always enabled.
 
 Remove one pair of operators
@@ -28,7 +35,20 @@ from the configuration. Try to remove the chosen operators.
 
 Probability of choosing a particular block index :math:`A` can be adjusted through the parameter ``proposal_prob``.
 
+With probability ``pauli_prob``, the annihilation operator is instead one of the nearest annihilation operators of the
+same index as :math:`c^\dagger_{Ai}(\tau)`, at an earlier or a later time. The acceptance ratios of both moves use the
+probabilities of the mixture, so any ``pauli_prob`` in :math:`[0, 1]` samples the same distribution.
+
 This move is always enabled.
+
+.. note::
+
+    When every block has size 1, every density commutes with the local Hamiltonian and the dynamical interactions only
+    couple densities, the operators of each index alternate in every configuration of non-zero weight. Uniform
+    proposals then mostly produce configurations of zero weight, while the Pauli proposal never does: it is the
+    segment insertion and removal of the segment-picture solvers. ``pauli_prob`` defaults to 1 in that case and to 0
+    otherwise. Set it explicitly to override; with ``pauli_prob = 1`` outside that case, configurations whose operators
+    do not alternate are never proposed and the pair moves may not be ergodic.
 
 Insert two pairs of operators
 *****************************
@@ -40,7 +60,9 @@ Similarly to the one pair insertion, randomly choose two combinations :math:`(A;
 Probability of choosing a particular block index can be adjusted through the parameter ``proposal_prob``.
 :math:`A` and :math:`B` are chosen independently.
 
-This move is enabled by default and can be disabled by setting ``move_double`` to ``False``.
+This move is enabled by default, except when every block has size 1, every density commutes with the local Hamiltonian
+and the dynamical interactions only couple densities: the pair moves alone are then ergodic, since every configuration
+of non-zero weight can be emptied one pair at a time. Setting ``move_double`` to ``True`` or ``False`` overrides the default.
 
 Remove two pairs of operators
 *****************************

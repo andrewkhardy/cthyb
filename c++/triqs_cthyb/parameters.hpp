@@ -107,8 +107,14 @@ namespace triqs_cthyb {
     /// Add shifting an operator as a move?
     bool move_shift = true;
 
-    /// Add double insertions as a move?
-    bool move_double = true;
+    /// Add double insertions as a move? Unset: off when the pair moves alone are ergodic (every block of size 1, every density
+    /// commuting with h_loc and density-density dynamical vertices), on otherwise.
+    std::optional<bool> move_double = {};
+
+    /// Probability that the pair insertions and removals use the Pauli proposal, which puts the c between its c^dagger and the
+    /// nearest operator of the same inner index, rather than the uniform one. Unset: 1 under the conditions where move_double
+    /// is off by default (the segment insertions and removals of CT-SEG), 0 otherwise.
+    std::optional<double> pauli_prob = {};
 
     /// Calculate the full trace or use an estimate?
     bool use_trace_estimator = false;
@@ -126,14 +132,23 @@ namespace triqs_cthyb {
     /// Measure \f$ G_l \f$ (Legendre)? No hermiticity is enforced.
     bool measure_G_l = false;
 
-    /// Measure \f$ \langle O_2(\tau) O_1(0) \rangle \f$ for measure_O_tau = (O_1, O_2), operators diagonal in the
-    /// occupation basis (n_a, N, S_z, n_a n_b, ...). Each configuration is evaluated exactly at every point of the mesh.
+    /// Measure \f$ \langle O_2(\tau) O_1(0) \rangle \f$ for measure_O_tau = (O_1, O_2), bosonic operators (an even number
+    /// of c and c^dagger in every term), whether or not they commute with h_loc. Measured at the nodes of a DLR grid
+    /// (dlr_w_max, dlr_eps), with the result in O_dlr and, on n_tau points, in O_tau. Operators that change the block of
+    /// h_loc (S^+, c^dagger_a c_b, ...) cost more.
     std::optional<std::pair<many_body_op_t, many_body_op_t>> measure_O_tau = {};
 
-    /// Measure \f$ \langle n_a(\tau) n_b(0) \rangle \f$ for every pair of spin-orbitals (nn_tau), whether or not the
-    /// n_a commute with h_loc. If they do and measure_D0_corr and measure_density_matrix are set, nn_tau is Q_tau from the
-    /// occupation kinks; otherwise each configuration is evaluated exactly at every point of the mesh.
+    /// Measure \f$ \langle n_a(\tau) n_b(0) \rangle \f$ for every pair of spin-orbitals, whether or not the n_a commute
+    /// with h_loc. If they do and measure_D0_corr and measure_density_matrix are set, nn_tau is Q_tau from the occupation
+    /// kinks; otherwise it is measured like measure_O_tau, with the result in nn_dlr and, on n_tau_bosonic points, in nn_tau.
     bool measure_nn_tau = false;
+
+    /// Highest frequency of the DLR grid of measure_O_tau and measure_nn_tau. The correlators must have no spectral weight
+    /// above it; check by doubling it.
+    double dlr_w_max = 20.0;
+
+    /// Accuracy of the DLR grid of measure_O_tau and measure_nn_tau.
+    double dlr_eps = 1e-10;
 
     /// Measure density-density correlators from the occupation kinks: Q_conserved_tau for the density combinations that
     /// commute with h_loc, and Q_tau if every n_a does. The equal-time part is added by the Python Solver with the density matrix.

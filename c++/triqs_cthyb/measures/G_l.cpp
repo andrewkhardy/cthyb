@@ -26,38 +26,49 @@ namespace triqs_cthyb {
   using namespace triqs::gfs;
   using namespace triqs::mesh;
 
-  measure_G_l::measure_G_l(std::optional<G_l_t> &G_l_opt, qmc_data const &data, int n_l, gf_struct_t const &gf_struct) : data(data), average_sign(0) {
+  measure_G_l::measure_G_l(std::optional<G_l_t> &G_l_opt, qmc_data const &data, int n_l, gf_struct_t const &gf_struct)
+     : data(data), average_sign(0), moments(n_l) {
     G_l_opt = block_gf<legendre>{{data.config.beta(), Fermion, n_l}, gf_struct};
     G_l.rebind(*G_l_opt);
     G_l() = 0.0;
+    for (auto const &[bl, size] : gf_struct) {
+      accumulated.push_back(nda::zeros<mc_weight_t>(size, size, n_l));
+      pair_x.emplace_back(size * size);
+      pair_w.emplace_back(size * size);
+    }
   }
 
   void measure_G_l::accumulate(mc_weight_t s) {
     s *= data.atomic_reweighting;
     average_sign += s;
 
-    double beta = data.config.beta();
-    auto Tn     = triqs::utility::legendre_generator();
+    double const beta = data.config.beta();
 
     for (auto block_idx : range(G_l.size())) {
 
-      foreach (data.dets[block_idx], [this, s, block_idx, beta, &Tn](op_t const &x, op_t const &y, det_scalar_t M) {
+      // Every element of M, by its inner indices (i, j) = (y, x) with the cyclic dt from x to y
+      long const n = accumulated[block_idx].shape()[0];
+      for (auto &x : pair_x[block_idx]) x.clear();
+      for (auto &w : pair_w[block_idx]) w.clear();
+      foreach (data.dets[block_idx], [&](op_t const &x, op_t const &y, det_scalar_t M) {
+        double dt       = double(y.first) - double(x.first);
+        mc_weight_t val = s * M;
+        if (dt < 0) dt += beta, val = -val;
+        pair_x[block_idx][y.second * n + x.second].push_back(2 * dt / beta - 1.0);
+        pair_w[block_idx][y.second * n + x.second].push_back(val);
+      });
 
-        double poly_arg = 2 * double(y.first - x.first) / beta - 1.0;
-        Tn.reset(poly_arg);
-
-        auto val = (y.first >= x.first ? s : -s) * M;
-
-        for (auto l : G_l[block_idx].mesh()) {
-          // Evaluate all polynomial orders
-          this->G_l[block_idx][l](y.second, x.second) += val * Tn.next();
-        }
-      })
-        ;
-    } // for block_idx
+      for (long i = 0; i < n; ++i)
+        for (long j = 0; j < n; ++j) moments.add(pair_x[block_idx][i * n + j], pair_w[block_idx][i * n + j], &accumulated[block_idx](i, j, 0));
+    }
   }
 
   void measure_G_l::collect_results(mpi::communicator const &c) {
+
+    for (auto block_idx : range(G_l.size()))
+      for (auto l : G_l[block_idx].mesh())
+        for (long i = 0; i < accumulated[block_idx].shape()[0]; ++i)
+          for (long j = 0; j < accumulated[block_idx].shape()[1]; ++j) G_l[block_idx][l](i, j) = accumulated[block_idx](i, j, l.index());
 
     average_sign = mpi::all_reduce(average_sign, c);
     G_l          = mpi::all_reduce(G_l, c);
@@ -65,12 +76,10 @@ namespace triqs_cthyb {
     double beta = data.config.beta();
 
     for (auto &G_l_block : G_l) {
-      for (auto l : G_l_block.mesh()) {
-        /// Normalize polynomial coefficients with basis overlap
-        G_l_block[l] *= -(sqrt(2.0 * l.index() + 1.0) / (real(average_sign) * beta));
-      }
+      // Normalize the polynomial coefficients with the basis overlap
+      for (auto l : G_l_block.mesh()) G_l_block[l] *= -(sqrt(2.0 * l.index() + 1.0) / (real(average_sign) * beta));
       matrix<double> id(G_l_block.target_shape());
-      id() = 1.0; // this creates an unit matrix
+      id() = 1.0; // a scalar assigned to a matrix sets the identity
       enforce_discontinuity(G_l_block, id);
     }
   }

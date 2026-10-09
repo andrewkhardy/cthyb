@@ -1,8 +1,6 @@
 #pragma once
 #include <nda/nda.hpp>
-#include <nda/linalg.hpp>
 #include <triqs/utility/exceptions.hpp>
-#include <triqs/utility/legendre.hpp>
 #include <algorithm>
 #include <functional>
 #include <vector>
@@ -25,23 +23,15 @@ namespace triqs_cthyb {
     return M;
   }
 
-  // Bosonic Legendre coefficients d_n = (2n+1)/beta int_0^beta D(tau) P_n(2 tau/beta - 1) dtau, n < N,
-  // of the piecewise-linear interpolant of D through n_pt equidistant samples (both end points
-  // included), computed exactly.
+  // Bosonic Legendre coefficients d_n = (2n+1)/beta int_0^beta D(tau) P_n(2 tau/beta - 1) dtau, n < N, of the
+  // piecewise-linear interpolant of D through n_pt equidistant samples (end points included), computed exactly.
   //
   // In x = 2 tau/beta - 1, integrate by parts twice against the second antiderivative of P_n,
   //   Pt_n(x) = [(P_{n+2} - P_n) / (2n+3) - (P_n - P_{n-2}) / (2n-1)] / (2n+1)    (n >= 2),
-  // which vanishes together with its derivative at x = -1 and x = 1. Only the jumps of the
-  // interpolant's slope s at the interior nodes are left:
+  // which vanishes with its derivative at x = +-1, leaving the jumps of the interpolant's slope s at the interior nodes:
   //   int_{-1}^{1} D P_n dx = sum_i Pt_n(x_i) (s_i - s_{i-1}).
-  // n = 0 is the trapezoidal sum, exact for the interpolant; n = 1 has Pt_1 = (x^3/3 - x)/2 - 1/3
-  // and the boundary term -s_last Pt_1(1) = 2 s_last / 3.
-  //
-  // The only error is that of the interpolant, (w dtau)^2 / 12 relative in K for a boson of
-  // frequency w, independent of n. The trapezoidal sum of D P_n used before aliases once P_n
-  // oscillates faster than the grid near tau = 0 and beta, n > ~sqrt(beta / dtau): its d_n stop
-  // decaying and grow with n, so a larger dyn_n_l made K(tau) worse (a linear D got |d_n| ~ 3 at
-  // n = 2000 on 2001 points). See test/c++/reconstruct_K.cpp.
+  // n = 0 is the trapezoidal sum; n = 1 has Pt_1 = (x^3/3 - x)/2 - 1/3 and the boundary term 2 s_last / 3.
+  // The only error is that of the interpolant, (w dtau)^2 / 12 relative in K for a boson of frequency w, whatever n.
   inline nda::vector<double> fit_legendre_coeffs(int n_pt, double beta, std::function<double(double)> D0_eval, int N) {
     nda::vector<double> d_n = nda::zeros<double>(N);
     if (N <= 0) return d_n;
@@ -93,5 +83,48 @@ namespace triqs_cthyb {
     for (int n = 0; n < N; ++n) d_n(n) *= (2.0 * n + 1.0) / 2.0;
     return d_n;
   }
+
+  // out[n] += sum_p w[p] P_n(x[p]) for n < n_l and x[p] in [-1, 1], the Legendre moments of weighted points. The Bonnet
+  // recursions of all the points run side by side, one order at a time, with precomputed coefficients, so the loop over
+  // the points vectorizes.
+  class legendre_sums {
+    public:
+    explicit legendre_sums(int n_l) : a(n_l), b(n_l) {
+      for (int n = 0; n < n_l; ++n) {
+        a[n] = (2.0 * n + 1.0) / (n + 1.0);
+        b[n] = n / (n + 1.0);
+      }
+    }
+
+    template <typename T> void add(std::vector<double> const &x, std::vector<T> const &w, T *out) {
+      int const n_l = a.size();
+      if (x.empty() || n_l == 0) return;
+      P_prev.assign(x.size(), 1.0);
+      P.assign(x.begin(), x.end());
+      out[0] += sum(w, P_prev);
+      if (n_l > 1) out[1] += sum(w, P);
+      for (int n = 1; n + 1 < n_l; ++n) {
+        for (size_t p = 0; p < x.size(); ++p) {
+          double const P_next = a[n] * x[p] * P[p] - b[n] * P_prev[p];
+          P_prev[p]           = P[p];
+          P[p]                = P_next;
+        }
+        out[n + 1] += sum(w, P);
+      }
+    }
+
+    private:
+    // sum_p w[p] v[p] in four partial sums, so that the additions do not wait on each other
+    template <typename T> static T sum(std::vector<T> const &w, std::vector<double> const &v) {
+      T s[4] = {};
+      size_t p = 0;
+      for (; p + 4 <= v.size(); p += 4)
+        for (int l = 0; l < 4; ++l) s[l] += w[p + l] * v[p + l];
+      for (; p < v.size(); ++p) s[0] += w[p] * v[p];
+      return (s[0] + s[1]) + (s[2] + s[3]);
+    }
+
+    std::vector<double> a, b, P, P_prev;
+  };
 
 } // namespace triqs_cthyb

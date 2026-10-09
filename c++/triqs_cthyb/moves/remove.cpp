@@ -20,24 +20,20 @@
  ******************************************************************************/
 
 #include "./remove.hpp"
+#include "./pauli.hpp"
 
 namespace triqs_cthyb {
 
-  histogram * move_remove_c_cdag::add_histo(std::string const &name, histo_map_t *histos) {
-    if (!histos) return nullptr;
-    auto new_histo = histos->insert({name, {.0, config.beta(), 100}});
-    return &(new_histo.first->second);
-  }
-
   move_remove_c_cdag::move_remove_c_cdag(int block_index, int block_size, std::string const &block_name, qmc_data &data, mc_tools::random_generator &rng,
-                     histo_map_t *histos)
+                     histo_map_t *histos, double pauli_prob)
      : data(data),
        config(data.config),
        rng(rng),
        block_index(block_index),
        block_size(block_size),
-       histo_proposed(add_histo("remove_length_proposed_" + block_name, histos)),
-       histo_accepted(add_histo("remove_length_accepted_" + block_name, histos)) {}
+       pauli_prob(pauli_prob),
+       histo_proposed(add_histo("remove_length_proposed_" + block_name, histos, data.config.beta())),
+       histo_accepted(add_histo("remove_length_accepted_" + block_name, histos, data.config.beta())) {}
 
   mc_weight_t move_remove_c_cdag::attempt() {
 
@@ -49,11 +45,21 @@ namespace triqs_cthyb {
 
     auto &det = data.dets[block_index];
 
-    // Pick up a couple of C, Cdagger to remove at random
-    // Remove the operators from the traces
+    // Pick up a couple of C, Cdagger to remove, uniformly or, with probability pauli_prob, by the Pauli removal of
+    // moves/pauli.hpp. t_ratio is the ratio of the proposal probabilities of this removal and of the insertion.
     int det_size = det.size();
     if (det_size == 0) return 0; // nothing to remove
-    int num_c_dag = rng(det_size), num_c = rng(det_size);
+    int num_c_dag, num_c;
+    mc_weight_t t_ratio;
+    if (pauli_prob == 0.0) {
+      num_c_dag = rng(det_size), num_c = rng(det_size);
+      t_ratio = std::pow(block_size * config.beta() / double(det_size), 2); // Size of the det before the try_delete!
+    } else {
+      std::tie(num_c_dag, num_c) = propose_pauli_removal(det, pauli_prob, rng);
+      double r                   = pauli_removal_ratio(det, pauli_prob, num_c_dag, num_c, block_size, config.beta());
+      if (r == 0.0) return 0; // The insertion cannot propose this pair
+      t_ratio = 1.0 / r;
+    }
 
 #ifdef EXT_DEBUG
     std::cerr << "* Proposing to remove: ";
@@ -74,9 +80,6 @@ namespace triqs_cthyb {
     if (histo_proposed) *histo_proposed << dtau;
 
     auto det_ratio = det.try_remove(num_c_dag, num_c);
-
-    // proposition probability
-    auto t_ratio = std::pow(block_size * config.beta() / double(det_size), 2); // Size of the det before the try_delete!
 
     auto const &op1          = config.find(tau1)->second;
     auto const &op2          = config.find(tau2)->second;
@@ -117,7 +120,7 @@ namespace triqs_cthyb {
       std::cerr << "Weight: " << p / t_ratio << std::endl;
       TRIQS_RUNTIME_ERROR << "(remove) p not finite :" << p << " in config " << config.get_id();
     }
-    
+
     if (!isfinite(p / t_ratio)){
       TRIQS_RUNTIME_ERROR << "(remove) p / t_ratio not finite p : " << p << " t_ratio :  " << t_ratio << " in config " << config.get_id();
     }

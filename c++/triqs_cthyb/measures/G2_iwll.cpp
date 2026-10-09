@@ -67,6 +67,7 @@ namespace triqs_cthyb {
 
     double beta = data.config.beta();
     int n_l     = std::get<1>(G2_iwll(0, 0).mesh().components()).size();
+    std::vector<double> p_l2(n_l);
 
     for (auto const &m : G2_measures()) {
 
@@ -76,12 +77,14 @@ namespace triqs_cthyb {
         tilde_p_gen p_l1_gen(beta), p_l2_gen(beta);
         double dtau = setup_times(p_l1_gen, p_l2_gen, i, j, k, l);
 
+        // The generators only step forward: P_l2 is needed for every l1, so take it once
+        for (int l2 : range(n_l)) p_l2[l2] = p_l2_gen.next();
+
         for (int l1 : range(n_l)) {
           double p_l1 = p_l1_gen.next();
           for (int l2 : range(n_l)) {
-            double p_l2 = p_l2_gen.next();
             std::array<int, 6> vec{l1, l2, i.second, j.second, k.second, l.second};
-            nfft_buf(m.b1.idx, m.b2.idx).push_back({dtau}, vec, val * p_l1 * p_l2);
+            nfft_buf(m.b1.idx, m.b2.idx).push_back({dtau}, vec, val * p_l1 * p_l2[l2]);
           }
         }
       };

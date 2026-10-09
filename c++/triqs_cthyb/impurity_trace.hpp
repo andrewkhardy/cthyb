@@ -25,8 +25,6 @@
 #include <triqs/stat/histograms.hpp>
 #include <triqs/atom_diag/atom_diag.hpp>
 
-//#define PRINT_CONF_DEBUG
-
 using namespace triqs;
 using histo_map_t = std::map<std::string, triqs::stat::histogram>;
 using triqs::stat::histogram;
@@ -45,9 +43,9 @@ namespace triqs_cthyb {
     bool measure_density_matrix;
 
     public:
-    // construct from the config, the diagonalization of h_loc, and parameters
-    impurity_trace(double beta, atom_diag const &h_diag, histo_map_t *hist_map,
-		   bool use_norm_as_weight=false, bool measure_density_matrix=false, bool performance_analysis=false);
+    // construct from the diagonalization of h_loc and parameters
+    impurity_trace(double beta, atom_diag const &h_diag, histo_map_t *hist_map, bool use_norm_as_weight = false,
+                   bool measure_density_matrix = false, bool performance_analysis = false);
 
     ~impurity_trace() {
       cancel_insert_impl(); // in case of an exception, we need to remove any trial nodes before cleaning the tree!
@@ -57,11 +55,8 @@ namespace triqs_cthyb {
 
     // ------- Configuration and h_loc data ----------------
 
-    const configuration *config;                                  // config object does exist longer (temporally) than this object.
-    const atom_diag *h_diag;                                      // access to the diagonalization of h_loc
-    const int n_orbitals  = h_diag->get_fops().size();            // total number of orbital flavours
-    const int n_blocks    = h_diag->n_subspaces();                //
-    const int n_eigstates = h_diag->get_full_hilbert_space_dim(); // size of the hilbert space
+    const atom_diag *h_diag;                   // access to the diagonalization of h_loc
+    const int n_blocks = h_diag->n_subspaces(); // number of blocks of h_diag
 
     // ------- Trace data ----------------
 
@@ -84,7 +79,7 @@ namespace triqs_cthyb {
     // The data stored for each node in tree
     struct cache_t {
       double dtau_l = 0, dtau_r = 0;                    // difference in tau of this node and left and right sub-trees
-      std::vector<int> block_table;                     // number of blocks limited to 2^15
+      std::vector<int> block_table;                     // the block each block b is mapped to, -1 if none
       std::vector<arrays::matrix<h_scalar_t>> matrices; // partial product of operator/time evolution matrices
       std::vector<double> matrix_lnorms;                // -ln(norm(matrix))
       std::vector<bool> matrix_norm_valid;              // is the norm of the matrix still valid?
@@ -107,7 +102,7 @@ namespace triqs_cthyb {
     rb_tree_t tree; // the red black tree and its nodes
 
     std::vector<atom_diag::op_block_mat_t> aux_operators;
-    
+
     // ---------------- Cache machinery ----------------
     void update_cache();
 
@@ -123,39 +118,34 @@ namespace triqs_cthyb {
 
     // node, block -> image of the block by n->op (the operator)
     int get_op_block_map(node n, int b) const {
-      if( n->op.linear_index >= 0 )
-	return (n->op.dagger ? h_diag->cdag_connection(n->op.linear_index, b) : h_diag->c_connection(n->op.linear_index, b));
-      else {
-	int aux_idx = -n->op.linear_index - 1;
-	return aux_operators[aux_idx].connection(b);
-      }
+      if (n->op.linear_index >= 0)
+        return (n->op.dagger ? h_diag->cdag_connection(n->op.linear_index, b) : h_diag->c_connection(n->op.linear_index, b));
+      else
+        return aux_operators[-n->op.linear_index - 1].connection(b);
     }
 
     // the matrix of n->op, from block b to its image
     matrix<h_scalar_t> const &get_op_block_matrix(node n, int b) const {
-      if( n->op.linear_index >= 0 )
-	return (n->op.dagger ? h_diag->cdag_matrix(n->op.linear_index, b) : h_diag->c_matrix(n->op.linear_index, b));
-      else {
-	int aux_idx = -n->op.linear_index - 1;
-	return aux_operators[aux_idx].block_mat[b];
-      }
+      if (n->op.linear_index >= 0)
+        return (n->op.dagger ? h_diag->cdag_matrix(n->op.linear_index, b) : h_diag->c_matrix(n->op.linear_index, b));
+      else
+        return aux_operators[-n->op.linear_index - 1].block_mat[b];
     }
 
     // recursive function for tree traversal
-    int compute_block_table(node n, int b);
-    std::pair<int, double> compute_block_table_and_bound(node n, int b, double bound_threshold, bool use_threshold = true);
+    std::pair<int, double> compute_block_table_and_bound(node n, int b, double lnorm_threshold, bool use_threshold = true);
     std::pair<int, matrix_t> compute_matrix(node n, int b);
 
     void update_cache_impl(node n);
     void update_dtau(node n);
 
-    bool use_norm_of_matrices_in_cache = true; // When a matrix is computed in cache, its spectral radius replaces the norm estimate
+    bool use_norm_of_matrices_in_cache = true; // When a matrix is computed in cache, its Frobenius norm replaces the norm estimate
 
     // integrity check
     void check_cache_integrity(bool print = false);
     void check_cache_integrity_one_node(node n, bool print);
-    int check_one_block_table_linear(node n, int b, bool print);       // compare block table to that of a linear method (ie. no tree)
-    matrix_t check_one_block_matrix_linear(node n, int b);             // compare matrix to that of a linear method (ie. no tree)
+    int check_one_block_table_linear(node n, int b, bool print); // block table by a linear method (ie. no tree), to compare with
+    matrix_t check_one_block_matrix_linear(node n, int b);       // matrix by a linear method (ie. no tree), to compare with
 
     // Pool of detached nodes
     class nodes_storage {
@@ -196,7 +186,6 @@ namespace triqs_cthyb {
         return n;
       }
       inline node take_next() { return nodes[++i]; }
-      inline node take_prev() { return nodes[i--]; }
     };
 
     public:
@@ -207,7 +196,7 @@ namespace triqs_cthyb {
       op_desc operator_desc{0, 0, true, -static_cast<int>(aux_operators.size())};
       return operator_desc;
     }
-    
+
     /*************************************************************************
      *  Ordinary binary search tree (BST) insertion of the trial nodes
      *************************************************************************/
@@ -251,7 +240,7 @@ namespace triqs_cthyb {
     public:
     // Put a trial node at tau for operator op using an ordinary BST insertion (ie. not red black)
     void try_insert(time_pt const &tau, op_desc const &op) {
-      if (trial_nodes.index() > 3) TRIQS_RUNTIME_ERROR << "Error : more than 4 insertions ";
+      if (trial_nodes.index() >= 3) TRIQS_RUNTIME_ERROR << "Error : more than 4 insertions ";
       auto &root                          = tree.get_root();
       node n                              = trial_nodes.take_next(); // get the next available node
       inserted_nodes[trial_nodes.index()] = {nullptr, false};
@@ -384,7 +373,7 @@ namespace triqs_cthyb {
     node try_replace_impl(node n, configuration::oplist_t const &updated_ops) noexcept {
 
       node new_left = nullptr, new_right = nullptr;
-      if (n->left) new_left              = try_replace_impl(n->left, updated_ops);
+      if (n->left) new_left = try_replace_impl(n->left, updated_ops);
       if (n->right) new_right = try_replace_impl(n->right, updated_ops);
 
       auto const &op     = n->op;
@@ -398,10 +387,7 @@ namespace triqs_cthyb {
         auto N     = n->N;
 
         new_node = backup_nodes.swap_next(n);
-        if (op_changed)
-          new_node->reset(key, new_op);
-        else
-          new_node->reset(key, op);
+        new_node->reset(key, new_op); // new_op is op if it did not change
         new_node->left     = new_left;
         new_node->right    = new_right;
         new_node->color    = color;

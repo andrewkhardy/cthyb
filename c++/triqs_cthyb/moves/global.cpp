@@ -49,7 +49,7 @@ namespace triqs_cthyb {
       auto it = std::find_if(std::begin(substitution_map), std::end(substitution_map),
                              [&fops, lin](indices_map_t::value_type const &kv) { return fops[kv.first] == lin; });
 
-      // If it does not, it is substituted by itself (subst_linear = lin)
+      // If it does not, it is substituted by itself (new_lin = lin)
       new_lin = (it != std::end(substitution_map)) ? fops[it->second] : lin;
       std::tie(new_block, new_inner) = lin_to_block_inner[new_lin];
 
@@ -140,6 +140,7 @@ namespace triqs_cthyb {
       auto const &tau    = o.first;
       auto it            = updated_ops.find(tau);
       auto const &new_op = it == updated_ops.end() ? o.second : it->second;
+      if (!affected_blocks.count(new_op.block_index)) continue; // only the affected dets are refilled
       (new_op.dagger ? x : y)[new_op.block_index].emplace_back(tau, new_op.inner_index);
     }
 
@@ -180,7 +181,7 @@ namespace triqs_cthyb {
 
     data.imp_trace.try_replace(dyn_changed ? updated_trace_ops : updated_ops);
 
-    // computation of the new trace after insertion
+    // computation of the new trace after the substitution
     std::tie(new_atomic_weight, new_atomic_reweighting) = data.imp_trace.compute(p_yee, random_number);
     if (new_atomic_weight == 0.0) {
 #ifdef EXT_DEBUG

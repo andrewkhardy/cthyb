@@ -37,9 +37,8 @@ namespace triqs_cthyb {
   void measure_density_matrix::accumulate(mc_weight_t s) {
     // we assume here that we are in "Norm" mode, i.e. qmc weight is norm, not trace
 
-    // We need to recompute since the density_matrix in the trace is changed at each computatation,
+    // Recompute without any Yee threshold: the density_matrix in the trace changes at each computation,
     // in particular at the last failed attempt.
-    // So we need to compute it, without any Yee threshold.
     data.imp_trace.compute();
     z += s * data.atomic_reweighting;
     s /= data.atomic_weight; // accumulate matrix / norm since weight is norm * det
@@ -59,7 +58,7 @@ namespace triqs_cthyb {
     for (auto &b : block_dm){
         // Normalize
         b /= real(z);
-        
+
         // Enforce hermiticity
         b = make_regular(0.5*(b + dagger(b)));
     }

@@ -28,7 +28,6 @@
 #include <triqs/operators/many_body_operator.hpp>
 #include <triqs/hilbert_space/state.hpp>
 #include <triqs/hilbert_space/imperative_operator.hpp>
-//#include "./array_suppl.hpp"
 
 #include <h5/h5.hpp>
 
@@ -38,7 +37,6 @@ using namespace nda;
 using namespace triqs::gfs;
 using namespace triqs::mesh;
 using namespace triqs::hilbert_space;
-namespace operators = triqs::operators;
 
 using std::isfinite;
 inline bool isfinite(dcomplex const &x) { return std::isfinite(real(x)) && std::isfinite(imag(x)); }

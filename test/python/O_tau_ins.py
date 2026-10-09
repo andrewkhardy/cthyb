@@ -49,3 +49,8 @@ np.testing.assert_allclose(S.O_tau.data.real, exact_O_tau(taus), atol=0.03)
 
 taus = np.array([float(t) for t in S.nn_tau['up', 'do'].mesh])
 np.testing.assert_allclose(S.nn_tau['up', 'do'].data[:, 0, 0].real, exact_O_tau(taus), atol=0.03)
+
+# The DLR coefficients give the correlator at any tau, not only on the mesh
+taus = np.random.default_rng(1).uniform(0, beta, 50)
+np.testing.assert_allclose([S.O_dlr(t).real for t in taus], exact_O_tau(taus), atol=0.03)
+np.testing.assert_allclose([S.nn_dlr['up', 'do'](t)[0, 0].real for t in taus], exact_O_tau(taus), atol=0.03)

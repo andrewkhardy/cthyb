@@ -16,9 +16,12 @@
 // file(GLOB_RECURSE *.cpp), was compiled into libtriqs_cthyb_c itself.
 
 #include <triqs/test_tools/gfs.hpp>
+#include <triqs/utility/legendre.hpp>
+#include <triqs_cthyb/dynamical_interactions.hpp>
 #include <triqs_cthyb/math_utils.hpp>
 
 #include <functional>
+#include <map>
 #include <vector>
 
 using namespace triqs_cthyb;
@@ -139,6 +142,44 @@ TEST(ReconstructK, LinearCouplingProjectsExactly) {
   double worst = 0.0;
   for (int n = 2; n < n_leg; ++n) worst = std::max(worst, std::abs(d_n(n)));
   EXPECT_LT(worst, 1e-10);
+}
+
+// A coupling registered one way, D n_up n_dn, is the same action as D/2 registered both ways, and
+// build_K_n must give the same, symmetric kernel for both: half of K in either row. With K only
+// in the (up, dn) row, a pair of kinks weighed K or 0 depending on which operator a move touched
+// (a 13 sigma spurious n_up - n_dn in test/python/dyn_one_way_registration.py's model at g = 1.3).
+TEST(BuildKn, OneWayRegistrationIsSymmetrized) {
+  double beta = 10.0, w0 = 1.0, lam_sq = 0.64;
+  int n_leg   = 40;
+
+  triqs::hilbert_space::fundamental_operator_set fops;
+  fops.insert("up", 0);
+  fops.insert("dn", 0);
+  std::map<std::pair<int, int>, int> linindex{{{0, 0}, fops[{"up", 0}]}, {{1, 0}, fops[{"dn", 0}]}};
+  int const up = linindex[{0, 0}], dn = linindex[{1, 0}];
+
+  auto D = gf<imtime, scalar_valued>{{beta, Boson, 2001}};
+  for (auto const &tau : D.mesh()) D[tau] = analytic_D(tau.value(), beta, w0, lam_sq);
+  auto D_half = D;
+  D_half.data() *= 0.5;
+
+  auto n_up    = triqs::operators::n("up", 0);
+  auto n_dn    = triqs::operators::n("dn", 0);
+  auto one_way = build_K_n({{n_up, n_dn, D}}, beta, linindex, fops, n_leg);
+  auto split   = build_K_n({{n_up, n_dn, D_half}, {n_dn, n_up, D_half}}, beta, linindex, fops, n_leg);
+
+  // K of the coupling D on its own, for the factor 1/2
+  std::function<double(double)> D_eval = [&](double tau) { return analytic_D(tau, beta, w0, lam_sq); };
+  nda::vector<double> k_n               = build_M_matrix(n_leg, beta) * fit_legendre_coeffs(2001, beta, D_eval, n_leg);
+
+  for (int n = 0; n < n_leg; ++n) {
+    EXPECT_DOUBLE_EQ(one_way[up][dn][n], one_way[dn][up][n]) << "n = " << n;
+    EXPECT_DOUBLE_EQ(one_way[up][dn][n], split[up][dn][n]) << "n = " << n;
+    EXPECT_DOUBLE_EQ(split[up][dn][n], split[dn][up][n]) << "n = " << n;
+    EXPECT_NEAR(one_way[up][dn][n], 0.5 * k_n(n), 1e-6 * std::abs(k_n(0))) << "n = " << n;
+    EXPECT_EQ(one_way[up][up][n], 0.0);
+    EXPECT_EQ(one_way[dn][dn][n], 0.0);
+  }
 }
 
 MAKE_MAIN;

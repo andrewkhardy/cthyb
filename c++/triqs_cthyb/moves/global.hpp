@@ -23,11 +23,8 @@
 #include "../qmc_data.hpp"
 
 #include <vector>
-#include <map>
 #include <set>
-#include <numeric>
 #include <algorithm>
-#include <memory>
 
 namespace triqs_cthyb {
 

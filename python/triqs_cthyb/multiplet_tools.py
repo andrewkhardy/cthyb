@@ -29,7 +29,7 @@ def multiplet_analysis(rho, h_loc_diag, n_orb, spin_names=['up','down'], off_dia
 
     Measures N, Sz, S(S+1), constructs eigenstates in Fock state
     basis, assigns the according probabilities from rho for all
-    impurity eigenstates, and stores the data in a Panda DataFrame.
+    impurity eigenstates, and stores the data in a pandas DataFrame.
     For more information check the guide in the documentation of cthyb
     regarding `Multiplet analysis & particle number histograms`.
 
@@ -51,7 +51,7 @@ def multiplet_analysis(rho, h_loc_diag, n_orb, spin_names=['up','down'], off_dia
 
     Returns
     -------
-    res : Panda DataFrame
+    res : pandas DataFrame
         containing all results structured
     """
     import pandas as pd
@@ -107,7 +107,7 @@ def multiplet_analysis(rho, h_loc_diag, n_orb, spin_names=['up','down'], off_dia
             # can be something like 1.999999996 and would get then 1!
             particle_number = round(particle_numbers[sub][ind])
             if abs(particle_number-particle_numbers[sub][ind]) > 1e-8:
-                raise ValueError('round error for particle number to large!',
+                raise ValueError('round error for particle number too large!',
                                  particle_numbers[sub][ind])
             else:
                 particle_number = int(particle_number)

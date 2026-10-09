@@ -159,4 +159,48 @@ TEST(CtHyb, G2_measurments) {
     }
   }
 }
+
+// The Legendre coefficient (l1, l2) of G2_iwll must not depend on how many coefficients are measured. Measurements draw
+// no random numbers, so with the same seed the two runs below sample the same configurations, and their common
+// coefficients agree to the NFFT's accuracy. The second Legendre generator was once stepped on through every l1
+// without being reset, which put P_{l1 n_l + l2} where P_{l2} belongs.
+TEST(CtHyb, G2_iwll_independent_of_n_l) {
+  double beta = 2.0, mu = 2.0, V1 = 2.0, V2 = 5.0, epsilon1 = 0.0, epsilon2 = 4.0;
+  gf_struct_t gf_struct{{"up", 1}, {"down", 1}};
+
+  auto measure = [&](int n_l) {
+    solver_core solver({beta, gf_struct, 1025, 2500, 10});
+    nda::clef::placeholder<0> om_;
+    auto g0_iw = gf<imfreq>{{beta, Fermion}, {1, 1}};
+    g0_iw(om_) << om_ + mu - V1 * V1 / (om_ - epsilon1) - V2 * V2 / (om_ - epsilon2);
+    for (int bl = 0; bl < 2; ++bl) solver.G0_iw()[bl] = triqs::gfs::inverse(g0_iw);
+
+    auto p                   = solve_parameters_t{.h_int = 1.0 * n("up", 0) * n("down", 0), .n_cycles = 200};
+    p.random_seed            = 567;
+    p.length_cycle           = 100;
+    p.n_warmup_cycles        = 200;
+    p.move_double            = false;
+    p.verbosity              = 0;
+    p.measure_G_tau          = false;
+    p.measure_G2_iwll_pp     = true;
+    p.measure_G2_iwll_ph     = true;
+    p.measure_G2_n_bosonic   = 3;
+    p.measure_G2_n_l         = n_l;
+    p.nfft_buf_sizes         = {{"up", 100}, {"down", 100}};
+    solver.solve(p);
+    return std::pair{*solver.G2_iwll_pp, *solver.G2_iwll_ph};
+  };
+
+  auto [pp_2, ph_2] = measure(2);
+  auto [pp_4, ph_4] = measure(4);
+
+  auto _ = nda::range::all;
+  for (int b1 = 0; b1 < 2; ++b1)
+    for (int b2 = 0; b2 < 2; ++b2) {
+      auto pp_common = pp_4(b1, b2).data()(_, nda::range(2), nda::range(2), _, _, _, _);
+      auto ph_common = ph_4(b1, b2).data()(_, nda::range(2), nda::range(2), _, _, _, _);
+      EXPECT_ARRAY_NEAR(pp_2(b1, b2).data(), pp_common, 1e-8);
+      EXPECT_ARRAY_NEAR(ph_2(b1, b2).data(), ph_common, 1e-8);
+    }
+}
 MAKE_MAIN;

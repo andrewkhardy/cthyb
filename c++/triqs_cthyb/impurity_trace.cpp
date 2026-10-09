@@ -19,34 +19,20 @@
  *
  ******************************************************************************/
 #include "impurity_trace.hpp"
-#include <nda/nda.hpp>
 #include <algorithm>
 #include <limits>
 
-//#define TRACE_DEBUG_CHECKS
 #ifdef TRACE_DEBUG_CHECKS
 #define TRACE_CHECK_CACHE
 #define TRACE_CHECK_AGAINST_LINEAR_COMPUTATION
 #define TRACE_CHECK_MATRIX_BOUNDED_BY_BOUND
 #endif
 
-double double_max = std::numeric_limits<double>::max(); // easier to read
-
-template <typename T>
-// require( is_real_or_complex<T>) FIXME?
-double frobenius_norm2(nda::matrix<T> const &a) {
-  double r = 0;
-  for (int i = 0; i < a.shape()[0]; ++i)
-    for (int j = 0; j < a.shape()[1]; ++j) {
-      auto ab = std::abs(a(i, j));
-      r += ab * ab;
-    }
-  return std::sqrt(r);
-}
-
-// -----------------------------------------------
-
 namespace triqs_cthyb {
+
+  namespace {
+    constexpr double double_max = std::numeric_limits<double>::max();
+  }
 
   // -------- Constructor --------
   impurity_trace::impurity_trace(double beta, atom_diag const &h_diag_, histo_map_t *hist_map, bool use_norm_as_weight, bool measure_density_matrix,
@@ -93,27 +79,9 @@ namespace triqs_cthyb {
   // following the time-ordering of beta (left) <- 0 (right).
   // Accordingly, the blocks are connected as follows: b_left <- b_current <- b_right
 
-  // ------- Computation of the block table (only) -------------
-
-  // for subtree at node n, returns B' that block b at the node closest to tau=0 connects to
-  // precondition: b != -1, n != null
-  // returns -1 if cancellation structural
-  int impurity_trace::compute_block_table(node n, int b) {
-
-    if (b < 0) TRIQS_RUNTIME_ERROR << " b < 0";
-    if (!n->modified) return n->cache.block_table[b];
-
-    int b1 = (n->right ? compute_block_table(n->right, b) : b);
-    if (b1 < 0) return b1;
-
-    int b2 = (n->delete_flag ? b1 : get_op_block_map(n, b1));
-    if (b2 < 0) return b2;
-
-    return (n->left ? compute_block_table(n->left, b2) : b2);
-  }
   // -------- Computation of the block table and bounds -------------
 
-  // for subtree at node n, return (B', bound)
+  // for subtree at node n, return (B', -ln of the bound)
   // precondition: b !=-1, n != null
   // returns -1 for structural and/or threshold cancellation
   std::pair<int, double> impurity_trace::compute_block_table_and_bound(node n, int b, double lnorm_threshold, bool use_threshold) {
@@ -146,10 +114,7 @@ namespace triqs_cthyb {
 
     if (use_threshold && (lnorm > lnorm_threshold)) return {-1, 0};
 
-    if (std::isinf(lnorm)) {
-      lnorm = double_max;
-      if (lnorm < 0) TRIQS_RUNTIME_ERROR << "Negative lnorm in compute_block_table_and_bound!";
-    }
+    if (std::isinf(lnorm)) lnorm = double_max;
 
     return {b3, lnorm};
   }
@@ -178,12 +143,12 @@ namespace triqs_cthyb {
 
     if (n->right) { // M <- M * exp * r[b]
       dtau_r   = double(n->key - tree.min_key(n->right));
-      auto dim = M.shape()[1];                                                               // same as get_block_dim(b2);
+      auto dim = M.shape()[1];                                                               // same as get_block_dim(b1);
       for (int i = 0; i < dim; ++i) M(_, i) *= std::exp(-dtau_r * get_block_eigenval(b1, i)); // Create time-evolution matrix e^-H(t'-t)
       if ((r.second.shape()[0] == 1) && (r.second.shape()[1] == 1))
         M *= r.second(0, 0);
       else
-        M = M * r.second; // FIXME could try to optimise lapack call?
+        M = M * r.second;
     }
 
     int b3 = b2;
@@ -192,7 +157,7 @@ namespace triqs_cthyb {
       b3     = l.first;
       if (b3 == -1) return {-1, {}};
       dtau_l   = double(tree.max_key(n->left) - n->key);
-      auto dim = M.shape()[0]; // same as get_block_dim(b1);
+      auto dim = M.shape()[0]; // same as get_block_dim(b2);
       for (int i = 0; i < dim; ++i) M(i, _) *= std::exp(-dtau_l * get_block_eigenval(b2, i));
       if ((l.second.shape()[0] == 1) && (l.second.shape()[1] == 1))
         M *= l.second(0, 0);
@@ -205,13 +170,9 @@ namespace triqs_cthyb {
       n->cache.matrix_norm_valid[b] = true;
 
       // improve the norm if calculating the full_trace
-      if (use_norm_of_matrices_in_cache) { // seems slower
-        auto norm = frobenius_norm(M);
-        if (std::abs(norm - frobenius_norm2(M)) > 1.e-12) TRIQS_RUNTIME_ERROR << " FROB PB" << M;
-        //if (norm < frobenius_norm2(M))  TRIQS_RUNTIME_ERROR << " FROB PB";
-        //if (norm < frobenius_norm2(M)) std::cout  <<norm <<" vs "<< frobenius_norm2(M)<<std::endl;// TRIQS_RUNTIME_ERROR << " FROB PB";
-        n->cache.matrix_lnorms[b] = -std::log(norm);
-        if (!isfinite(-std::log(norm))) { n->cache.matrix_lnorms[b] = double_max; }
+      if (use_norm_of_matrices_in_cache) {
+        double const lnorm        = -std::log(frobenius_norm(M));
+        n->cache.matrix_lnorms[b] = isfinite(lnorm) ? lnorm : double_max;
       }
     }
 
@@ -238,9 +199,7 @@ namespace triqs_cthyb {
       n->cache.matrix_lnorms[b]     = r.second;
       n->cache.matrix_norm_valid[b] = false;
     }
-    // This is not necessary here as all modified nodes are "cleared"
-    //  by tree::clear_modified in the try/cancel/confirm set
-    // n->modified = false;
+    // n->modified is reset by tree::clear_modified in the try/cancel/confirm set
   }
 
   // -------- Calculate the dtau for a given node to its left and right neighbours ----------------
@@ -256,9 +215,9 @@ namespace triqs_cthyb {
   // Returns MC atomic weight and reweighting = trace/(atomic weight)
   std::pair<h_scalar_t, h_scalar_t> impurity_trace::compute(double p_yee, double u_yee) {
 
-    double epsilon         = 1.e-15; // Machine precision
-    auto log_epsilon0      = -std::log(1.e-15);
-    double lnorm_threshold = double_max - 100;
+    double const epsilon      = 1.e-15; // relative truncation of the trace
+    double const log_epsilon0 = -std::log(epsilon);
+    double lnorm_threshold    = double_max;
     std::vector<std::pair<double, int>> init_to_sort_lnorm_b, to_sort_lnorm_b; // pairs of lnorm and b to sort in order of bound
 
     // simplifies later code
@@ -276,22 +235,13 @@ namespace triqs_cthyb {
     double dtau_0    = double(tree.max_key());
     double dtau      = dtau_beta + dtau_0;
 
-    //FIXME
-    // #ifdef EXT_DEBUG
-    //  std::cout << " Trace computed ---------------" << std::endl;
-    //  tree.print(std::cout);
-    //  std::cout << "dtau = " << dtau << std::endl;
-    //  std::cout << *config << std::endl;
-    //  tree.graphviz(std::ofstream("tree_start_compute_trace"));
-    // #endif
-
     update_dtau(root); // recompute the dtau for modified nodes
 
     for (int b = 0; b < n_blocks; ++b) {
       auto block_lnorm_pair = compute_block_table_and_bound(root, b, lnorm_threshold);
 
       // Check that the final block is the same as the initial block or -1, indicating structural cancellation
-      // This guarantees that the density matrix is blockwise diagonal (otherwise the code will have thrown an error).
+      // This guarantees that the density matrix is blockwise diagonal (otherwise a warning is printed once).
       if (measure_density_matrix) {
         static bool first_warning_issued = false;
         if ((not first_warning_issued) and (block_lnorm_pair.first != b) && (block_lnorm_pair.first != -1)) {
@@ -331,20 +281,16 @@ namespace triqs_cthyb {
     // Put density_matrix to "not recomputed"
     for (int bl = 0; bl < n_blocks; ++bl) density_matrix[bl].is_valid = false;
 
-    auto trace_contrib_block = std::vector<std::pair<double, int>>{}; //FIXME complex -- can histos handle this?
+    auto trace_contrib_block = std::vector<std::pair<double, int>>{};
 
     int n_bl         = to_sort_lnorm_b.size();        // number of blocks
     auto bound_cumul = std::vector<double>(n_bl + 1); // cumulative sum of the bounds
-    // The contribution to the trace from block B is bounded: |Tr_B| <= dim(B) * sum_{B} e^{Emin(B)*dtau}
-    // Here we calculate the cumulative bound from each contributing (structurally non-zero) block to
-    // determine at which block we have exceeded the bound and hence can stop.
-    // Can tighten bound on trace by using sqrt(dim(B)) in the case of Frobenius norm only.
+    // The contribution of block B to the trace is bounded: |Tr_B| <= dim(B) e^{-lnorm(B)}, with sqrt(dim(B)) for the
+    // Frobenius norm. The cumulative bound of the remaining blocks tells when the sum can stop.
     bound_cumul[n_bl] = 0;
-    if (!use_norm_as_weight) {
-      for (int bl = n_bl - 1; bl >= 0; --bl)
-        bound_cumul[bl] = bound_cumul[bl + 1] + std::exp(-to_sort_lnorm_b[bl].first) * get_block_dim(to_sort_lnorm_b[bl].second);
-    } else {
-      for (int bl = n_bl - 1; bl >= 0; --bl) bound_cumul[bl] = bound_cumul[bl + 1] + std::exp(-to_sort_lnorm_b[bl].first) * std::sqrt(get_block_dim(to_sort_lnorm_b[bl].second));
+    for (int bl = n_bl - 1; bl >= 0; --bl) {
+      double const dim = get_block_dim(to_sort_lnorm_b[bl].second);
+      bound_cumul[bl]  = bound_cumul[bl + 1] + std::exp(-to_sort_lnorm_b[bl].first) * (use_norm_as_weight ? std::sqrt(dim) : dim);
     }
 
     int bl;
@@ -355,7 +301,7 @@ namespace triqs_cthyb {
 
       int block_index = to_sort_lnorm_b[bl].second; // index in original (unsorted) order
 
-      // additionnal Yee quick return criterion
+      // additional Yee quick return criterion
       if (p_yee >= 0.0) {
         auto current_weight = (use_norm_as_weight ? std::sqrt(norm_trace_sq) : full_trace);
         auto pmax           = std::abs(p_yee) * (std::abs(current_weight) + bound_cumul[bl]);
@@ -412,13 +358,13 @@ namespace triqs_cthyb {
       if (histo) {
         histo->trace_over_bound << std::abs(trace_partial) / std::exp(-to_sort_lnorm_b[bl].first);
         trace_contrib_block.emplace_back(std::abs(trace_partial), block_index);
-        if (bl == 1) {
+        if (bl == 0) {
           first_term = trace_partial;
           histo->dominant_block_bound << block_index;
           histo->dominant_block_energy_bound << get_block_emin(block_index);
         } else if (first_term != 0.0) {
           histo->trace_first_over_sec_term << real(trace_partial / first_term);
-	}
+        }
       }
     } // loop on block
 
@@ -442,7 +388,6 @@ namespace triqs_cthyb {
     // else determine reweighting
     auto rw = full_trace / norm_trace;
     if (!isfinite(rw)) rw = 1;
-    //FIXME if (!isfinite(rw)) TRIQS_RUNTIME_ERROR << "Atomic correlators : reweight not finite" << full_trace << " "<< norm_trace;
     return {norm_trace, rw};
   }
 

@@ -22,13 +22,14 @@
  ******************************************************************************/
 #include "./solver_core.hpp"
 #include "./qmc_data.hpp"
-#include "./math_utils.hpp"
 #include "./dynamical_interactions.hpp"
 
 #include <triqs/utility/callbacks.hpp>
 #include <triqs/utility/exceptions.hpp>
 #include <triqs/gfs.hpp>
 #include <triqs/mesh.hpp>
+#include <algorithm>
+#include <set>
 #include <fstream>
 #include <variant>
 
@@ -62,11 +63,32 @@
 
 namespace triqs_cthyb {
 
-  struct index_visitor {
-    std::vector<std::string> indices;
-    void operator()(int i) { indices.push_back(std::to_string(i)); }
-    void operator()(std::string s) { indices.push_back(s); }
-  };
+  namespace {
+
+    // The pairs of orbitals (block, inner index) coupled by a one-body term of h_loc whose hybridization Delta_ab(tau)
+    // vanishes, because they are in different blocks or the element is zero. Against exact diagonalization, a hopping
+    // between two orbitals with independent baths gave a G off by a few percent, even without interaction; two-body terms
+    // between such orbitals (spin flips, pair hopping) did not.
+    std::set<std::pair<std::pair<int, int>, std::pair<int, int>>> one_body_terms_without_delta(many_body_op_t const &h_loc,
+                                                                                                block_gf_const_view<imtime> Delta_tau,
+                                                                                                fundamental_operator_set const &fops,
+                                                                                                std::map<std::pair<int, int>, int> const &linindex) {
+      std::vector<std::pair<int, int>> orbital(linindex.size());
+      for (auto const &[block_inner, lin] : linindex) orbital[lin] = block_inner;
+      double scale = 0.0;
+      for (auto const &d : Delta_tau) scale = std::max(scale, double(max_element(abs(d.data()))));
+      std::set<std::pair<std::pair<int, int>, std::pair<int, int>>> pairs;
+      for (auto const &[monomial, coeff] : h_loc) {
+        if (monomial.size() != 2 or monomial[0].dagger == monomial[1].dagger or std::abs(coeff) < 1e-12) continue;
+        auto a = orbital[fops[monomial[0].indices]], b = orbital[fops[monomial[1].indices]];
+        if (a == b) continue;
+        if (a.first != b.first or max_element(abs(Delta_tau[a.first].data()(range::all, a.second, b.second))) <= 1e-10 * scale)
+          pairs.insert(std::minmax(a, b));
+      }
+      return pairs;
+    }
+
+  } // namespace
 
   solver_core::solver_core(constr_parameters_t const &p)
      : beta(p.beta), gf_struct(p.gf_struct), n_iw(p.n_iw), n_tau(p.n_tau), n_l(p.n_l), delta_interface(p.delta_interface), constr_parameters(p) {
@@ -94,9 +116,6 @@ namespace triqs_cthyb {
     solve_parameters = solve_parameters_;
     solve_parameters_t params(solve_parameters_);
 
-    // Merge constr_params and solve_params
-    //params_t params(constr_parameters, solve_parameters);
-
     // http://patorjk.com/software/taag/#p=display&f=Calvin%20S&t=TRIQS%20cthyb
     if (params.verbosity >= 2)
       std::cout << "\n"
@@ -110,21 +129,14 @@ namespace triqs_cthyb {
       for (auto idx : range(bl_size)) { fops.insert(bl, idx); }
     }
 
-    // setup the linear index map
+    // The linear index of (block, inner index), and the block sizes
     std::map<std::pair<int, int>, int> linindex;
-    int block_index = 0;
-    for (auto const &[bl, bl_size] : gf_struct) {
-      int inner_index = 0;
-      for (auto idx : range(bl_size)) {
-        linindex[std::make_pair(block_index, inner_index)] = fops[{bl, idx}];
-        inner_index++;
-      }
-      block_index++;
-    }
-
-    // Make list of block sizes
     std::vector<int> n_inner;
-    for (auto const &[bl, bl_size] : gf_struct) { n_inner.push_back(bl_size); }
+    for (int b = 0; b < int(gf_struct.size()); ++b) {
+      auto const &[bl, bl_size] = gf_struct[b];
+      for (int i = 0; i < bl_size; ++i) linindex[{b, i}] = fops[{bl, i}];
+      n_inner.push_back(bl_size);
+    }
 
     if (not delta_interface) {
 
@@ -190,8 +202,8 @@ namespace triqs_cthyb {
           // Set off diagonal terms to 0 if they are below off_diag_threshold
           if (n1 != n2 && abs(Delta_infty_vec.value()[bl](n1, n2)) < params.off_diag_threshold) e_ij = 0.0;
 
-	  auto bl_name = gf_struct[bl].first;
-          _h_loc0 = _h_loc0 + e_ij * c_dag<h_scalar_t>(bl_name, n1) * c<h_scalar_t>(bl_name, n2);
+          auto bl_name = gf_struct[bl].first;
+          _h_loc0      = _h_loc0 + e_ij * c_dag<h_scalar_t>(bl_name, n1) * c<h_scalar_t>(bl_name, n2);
         }
       }
 
@@ -215,15 +227,50 @@ namespace triqs_cthyb {
     // of the Lang-Firsov vertices goes into h_loc before h_diag is built
     auto dyn_vertices            = collect_dyn_vertices(inputs.dyn_vertices, inputs.D0t, inputs.Jperpt, gf_struct);
     auto classified_dyn_vertices = classify_dyn_vertices(dyn_vertices, _h_loc, fops, linindex, params.lang_firsov);
-    conserved_densities_t conserved;
+    conserved_densities_t lf_conserved;
     density_split_counts_t split;
     if (params.lang_firsov) {
-      conserved = conserved_densities(_h_loc, fops, linindex);
-      split     = split_density_couplings(classified_dyn_vertices, conserved.vectors, fops, linindex);
+      lf_conserved = conserved_densities(_h_loc, fops, linindex);
+      split        = split_density_couplings(classified_dyn_vertices, lf_conserved.vectors, fops, linindex);
     }
     if (params.verbosity >= 2)
-      print_dyn_routing(dyn_vertices.size(), classified_dyn_vertices, conserved.operators, split, params.lang_firsov, fops, linindex);
+      print_dyn_routing(dyn_vertices.size(), classified_dyn_vertices, lf_conserved.operators, split, params.lang_firsov, fops, linindex);
     apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
+
+    // With blocks of size 1, a density-density h_loc and density-density dynamical vertices, the operators of each block
+    // alternate between c^dagger and c in every configuration of non-zero weight, which can therefore be emptied pair by
+    // pair: the pair moves alone are ergodic, and their Pauli proposal (moves/pauli.hpp) is the segment move of CT-SEG
+    bool segment_regime = std::ranges::all_of(gf_struct, [](auto const &bl) { return bl.second == 1; })
+       and conserved_densities(_h_loc, fops, linindex).vectors.size() == linindex.size()
+       and all_density_vertices(classified_dyn_vertices, fops, linindex);
+    bool move_double  = params.move_double.value_or(not segment_regime);
+    double pauli_prob = params.pauli_prob.value_or(segment_regime ? 1.0 : 0.0);
+    if (pauli_prob < 0.0 or pauli_prob > 1.0) TRIQS_RUNTIME_ERROR << "pauli_prob = " << pauli_prob << " must be in [0, 1]";
+    if (params.verbosity >= 2) {
+      auto how = [](auto const &opt) { return opt.has_value() ? "" : " (default)"; };
+      std::cout << "Pair moves with pauli_prob = " << pauli_prob << how(params.pauli_prob) << ", four-operator moves "
+                << (move_double ? "on" : "off") << how(params.move_double) << ": "
+                << (segment_regime ? "blocks of size 1, density-density h_loc and dynamical vertices, the pair moves alone are ergodic"
+                                   : "the pair moves alone may not be ergodic")
+                << std::endl;
+    }
+    if (pauli_prob == 1.0 and not segment_regime and params.verbosity >= 1)
+      std::cerr << "WARNING: pauli_prob = 1 without blocks of size 1, a density-density h_loc and density-density dynamical vertices.\n"
+                   "Configurations in which the operators of an inner index do not alternate are only proposed by the uniform\n"
+                   "pair moves, so the pair moves may not be ergodic.\n";
+
+    if (params.verbosity >= 1) {
+      auto pairs = one_body_terms_without_delta(_h_loc, _Delta_tau, fops, linindex);
+      if (not pairs.empty()) {
+        std::cerr << "WARNING: h_loc has one-body terms (e.g. a hopping) between orbitals whose hybridization Delta_ab(tau) vanishes:\n";
+        for (auto const &[a, b] : pairs)
+          std::cerr << "    (" << gf_struct[a.first].first << ", " << a.second << ") and (" << gf_struct[b.first].first << ", " << b.second
+                    << ")" << (a.first != b.first ? ", in different blocks" : "") << "\n";
+        std::cerr << "Against exact diagonalization, G came out a few percent off in this case, even without interaction.\n"
+                     "If Delta_ab was dropped (by the block structure, or to reduce the sign problem), keep it; otherwise\n"
+                     "rotate to a basis where the one-body part of h_loc is diagonal.\n";
+      }
+    }
 
 #ifndef HYBRIDISATION_IS_COMPLEX
     // Check that diagonal components of Delta_tau are real
@@ -235,8 +282,8 @@ namespace triqs_cthyb {
         auto Delta_tau_bl_ij = _Delta_tau[bl].data()(_, i, j);
         double max_imag      = max_element(abs(imag(Delta_tau_bl_ij)));
         if (i == j && max_imag > 1e-10) {
-          std::cout << "WARNING: max(abs(imag(S.Delta_tau[" << bl << "][" << i << ", " << j << "]))) = "
-		    << max_imag << " setting to zero.\n";
+          std::cout << "WARNING: max(abs(imag(S.Delta_tau[" << bl << "][" << i << ", " << j << "]))) = " << max_imag
+                    << " setting to zero.\n";
           Delta_tau_bl_ij = real(Delta_tau_bl_ij);
         } else if (max_imag < params.imag_threshold) {
           Delta_tau_bl_ij = real(Delta_tau_bl_ij);
@@ -276,9 +323,6 @@ namespace triqs_cthyb {
     } else
       TRIQS_RUNTIME_ERROR << "Partition method " << params.partition_method << " not recognised.";
 
-    // FIXME save h_loc to be able to rebuild h_diag in an analysis program.
-    //if (_comm.rank() ==0) h5_write(h5::file("h_loc.h5",'w'), "h_loc", _h_loc, fops);
-
     if (params.verbosity >= 2)
       std::cout << "Found " << h_diag.n_subspaces() << " subspaces." << std::endl;
 
@@ -295,18 +339,16 @@ namespace triqs_cthyb {
     std::vector<std::function<double(double)>> dyn_interactions;
     K_n = build_K_n(classified_dyn_vertices.lang_firsov, beta, linindex, fops, params.dyn_n_l);
     fold_into_stochastic_catalog(classified_dyn_vertices.stochastic, fops, linindex, dyn_op_list, dyn_interactions);
-    dyn_vertex_operators.clear();
-    dyn_vertex_couplings.clear();
-    for (auto const &v : classified_dyn_vertices.stochastic) {
-      dyn_vertex_operators.emplace_back(v.op1, v.op2);
-      dyn_vertex_couplings.push_back(v.coupling);
-    }
-    lang_firsov_vertex_operators.clear();
-    lang_firsov_vertex_couplings.clear();
-    for (auto const &v : classified_dyn_vertices.lang_firsov) {
-      lang_firsov_vertex_operators.emplace_back(v.op1, v.op2);
-      lang_firsov_vertex_couplings.push_back(v.coupling);
-    }
+    auto report = [](std::vector<dyn_vertex_t> const &vertices, auto &operators, auto &couplings) {
+      operators.clear();
+      couplings.clear();
+      for (auto const &v : vertices) {
+        operators.emplace_back(v.op1, v.op2);
+        couplings.push_back(v.coupling);
+      }
+    };
+    report(classified_dyn_vertices.stochastic, dyn_vertex_operators, dyn_vertex_couplings);
+    report(classified_dyn_vertices.lang_firsov, lang_firsov_vertex_operators, lang_firsov_vertex_couplings);
 
     bool has_dyn_interactions = !dyn_op_list.empty();
 
@@ -335,11 +377,11 @@ namespace triqs_cthyb {
       int block_size         = _Delta_tau[block].data().shape()[1];
       auto const &block_name = delta_names[block];
       double prop_prob       = get_prob_prop(block_name);
-      inserts.add(move_insert_c_cdag(block, block_size, block_name, data, qmc.get_rng(), histo_map),
+      inserts.add(move_insert_c_cdag(block, block_size, block_name, data, qmc.get_rng(), histo_map, pauli_prob),
                   "Insert Delta_" + block_name, prop_prob);
-      removes.add(move_remove_c_cdag(block, block_size, block_name, data, qmc.get_rng(), histo_map),
+      removes.add(move_remove_c_cdag(block, block_size, block_name, data, qmc.get_rng(), histo_map, pauli_prob),
                   "Remove Delta_" + block_name, prop_prob);
-      if (params.move_double) {
+      if (move_double) {
         for (size_t block2 = 0; block2 < _Delta_tau.size(); ++block2) {
           int block_size2         = _Delta_tau[block2].data().shape()[1];
           auto const &block_name2 = delta_names[block2];
@@ -358,7 +400,7 @@ namespace triqs_cthyb {
 
     qmc.add_move(std::move(inserts), "Insert two operators", 1.0);
     qmc.add_move(std::move(removes), "Remove two operators", 1.0);
-    if (params.move_double) {
+    if (move_double) {
       qmc.add_move(std::move(double_inserts), "Insert four operators", 1.0);
       qmc.add_move(std::move(double_removes), "Remove four operators", 1.0);
     }
@@ -433,9 +475,12 @@ namespace triqs_cthyb {
     // --------------------------------------------------------------------------
     // Single-particle correlators
 
+    // O_tau and nn_tau are evaluated at the nodes of a DLR grid
+    auto dlr_nodes = [&] { return dlr_imtime{beta, Boson, params.dlr_w_max, params.dlr_eps}; };
+
     if (params.measure_O_tau) {
       auto const &[O1, O2] = *params.measure_O_tau;
-      qmc.add_measure(measure_O_tau_ins{O_tau, data, n_tau, O1, O2}, "O_tau measure");
+      qmc.add_measure(measure_O_tau_ins{O_tau, O_dlr, data, dlr_nodes(), n_tau, O1, O2}, "O_tau measure");
     }
 
     // With every n_a commuting with h_loc, the occupation kinks give <n_a(tau) n_b(0)> as Q_tau, which the Python Solver
@@ -450,8 +495,8 @@ namespace triqs_cthyb {
       if (conserved.vectors.size() < linindex.size() && params.verbosity >= 1) {
         std::cerr << "WARNING (measure_D0_corr): not every orbital density commutes with h_loc (e.g. spin-flip or\n"
                      "pair-hopping terms), so <n_a(tau) n_b(0)> cannot be measured from occupation kinks and\n"
-                     "Q_tau / Q_l are left empty (measure_nn_tau measures it by the sweep). Measuring instead <O_i(tau) O_j(0)> in Q_conserved_tau / Q_conserved_l\n"
-                     "for the "
+                     "Q_tau / Q_l are left empty (measure_nn_tau measures it directly). Measuring instead\n"
+                     "<O_i(tau) O_j(0)> in Q_conserved_tau / Q_conserved_l for the "
                   << conserved.operators.size() << " density combination(s) that do commute with h_loc (conserved_density_operators):\n";
         for (size_t i = 0; i < conserved.operators.size(); ++i) std::cerr << "    O_" << i << " = " << conserved.operators[i] << "\n";
       }
@@ -463,10 +508,11 @@ namespace triqs_cthyb {
     if (params.measure_nn_tau) {
       if (nn_tau_from_kinks) {
         nn_tau.reset();
+        nn_dlr.reset();
         if (params.verbosity >= 1)
           std::cout << "measure_nn_tau: every orbital density commutes with h_loc, so nn_tau is Q_tau from the occupation kinks\n";
       } else
-        qmc.add_measure(measure_nn_tau{nn_tau, data, constr_parameters.n_tau_bosonic, gf_struct}, "nn_tau measure");
+        qmc.add_measure(measure_nn_tau{nn_tau, nn_dlr, data, dlr_nodes(), constr_parameters.n_tau_bosonic, gf_struct}, "nn_tau measure");
     }
 
     if (params.measure_G_tau) {

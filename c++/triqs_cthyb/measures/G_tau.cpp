@@ -60,7 +60,7 @@ namespace triqs_cthyb {
       double beta = G_tau_block.mesh().beta();
       G_tau_block /= -real(average_sign) * beta * G_tau_block.mesh().delta();
 
-      // Multiply first and last bins by 2 to account for full bins
+      // Multiply the first and last bins by 2: they are half as wide
       int last = G_tau_block.mesh().size() - 1;
       G_tau_block[0] *= 2;
       G_tau_block[last] *= 2;

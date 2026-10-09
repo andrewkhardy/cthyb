@@ -26,8 +26,7 @@ from .solver_core import SolverCore, ConstrParametersT, SolveParametersT
 from triqs.gfs import *
 import triqs.utility.mpi as mpi
 import numpy as np
-from itertools import product
-from triqs.operators.util.extractors import extract_h_dict, block_matrix_from_op
+from triqs.operators.util.extractors import block_matrix_from_op
 from .tail_fit import tail_fit as cthyb_tail_fit
 from .tail_fit import sigma_high_frequency_moments, green_high_frequency_moments
 from .util import orbital_occupations
@@ -141,8 +140,8 @@ class Solver(SolverCore):
         a warning is printed if the property was not satisfied. Additionally, if
         ``measure_G_tau`` is set to ``True``, the property :math:`G_{ij}(\tau)=
         G_{ji}^*(\tau)` will be also ensured for the measured :math:`G(\tau)`.
-	The difference between the original :math:`G(\tau)` and the hermitized
-	:math:`G(\tau)` is stored in the object ``asymmetry_G_tau`` of the solver instance.
+        The difference between the original :math:`G(\tau)` and the hermitized
+        :math:`G(\tau)` is stored in the object ``asymmetry_G_tau`` of the solver instance.
 
 
         Parameters
@@ -199,6 +198,9 @@ class Solver(SolverCore):
             fit_max_w = params_kw.pop("fit_max_w", None)
             fit_max_moment = params_kw.pop("fit_max_moment", None)
             fit_known_moments = params_kw.pop("fit_known_moments", None)
+
+        # The moments come from this solve's density matrix, or are not known
+        self.G_moments = self.Sigma_moments = self.Sigma_Hartree = self.orbital_occupations = None
 
         # Call the core solver's solve routine
         solve_status = SolverCore.solve(self, SolveParametersT(**params_kw))

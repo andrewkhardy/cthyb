@@ -43,6 +43,10 @@ namespace triqs_cthyb {
                                                   fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex,
                                                   bool lang_firsov_requested);
 
+  /// Do all vertices, resummed or sampled, couple two densities n_a (so none of them flips an occupation, unlike Jperp)?
+  bool all_density_vertices(classified_dyn_vertices_t const &classified, fundamental_operator_set const &fops,
+                            std::map<std::pair<int, int>, int> const &linindex);
+
   /// The density combinations O_i = sum_a vectors[i][a] n_a that commute with h_loc, in reduced row-echelon form
   struct conserved_densities_t {
     std::vector<nda::vector<double>> vectors; // indexed by linear index

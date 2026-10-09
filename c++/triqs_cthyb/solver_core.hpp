@@ -1,9 +1,8 @@
-
 /*******************************************************************************
  *
  * TRIQS: a Toolbox for Research in Interacting Quantum Systems
  *
- * Copyright (C) 2014-2017, H. U.R. Strand, P. Seth, I. Krivenko, 
+ * Copyright (C) 2014-2017, H. U.R. Strand, P. Seth, I. Krivenko,
  *                          M. Ferrero and O. Parcollet
  *
  * TRIQS is free software: you can redistribute it and/or modify it under the
@@ -107,7 +106,7 @@ namespace triqs_cthyb {
      */
     solver_core(constr_parameters_t const &p);
 
-    // Delete assignement operator because of const members
+    // Copyable and movable, but not copy-assignable
     solver_core(solver_core const &p)            = default;
     solver_core(solver_core &&p)                 = default;
     solver_core &operator=(solver_core const &p) = delete;
@@ -159,9 +158,6 @@ namespace triqs_cthyb {
       if (delta_interface) TRIQS_RUNTIME_ERROR << "G0_iw cannot be accessed when using the Delta interface";
       return _G0_iw.value();
     }
-
-    /// Atomic :math:`G(\tau)` in imaginary time.
-    //block_gf_view<imtime> atomic_gf() const { return ::triqs_cthyb::atomic_gf(h_diag, beta, gf_struct, _Delta_tau[0].mesh().size()); }
 
     /// Accumulated density matrix.
     std::vector<matrix_t> density_matrix() const { return _density_matrix; }
@@ -242,7 +238,7 @@ namespace triqs_cthyb {
       h5_write(grp, "lang_firsov_vertex_couplings", s.lang_firsov_vertex_couplings);
     }
 
-    // Function that read all containers to hdf5 file
+    // Function that reads all containers from hdf5 file
     C2PY_IGNORE static solver_core h5_read_construct(h5::group h5group, std::string subgroup_name) {
       h5::group grp          = subgroup_name.empty() ? h5group : h5group.open_group(subgroup_name);
       auto constr_parameters = h5::h5_read<constr_parameters_t>(grp, "constr_parameters");

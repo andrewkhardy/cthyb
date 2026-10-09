@@ -23,12 +23,6 @@
 
 namespace triqs_cthyb {
 
-  histogram *move_insert_c_c_cdag_cdag::add_histo(std::string const &name, histo_map_t *histos) {
-    if (!histos) return nullptr;
-    auto new_histo = histos->insert({name, {.0, config.beta(), 100}});
-    return &(new_histo.first->second);
-  }
-
   move_insert_c_c_cdag_cdag::move_insert_c_c_cdag_cdag(int block_index1, int block_index2, int block_size1, int block_size2,
                                                        std::string const &block_name1, std::string const &block_name2, qmc_data &data,
                                                        mc_tools::random_generator &rng, histo_map_t *histos)
@@ -39,10 +33,10 @@ namespace triqs_cthyb {
        block_index2(block_index2),
        block_size1(block_size1),
        block_size2(block_size2),
-       histo_proposed1(add_histo("double_insert_length_proposed_" + block_name1, histos)),
-       histo_proposed2(add_histo("double_insert_length_proposed_" + block_name2, histos)),
-       histo_accepted1(add_histo("double_insert_length_accepted_" + block_name1, histos)),
-       histo_accepted2(add_histo("double_insert_length_accepted_" + block_name2, histos)) {}
+       histo_proposed1(add_histo("double_insert_length_proposed_" + block_name1, histos, data.config.beta())),
+       histo_proposed2(add_histo("double_insert_length_proposed_" + block_name2, histos, data.config.beta())),
+       histo_accepted1(add_histo("double_insert_length_accepted_" + block_name1, histos, data.config.beta())),
+       histo_accepted2(add_histo("double_insert_length_accepted_" + block_name2, histos, data.config.beta())) {}
 
   mc_weight_t move_insert_c_c_cdag_cdag::attempt() {
 
@@ -52,19 +46,19 @@ namespace triqs_cthyb {
     std::cerr << "* Attempt for move_insert_c_c_cdag_cdag (blocks " << block_index1 << ", " << block_index2 << ")" << std::endl;
 #endif
 
-    // Pick up the value of alpha and choose the operators
+    // Choose the inner indices of the operators
     auto rs1 = rng(block_size1), rs2 = rng(block_size1), rs3 = rng(block_size2), rs4 = rng(block_size2);
     op1 = op_desc{block_index1, rs1, true, data.linindex[std::make_pair(block_index1, rs1)]};
     op2 = op_desc{block_index1, rs2, false, data.linindex[std::make_pair(block_index1, rs2)]};
     op3 = op_desc{block_index2, rs3, true, data.linindex[std::make_pair(block_index2, rs3)]};
     op4 = op_desc{block_index2, rs4, false, data.linindex[std::make_pair(block_index2, rs4)]};
 
-    // Choice of times for insertion. Find the time as double and them put them on the grid.
+    // Choose the times for insertion
     tau1 = data.tau_seg.get_random_pt(rng);
     tau2 = data.tau_seg.get_random_pt(rng);
     tau3 = data.tau_seg.get_random_pt(rng);
     tau4 = data.tau_seg.get_random_pt(rng);
-    if ((tau1 == tau3) or (tau2 == tau4)) return 0; // trying to insert/remove two operators at exactly the same time
+    if ((tau1 == tau3) || (tau2 == tau4)) return 0; // trying to insert two operators at exactly the same time
 
 #ifdef EXT_DEBUG
     std::cerr << "* Proposing to insert:" << std::endl;
@@ -83,9 +77,7 @@ namespace triqs_cthyb {
     }
 
     // Insert the operators op1, op2, op3, op4 at time tau1, tau2, tau3, tau4
-    // 1- In the very exceptional case where the insert has failed because an operator is already sitting here
-    // (cf std::map doc for insert return), we reject the move.
-    // 2- If ok, we store the iterator to the inserted operators for later removal in reject if necessary
+    // In the very exceptional case where an operator already sits at one of these times, reject the move
     try {
       data.imp_trace.try_insert(tau1, op1);
       data.imp_trace.try_insert(tau2, op2);
@@ -124,7 +116,7 @@ namespace triqs_cthyb {
     if (block_index1 == block_index2) {
       // The determinant positions that need to be passed to det_manip are those in the *final* det of size N+2.
       // Shift the operator at the smaller time one step further in the determinant to account for the larger operator.
-      // This shfit must be done in general, and not only when num_c(_dag)1 and num_c(dag_)2 are the same!!
+      // This shift must be done in general, and not only when num_c_dag1 and num_c_dag2 (or num_c1 and num_c2) are the same!
       if (tau1 < tau3)
         num_c_dag1++;
       else
@@ -144,7 +136,7 @@ namespace triqs_cthyb {
     // proposition probability
     mc_weight_t t_ratio;
     if (block_index1 == block_index2) {
-      // (ways to insert 4 operators in det1)/((ways to remove 4 operators from det that is larger by two))
+      // (ways to insert 4 operators in det1)/(ways to remove 4 operators from det that is larger by two)
       // Here, we use the fact that the two cdag/c proposed to be removed in the det can be at the same
       // positions in the det, and thus remove prob is NOT (detsize+2)*(detsize+1)
       t_ratio = std::pow(block_size1 * config.beta() / double(det1.size() + 2), 4);
@@ -202,12 +194,8 @@ namespace triqs_cthyb {
     config.finalize();
 
     // insert in the determinant
-    if (block_index1 == block_index2) {
-      data.dets[block_index1].complete_operation();
-    } else {
-      data.dets[block_index1].complete_operation();
-      data.dets[block_index2].complete_operation();
-    }
+    data.dets[block_index1].complete_operation();
+    if (block_index1 != block_index2) data.dets[block_index2].complete_operation();
     data.update_sign();
 
     data.atomic_weight      = new_atomic_weight;
@@ -228,18 +216,12 @@ namespace triqs_cthyb {
     return data.current_sign / data.old_sign;
   }
 
-  //----------------
-
   void move_insert_c_c_cdag_cdag::reject() {
 
     config.finalize();
     data.imp_trace.cancel_insert();
-    if (block_index1 == block_index2) {
-      data.dets[block_index1].reject_last_try();
-    } else {
-      data.dets[block_index1].reject_last_try();
-      data.dets[block_index2].reject_last_try();
-    }
+    data.dets[block_index1].reject_last_try();
+    if (block_index1 != block_index2) data.dets[block_index2].reject_last_try();
 
 #ifdef EXT_DEBUG
     std::cerr << "* Move move_insert_c_c_cdag_cdag rejected" << std::endl;

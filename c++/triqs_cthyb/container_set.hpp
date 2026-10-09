@@ -47,8 +47,14 @@ namespace triqs_cthyb {
     /// :math:`\langle O_2(\tau) O_1(0) \rangle` for measure_O_tau = (O_1, O_2).
     std::optional<gf<imtime, scalar_valued>> O_tau;
 
+    /// O_tau as DLR coefficients, from which it is evaluated at any tau or Matsubara frequency.
+    std::optional<gf<dlr, scalar_valued>> O_dlr;
+
     /// :math:`\langle n_a(\tau) n_b(0) \rangle` for every pair of spin-orbitals, as nn_tau[bl_a, bl_b][tau](i_a, i_b).
     std::optional<Q_tau_t> nn_tau;
+
+    /// nn_tau as DLR coefficients, from which it is evaluated at any tau or Matsubara frequency.
+    std::optional<Q_dlr_t> nn_dlr;
 
     /// Density-density correlator :math:`Q(\tau) = \langle n(\tau) n(0) \rangle` in imaginary time.
     std::optional<Q_tau_t> Q_tau;
@@ -109,7 +115,7 @@ namespace triqs_cthyb {
     /// Function that writes all containers to hdf5 file
     friend void h5_write(h5::group h5group, std::string subgroup_name, container_set_t const &c);
 
-    /// Function that reads all containers to hdf5 file
+    /// Function that reads all containers from hdf5 file
     friend void h5_read(h5::group h5group, std::string subgroup_name, container_set_t &c);
 
   }; // struct container_set_t

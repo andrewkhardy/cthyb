@@ -1,0 +1,7 @@
+#!/bin/bash
+#SBATCH --job-name=plaquette_2x2
+#SBATCH --ntasks=128
+# Load the TRIQS environment before submitting; sbatch exports it to the job.
+
+mpirun python plaquette_2x2.py --scheme DCA
+mpirun python plaquette_2x2.py --scheme CDMFT

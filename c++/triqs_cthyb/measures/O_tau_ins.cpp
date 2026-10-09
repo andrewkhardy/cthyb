@@ -27,21 +27,27 @@ namespace triqs_cthyb {
   using namespace triqs::gfs;
   using namespace triqs::mesh;
 
-  measure_O_tau_ins::measure_O_tau_ins(std::optional<gf<imtime, scalar_valued>> &O_tau_opt, qmc_data const &data, int n_tau,
-                                       many_body_op_t const &op1, many_body_op_t const &op2)
-     : sweep(data, n_tau, {op2}, {op1}), symmetric((op1 - op2).is_zero()) {
+  measure_O_tau_ins::measure_O_tau_ins(std::optional<gf<imtime, scalar_valued>> &O_tau_opt, std::optional<gf<dlr, scalar_valued>> &O_dlr_opt,
+                                       qmc_data const &data, dlr_imtime const &nodes, int n_tau, many_body_op_t const &op1,
+                                       many_body_op_t const &op2)
+     : sweep(data, nodes, {op2}, {op1}), nodes(nodes), symmetric((op1 - op2).is_zero()) {
     O_tau_opt = gf<imtime, scalar_valued>{{data.config.beta(), Boson, n_tau}};
+    O_dlr_opt = gf<dlr, scalar_valued>{dlr{nodes}};
     O_tau.rebind(*O_tau_opt);
+    O_dlr.rebind(*O_dlr_opt);
     O_tau() = 0.0;
+    O_dlr() = 0.0;
   }
 
   void measure_O_tau_ins::collect_results(mpi::communicator const &c) {
     auto const corr = sweep.collect(c);
-    long const last = O_tau.mesh().size() - 1;
-    for (auto const &tau : O_tau.mesh()) {
-      long const p = tau.index();
-      O_tau[tau]   = symmetric ? 0.5 * (corr(p, 0, 0) + corr(last - p, 0, 0)) : corr(p, 0, 0);
+    auto at_nodes   = gf<dlr_imtime, scalar_valued>{nodes};
+    for (auto const &tau : at_nodes.mesh()) {
+      long const l  = tau.index();
+      at_nodes[tau] = symmetric ? 0.5 * (corr(l, 0, 0) + corr(sweep.reflected(l), 0, 0)) : corr(l, 0, 0);
     }
+    O_dlr = make_gf_dlr(at_nodes);
+    for (auto const &tau : O_tau.mesh()) O_tau[tau] = O_dlr(tau.value());
   }
 
 } // namespace triqs_cthyb

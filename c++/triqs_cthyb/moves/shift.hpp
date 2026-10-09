@@ -35,11 +35,9 @@ namespace triqs_cthyb {
     h_scalar_t new_atomic_weight, new_atomic_reweighting;
     time_pt tau_old, tau_new;
     op_desc op_old, op_new;
-    using det_type = det_manip::det_manip<qmc_data::delta_block_adaptor>;
     det_type::RollDirection roll_direction;
     int block_index;
 
-    histogram *add_histo(std::string const &name, histo_map_t *histos);
 
     public:
     move_shift_operator(qmc_data &data, mc_tools::random_generator &rng, histo_map_t *histos);

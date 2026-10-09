@@ -162,6 +162,7 @@ static int synth_constructor_167a5c32(PyObject *self, PyObject *args, PyObject *
   de("verbosity", self_c.verbosity, true);
   de("move_shift", self_c.move_shift, true);
   de("move_double", self_c.move_double, true);
+  de("pauli_prob", self_c.pauli_prob, true);
   de("use_trace_estimator", self_c.use_trace_estimator, true);
   de("lang_firsov", self_c.lang_firsov, true);
   de("dyn_n_l", self_c.dyn_n_l, true);
@@ -169,6 +170,8 @@ static int synth_constructor_167a5c32(PyObject *self, PyObject *args, PyObject *
   de("measure_G_l", self_c.measure_G_l, true);
   de("measure_O_tau", self_c.measure_O_tau, true);
   de("measure_nn_tau", self_c.measure_nn_tau, true);
+  de("dlr_w_max", self_c.dlr_w_max, true);
+  de("dlr_eps", self_c.dlr_eps, true);
   de("measure_D0_corr", self_c.measure_D0_corr, true);
   de("measure_G2_tau", self_c.measure_G2_tau, true);
   de("measure_G2_iw", self_c.measure_G2_iw, true);
@@ -241,91 +244,97 @@ verbosity : {par_11}, default== 0) ? 3 : 0)
 
 move_shift : {par_12}, default=true
 
-move_double : {par_13}, default=true
+move_double : {par_13}, default={}
 
-use_trace_estimator : {par_14}, default=false
+pauli_prob : {par_14}, default={}
 
-lang_firsov : {par_15}, default=true
+use_trace_estimator : {par_15}, default=false
 
-dyn_n_l : {par_16}, default=50
+lang_firsov : {par_16}, default=true
 
-measure_G_tau : {par_17}, default=true
+dyn_n_l : {par_17}, default=50
 
-measure_G_l : {par_18}, default=false
+measure_G_tau : {par_18}, default=true
 
-measure_O_tau : {par_19}, default={}
+measure_G_l : {par_19}, default=false
 
-measure_nn_tau : {par_20}, default=false
+measure_O_tau : {par_20}, default={}
 
-measure_D0_corr : {par_21}, default=false
+measure_nn_tau : {par_21}, default=false
 
-measure_G2_tau : {par_22}, default=false
+dlr_w_max : {par_22}, default=20.0
 
-measure_G2_iw : {par_23}, default=false
+dlr_eps : {par_23}, default=1e-10
 
-measure_G2_iw_nfft : {par_24}, default=false
+measure_D0_corr : {par_24}, default=false
 
-measure_G2_iw_pp : {par_25}, default=false
+measure_G2_tau : {par_25}, default=false
 
-measure_G2_iw_pp_nfft : {par_26}, default=false
+measure_G2_iw : {par_26}, default=false
 
-measure_G2_iw_ph : {par_27}, default=false
+measure_G2_iw_nfft : {par_27}, default=false
 
-measure_G2_iw_ph_nfft : {par_28}, default=false
+measure_G2_iw_pp : {par_28}, default=false
 
-measure_G2_iwll_pp : {par_29}, default=false
+measure_G2_iw_pp_nfft : {par_29}, default=false
 
-measure_G2_iwll_ph : {par_30}, default=false
+measure_G2_iw_ph : {par_30}, default=false
 
-measure_G2_block_order : {par_31}, default=block_order::AABB
+measure_G2_iw_ph_nfft : {par_31}, default=false
 
-measure_G2_blocks : {par_32}, default={}
+measure_G2_iwll_pp : {par_32}, default=false
 
-measure_G2_n_tau : {par_33}, default=10
+measure_G2_iwll_ph : {par_33}, default=false
 
-measure_G2_n_bosonic : {par_34}, default=30
+measure_G2_block_order : {par_34}, default=block_order::AABB
 
-measure_G2_n_fermionic : {par_35}, default=30
+measure_G2_blocks : {par_35}, default={}
 
-measure_G2_n_l : {par_36}, default=20
+measure_G2_n_tau : {par_36}, default=10
 
-measure_G2_iwll_nfft_buf_size : {par_37}, default=100
+measure_G2_n_bosonic : {par_37}, default=30
 
-nfft_buf_sizes : {par_38}, default={}
+measure_G2_n_fermionic : {par_38}, default=30
 
-measure_pert_order : {par_39}, default=false
+measure_G2_n_l : {par_39}, default=20
 
-measure_density_matrix : {par_40}, default=false
+measure_G2_iwll_nfft_buf_size : {par_40}, default=100
 
-use_norm_as_weight : {par_41}, default=false
+nfft_buf_sizes : {par_41}, default={}
 
-initial_configuration : {par_42}, default={}
+measure_pert_order : {par_42}, default=false
 
-performance_analysis : {par_43}, default=false
+measure_density_matrix : {par_43}, default=false
 
-proposal_prob : {par_44}, default={}
+use_norm_as_weight : {par_44}, default=false
 
-move_global : {par_45}, default={}
+initial_configuration : {par_45}, default={}
 
-move_global_prob : {par_46}, default=0.05
+performance_analysis : {par_46}, default=false
 
-move_global_full : {par_47}, default=false
+proposal_prob : {par_47}, default={}
 
-imag_threshold : {par_48}, default=1.e-13
+move_global : {par_48}, default={}
 
-det_init_size : {par_49}, default=100
+move_global_prob : {par_49}, default=0.05
 
-det_n_operations_before_check : {par_50}, default=100
+move_global_full : {par_50}, default=false
 
-det_precision_warning : {par_51}, default=1.e-8
+imag_threshold : {par_51}, default=1.e-13
 
-det_precision_error : {par_52}, default=1.e-5
+det_init_size : {par_52}, default=100
 
-det_singular_threshold : {par_53}, default=-1
+det_n_operations_before_check : {par_53}, default=100
 
-off_diag_threshold : {par_54}, default=0.0
+det_precision_warning : {par_54}, default=1.e-8
 
-h_loc0 : {par_55}, default={}
+det_precision_error : {par_55}, default=1.e-5
+
+det_singular_threshold : {par_56}, default=-1
+
+off_diag_threshold : {par_57}, default=0.0
+
+h_loc0 : {par_58}, default={}
 
 )DOC",
                       "par",
@@ -342,7 +351,8 @@ h_loc0 : {par_55}, default={}
                        c2py::python_typename<long>(),
                        c2py::python_typename<int>(),
                        c2py::python_typename<bool>(),
-                       c2py::python_typename<bool>(),
+                       c2py::python_typename<std::optional<bool>>(),
+                       c2py::python_typename<std::optional<double>>(),
                        c2py::python_typename<bool>(),
                        c2py::python_typename<bool>(),
                        c2py::python_typename<int>(),
@@ -350,6 +360,8 @@ h_loc0 : {par_55}, default={}
                        c2py::python_typename<bool>(),
                        c2py::python_typename<std::optional<std::pair<triqs_cthyb::many_body_op_t, triqs_cthyb::many_body_op_t>>>(),
                        c2py::python_typename<bool>(),
+                       c2py::python_typename<double>(),
+                       c2py::python_typename<double>(),
                        c2py::python_typename<bool>(),
                        c2py::python_typename<bool>(),
                        c2py::python_typename<bool>(),
@@ -406,7 +418,11 @@ constexpr auto _c2py_doc_member_c907e317 = R"DOC(Name of random number generator
 constexpr auto _c2py_doc_member_01758266 = R"DOC(Maximum runtime in seconds, use -1 to set infinite.)DOC";
 constexpr auto _c2py_doc_member_d618aa45 = R"DOC(Verbosity level.)DOC";
 constexpr auto _c2py_doc_member_68e6d012 = R"DOC(Add shifting an operator as a move?)DOC";
-constexpr auto _c2py_doc_member_3d1a62d7 = R"DOC(Add double insertions as a move?)DOC";
+constexpr auto _c2py_doc_member_3d1a62d7 = R"DOC(Add double insertions as a move? Unset: off when the pair moves alone are ergodic (every block of size 1, every density
+commuting with h_loc and density-density dynamical vertices), on otherwise.)DOC";
+constexpr auto _c2py_doc_member_8c7e2f15 = R"DOC(Probability that the pair insertions and removals use the Pauli proposal, which puts the c between its c^dagger and the
+nearest operator of the same inner index, rather than the uniform one. Unset: 1 under the conditions where move_double
+is off by default (the segment insertions and removals of CT-SEG), 0 otherwise.)DOC";
 constexpr auto _c2py_doc_member_de609b18 = R"DOC(Calculate the full trace or use an estimate?)DOC";
 constexpr auto _c2py_doc_member_bbdc9102 = R"DOC(Resum the density-density dynamical vertices that commute with h_loc analytically (Lang-Firsov)?
 All other vertices, or all of them if false, are sampled stochastically.)DOC";
@@ -414,12 +430,18 @@ constexpr auto _c2py_doc_member_b49d62c9 = R"DOC(Number of Legendre coefficients
 constexpr auto _c2py_doc_member_19ebb74f = R"DOC(Measure :math:`G(\tau)`? Hermiticity :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` is enforced.)DOC";
 constexpr auto _c2py_doc_member_9fe4e2b9 = R"DOC(Measure :math:`G_l` (Legendre)? No hermiticity is enforced.)DOC";
 constexpr auto _c2py_doc_member_c478e947 =
-   R"DOC(Measure :math:`\langle O_2(\tau) O_1(0) \rangle` for measure_O_tau = (O_1, O_2), operators diagonal in the
-occupation basis (n_a, N, S_z, n_a n_b, ...). Each configuration is evaluated exactly at every point of the mesh.)DOC";
+   R"DOC(Measure :math:`\langle O_2(\tau) O_1(0) \rangle` for measure_O_tau = (O_1, O_2), bosonic operators (an even number
+of c and c^dagger in every term), whether or not they commute with h_loc. Measured at the nodes of a DLR grid
+(dlr_w_max, dlr_eps), with the result in O_dlr and, on n_tau points, in O_tau. Operators that change the block of
+h_loc (S^+, c^dagger_a c_b, ...) cost more.)DOC";
 constexpr auto _c2py_doc_member_bce605dc =
-   R"DOC(Measure :math:`\langle n_a(\tau) n_b(0) \rangle` for every pair of spin-orbitals (nn_tau), whether or not the
-n_a commute with h_loc. If they do and measure_D0_corr and measure_density_matrix are set, nn_tau is Q_tau from the
-occupation kinks; otherwise each configuration is evaluated exactly at every point of the mesh.)DOC";
+   R"DOC(Measure :math:`\langle n_a(\tau) n_b(0) \rangle` for every pair of spin-orbitals, whether or not the n_a commute
+with h_loc. If they do and measure_D0_corr and measure_density_matrix are set, nn_tau is Q_tau from the occupation
+kinks; otherwise it is measured like measure_O_tau, with the result in nn_dlr and, on n_tau_bosonic points, in nn_tau.)DOC";
+constexpr auto _c2py_doc_member_d1a0e7f2 =
+   R"DOC(Highest frequency of the DLR grid of measure_O_tau and measure_nn_tau. The correlators must have no spectral weight
+above it; check by doubling it.)DOC";
+constexpr auto _c2py_doc_member_d1a0e7f3 = R"DOC(Accuracy of the DLR grid of measure_O_tau and measure_nn_tau.)DOC";
 constexpr auto _c2py_doc_member_7bd1b214 =
    R"DOC(Measure density-density correlators from the occupation kinks: Q_conserved_tau for the density combinations that
 commute with h_loc, and Q_tau if every n_a does. The equal-time part is added by the Python Solver with the density matrix.)DOC";
@@ -477,6 +499,7 @@ static PyObject *prop_get_dict_167a5c32(PyObject *self, void *) {
   dic["verbosity"]                     = self_c.verbosity;
   dic["move_shift"]                    = self_c.move_shift;
   dic["move_double"]                   = self_c.move_double;
+  dic["pauli_prob"]                    = self_c.pauli_prob;
   dic["use_trace_estimator"]           = self_c.use_trace_estimator;
   dic["lang_firsov"]                   = self_c.lang_firsov;
   dic["dyn_n_l"]                       = self_c.dyn_n_l;
@@ -484,6 +507,8 @@ static PyObject *prop_get_dict_167a5c32(PyObject *self, void *) {
   dic["measure_G_l"]                   = self_c.measure_G_l;
   dic["measure_O_tau"]                 = self_c.measure_O_tau;
   dic["measure_nn_tau"]                = self_c.measure_nn_tau;
+  dic["dlr_w_max"]                     = self_c.dlr_w_max;
+  dic["dlr_eps"]                       = self_c.dlr_eps;
   dic["measure_D0_corr"]               = self_c.measure_D0_corr;
   dic["measure_G2_tau"]                = self_c.measure_G2_tau;
   dic["measure_G2_iw"]                 = self_c.measure_G2_iw;
@@ -540,6 +565,7 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_a2b1dce8>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::verbosity, _c2py_cls_a2b1dce8>("verbosity", _c2py_doc_member_d618aa45),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::move_shift, _c2py_cls_a2b1dce8>("move_shift", _c2py_doc_member_68e6d012),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::move_double, _c2py_cls_a2b1dce8>("move_double", _c2py_doc_member_3d1a62d7),
+   c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::pauli_prob, _c2py_cls_a2b1dce8>("pauli_prob", _c2py_doc_member_8c7e2f15),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::use_trace_estimator, _c2py_cls_a2b1dce8>("use_trace_estimator", _c2py_doc_member_de609b18),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::lang_firsov, _c2py_cls_a2b1dce8>("lang_firsov", _c2py_doc_member_bbdc9102),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::dyn_n_l, _c2py_cls_a2b1dce8>("dyn_n_l", _c2py_doc_member_b49d62c9),
@@ -547,6 +573,8 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_a2b1dce8>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_G_l, _c2py_cls_a2b1dce8>("measure_G_l", _c2py_doc_member_9fe4e2b9),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_O_tau, _c2py_cls_a2b1dce8>("measure_O_tau", _c2py_doc_member_c478e947),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_nn_tau, _c2py_cls_a2b1dce8>("measure_nn_tau", _c2py_doc_member_bce605dc),
+   c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::dlr_w_max, _c2py_cls_a2b1dce8>("dlr_w_max", _c2py_doc_member_d1a0e7f2),
+   c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::dlr_eps, _c2py_cls_a2b1dce8>("dlr_eps", _c2py_doc_member_d1a0e7f3),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_D0_corr, _c2py_cls_a2b1dce8>("measure_D0_corr", _c2py_doc_member_7bd1b214),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_G2_tau, _c2py_cls_a2b1dce8>("measure_G2_tau", _c2py_doc_member_c35e2239),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::measure_G2_iw, _c2py_cls_a2b1dce8>("measure_G2_iw", _c2py_doc_member_e514acd9),
@@ -663,6 +691,8 @@ constexpr auto _c2py_doc_member_c4b4ab9c = R"DOC(Violation of the property :math
 constexpr auto _c2py_doc_member_bb9bd800 = R"DOC(Single-particle Green's function :math:`G_l` in the Legendre representation.)DOC";
 constexpr auto _c2py_doc_member_2fc3b9f2 = R"DOC(:math:` O_2() O_1(0) ` for measure_O_tau = (O_1, O_2).)DOC";
 constexpr auto _c2py_doc_member_0ce5333f = R"DOC(:math:` n_a() n_b(0) ` for every pair of spin-orbitals, as nn_tau[bl_a, bl_b][tau](i_a, i_b).)DOC";
+constexpr auto _c2py_doc_member_d1a0e7f4 = R"DOC(O_tau as DLR coefficients, from which it is evaluated at any tau or Matsubara frequency.)DOC";
+constexpr auto _c2py_doc_member_d1a0e7f5 = R"DOC(nn_tau as DLR coefficients, from which it is evaluated at any tau or Matsubara frequency.)DOC";
 constexpr auto _c2py_doc_member_d13e3140 = R"DOC(Density-density correlator :math:`Q() =  n() n(0) ` in imaginary time.)DOC";
 constexpr auto _c2py_doc_member_7d53005e = R"DOC(Density-density correlator in Legendre representation.)DOC";
 constexpr auto _c2py_doc_member_39308cca =
@@ -730,7 +760,9 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_7e768e6a>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::asymmetry_G_tau, _c2py_cls_7e768e6a>("asymmetry_G_tau", _c2py_doc_member_c4b4ab9c),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::G_l, _c2py_cls_7e768e6a>("G_l", _c2py_doc_member_bb9bd800),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::O_tau, _c2py_cls_7e768e6a>("O_tau", _c2py_doc_member_2fc3b9f2),
+   c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::O_dlr, _c2py_cls_7e768e6a>("O_dlr", _c2py_doc_member_d1a0e7f4),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::nn_tau, _c2py_cls_7e768e6a>("nn_tau", _c2py_doc_member_0ce5333f),
+   c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::nn_dlr, _c2py_cls_7e768e6a>("nn_dlr", _c2py_doc_member_d1a0e7f5),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::Q_tau, _c2py_cls_7e768e6a>("Q_tau", _c2py_doc_member_d13e3140),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::Q_l, _c2py_cls_7e768e6a>("Q_l", _c2py_doc_member_7d53005e),
    c2py::getsetdef_from_member<&_c2py_cls_7e768e6a::Q_conserved_tau, _c2py_cls_7e768e6a>("Q_conserved_tau", _c2py_doc_member_39308cca),

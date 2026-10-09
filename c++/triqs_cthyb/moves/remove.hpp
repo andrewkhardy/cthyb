@@ -19,7 +19,6 @@
  *
  ******************************************************************************/
 #pragma once
-#include <algorithm>
 #include <triqs/mc_tools.hpp>
 #include "../qmc_data.hpp"
 
@@ -32,16 +31,16 @@ namespace triqs_cthyb {
     configuration &config;
     mc_tools::random_generator &rng;
     int block_index, block_size;
+    double pauli_prob; // Probability of the Pauli proposal (moves/pauli.hpp) rather than the uniform one
     histogram *histo_proposed, *histo_accepted; // Analysis histograms
     double dtau;
     h_scalar_t new_atomic_weight, new_atomic_reweighting;
     time_pt tau1, tau2;
 
-    histogram *add_histo(std::string const &name, histo_map_t *histos);
 
     public:
     move_remove_c_cdag(int block_index, int block_size, std::string const &block_name, qmc_data &data, mc_tools::random_generator &rng,
-                       histo_map_t *histos);
+                       histo_map_t *histos, double pauli_prob = 0.0);
 
     mc_weight_t attempt();
     mc_weight_t accept();

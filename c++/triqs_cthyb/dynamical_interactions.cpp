@@ -20,6 +20,7 @@
  ******************************************************************************/
 #include "./dynamical_interactions.hpp"
 #include "./math_utils.hpp"
+#include <nda/linalg.hpp>
 #include <triqs/utility/exceptions.hpp>
 #include <algorithm>
 #include <limits>
@@ -49,19 +50,27 @@ namespace triqs_cthyb {
 
     double eval_scalar_gf(gf<imtime, scalar_valued> const &g, double tau) { return real(g[closest_mesh_pt(tau)]); }
 
+    // The Legendre coefficients of the coupling of v
+    nda::vector<double> legendre_coeffs(dyn_vertex_t const &v, double beta, int N_leg) {
+      return fit_legendre_coeffs(v.coupling.mesh().size(), beta, [&v](double tau) { return eval_scalar_gf(v.coupling, tau); }, N_leg);
+    }
+
     int count_orbitals(std::map<std::pair<int, int>, int> const &linindex) {
       int n = 0;
       for (auto const &pair : linindex) n = std::max(n, pair.second + 1);
       return n;
     }
 
+    // n_a for linear index a, from fops's indices (linindex keys hold block positions, not names)
+    many_body_op_t density(fundamental_operator_set::data_t const &fops_indices, int a) {
+      return many_body_op_t::make_canonical(true, fops_indices[a]) * many_body_op_t::make_canonical(false, fops_indices[a]);
+    }
+
     // The U_ij n_i n_j (i != j) and -mu_i n_i terms of h_loc, for the verbosity-2 report (as in CTSEG)
     std::pair<nda::matrix<double>, nda::vector<double>> bare_density_matrix(many_body_op_t const &h_loc, fundamental_operator_set const &fops,
                                                                             int n_orbitals) {
-      nda::matrix<double> U_matrix(n_orbitals, n_orbitals);
-      nda::vector<double> mu_vec(n_orbitals);
-      U_matrix = 0.0;
-      mu_vec   = 0.0;
+      nda::matrix<double> U_matrix = nda::zeros<double>(n_orbitals, n_orbitals);
+      nda::vector<double> mu_vec   = nda::zeros<double>(n_orbitals);
       for (auto const &[term, coeff] : h_loc) {
         if (term.size() == 2) {
           if (term[0].dagger && !term[1].dagger && term[0].indices == term[1].indices) mu_vec(fops[term[0].indices]) -= real(coeff);
@@ -126,25 +135,16 @@ namespace triqs_cthyb {
     }
 
     void expand_D0_into_vertices(block2_gf_const_view<imtime> D0t, gf_struct_t const &gf_struct, std::vector<dyn_vertex_t> &vertices) {
-      for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1) {
+      for (size_t bl1 = 0; bl1 < gf_struct.size(); ++bl1)
         for (size_t bl2 = 0; bl2 < gf_struct.size(); ++bl2) {
           auto D0_bl = D0t(bl1, bl2);
           if (!any_nonzero(D0_bl)) continue;
-
-          auto bl1_name = gf_struct[bl1].first;
-          auto bl2_name = gf_struct[bl2].first;
-          int bl1_size  = gf_struct[bl1].second;
-          int bl2_size  = gf_struct[bl2].second;
-
-          for (int i1 = 0; i1 < bl1_size; ++i1) {
-            for (int i2 = 0; i2 < bl2_size; ++i2) {
-              if (!any_nonzero(D0_bl, i1, i2)) continue;
-              vertices.push_back({c_dag<h_scalar_t>(bl1_name, i1) * c<h_scalar_t>(bl1_name, i1),
-                                  c_dag<h_scalar_t>(bl2_name, i2) * c<h_scalar_t>(bl2_name, i2), scalar_component(D0_bl, i1, i2)});
-            }
-          }
+          auto const &[name1, size1] = gf_struct[bl1];
+          auto const &[name2, size2] = gf_struct[bl2];
+          for (int i1 = 0; i1 < size1; ++i1)
+            for (int i2 = 0; i2 < size2; ++i2)
+              if (any_nonzero(D0_bl, i1, i2)) vertices.push_back({n<h_scalar_t>(name1, i1), n<h_scalar_t>(name2, i2), scalar_component(D0_bl, i1, i2)});
         }
-      }
     }
 
     void expand_Jperp_into_vertices(gf_const_view<imtime, matrix_valued> Jperpt, gf_struct_t const &gf_struct, std::vector<dyn_vertex_t> &vertices) {
@@ -212,6 +212,14 @@ namespace triqs_cthyb {
     return result;
   }
 
+  bool all_density_vertices(classified_dyn_vertices_t const &classified, fundamental_operator_set const &fops,
+                            std::map<std::pair<int, int>, int> const &linindex) {
+    auto is_density = [&](dyn_vertex_t const &v) {
+      return is_density_bilinear(extract_bilinear(v.op1, fops, linindex, "op1")) and is_density_bilinear(extract_bilinear(v.op2, fops, linindex, "op2"));
+    };
+    return std::ranges::all_of(classified.lang_firsov, is_density) and std::ranges::all_of(classified.stochastic, is_density);
+  }
+
   // -----------------------------------------------------------------------------------
 
   void apply_lang_firsov_shift(many_body_op_t &h_loc, std::vector<dyn_vertex_t> const &lf_vertices, fundamental_operator_set const &fops,
@@ -225,18 +233,12 @@ namespace triqs_cthyb {
     }
 
     for (auto const &v : lf_vertices) {
-      auto bp1 = extract_bilinear(v.op1, fops, linindex, "op1");
-      auto bp2 = extract_bilinear(v.op2, fops, linindex, "op2");
+      int const lin1 = extract_bilinear(v.op1, fops, linindex, "op1").opL.linear_index;
+      int const lin2 = extract_bilinear(v.op2, fops, linindex, "op2").opL.linear_index;
 
-      int n_pt_tau = v.coupling.mesh().size();
-      auto d_n     = fit_legendre_coeffs(n_pt_tau, beta, [&v](double tau) { return eval_scalar_gf(v.coupling, tau); }, N_leg);
-      double d0       = d_n(0);
-      double d1       = (N_leg > 1) ? d_n(1) : 0.0;
-      double Kprime_0 = -1.0 * beta * (d0 - d1 / 3.0);
+      auto const d_n        = legendre_coeffs(v, beta, N_leg);
+      double const Kprime_0 = -beta * (d_n(0) - (N_leg > 1 ? d_n(1) : 0.0) / 3.0);
       if (std::abs(Kprime_0) < 1.e-13) continue;
-
-      int lin1 = bp1.opL.linear_index;
-      int lin2 = bp2.opL.linear_index;
 
       // H -> H - K'(0)/2 n_a n_b per ordered vertex, so a pair registered both ways shifts by K'(0)
       if (lin1 == lin2) {
@@ -266,22 +268,23 @@ namespace triqs_cthyb {
     std::vector<std::vector<std::vector<double>>> K_n;
     if (lf_vertices.empty()) return K_n;
 
-    auto M_matrix = build_M_matrix(N_leg, beta);
-    int max_linindex = 0;
-    for (auto const &pair : linindex) max_linindex = std::max(max_linindex, pair.second);
-    K_n.resize(max_linindex + 1, std::vector<std::vector<double>>(max_linindex + 1, std::vector<double>(N_leg, 0.0)));
+    auto const M_matrix = build_M_matrix(N_leg, beta);
+    int const n_orb     = count_orbitals(linindex);
+    K_n.assign(n_orb, std::vector<std::vector<double>>(n_orb, std::vector<double>(N_leg, 0.0)));
 
     for (auto const &v : lf_vertices) {
-      auto bp1 = extract_bilinear(v.op1, fops, linindex, "op1");
-      auto bp2 = extract_bilinear(v.op2, fops, linindex, "op2");
-      int n_pt_tau = v.coupling.mesh().size();
-      auto d_n     = fit_legendre_coeffs(n_pt_tau, beta, [&v](double tau) { return eval_scalar_gf(v.coupling, tau); }, N_leg);
-      nda::vector<double> k_n_vec = M_matrix * d_n;
-
-      int lin1 = bp1.opL.linear_index;
-      int lin2 = bp2.opL.linear_index;
-      for (int n = 0; n < N_leg; ++n) K_n[lin1][lin2][n] += k_n_vec(n);
+      int const lin1                = extract_bilinear(v.op1, fops, linindex, "op1").opL.linear_index;
+      int const lin2                = extract_bilinear(v.op2, fops, linindex, "op2").opL.linear_index;
+      nda::vector<double> const k_n = M_matrix * legendre_coeffs(v, beta, N_leg);
+      for (int n = 0; n < N_leg; ++n) K_n[lin1][lin2][n] += k_n(n);
     }
+
+    // A pair of kinks in a and b interacts through (K_ab + K_ba) / 2 (each vertex is 1/2 int int D_ab n_a n_b).
+    // compute_lang_firsov_ratio reads the row of whichever operator moves, so both rows must hold it, or a pair
+    // registered one way only would break detailed balance.
+    for (size_t a = 0; a < K_n.size(); ++a)
+      for (size_t b = a + 1; b < K_n.size(); ++b)
+        for (int n = 0; n < N_leg; ++n) K_n[a][b][n] = K_n[b][a][n] = 0.5 * (K_n[a][b][n] + K_n[b][a][n]);
     return K_n;
   }
 
@@ -307,15 +310,11 @@ namespace triqs_cthyb {
       int M = count_orbitals(linindex);
       if (M == 0) return {};
 
-      // [n_a, h_loc], with n_a built from fops's indices (linindex keys hold block positions, not names)
-      auto fops_indices = fundamental_operator_set::data_t(fops);
+      auto const fops_indices = fundamental_operator_set::data_t(fops);
       std::vector<many_body_op_t> commutators(M);
       for (auto const &[block_inner, a] : linindex) {
-        auto const &indices_a = fops_indices[a];
-        auto c_dag_a          = many_body_op_t::make_canonical(true, indices_a);
-        auto c_a              = many_body_op_t::make_canonical(false, indices_a);
-        auto n_a              = c_dag_a * c_a;
-        commutators[a]        = n_a * h_loc - h_loc * n_a;
+        auto const n_a = density(fops_indices, a);
+        commutators[a] = n_a * h_loc - h_loc * n_a;
       }
 
       // One row per monomial of the commutators, real and imaginary parts separately
@@ -339,29 +338,17 @@ namespace triqs_cthyb {
         return unit_vectors;
       }
 
-      nda::matrix<double> mat = nda::zeros<double>(P, M);
-      int row                 = 0;
-      for (auto const &[monomial, vec] : real_rows) {
-        mat(row, nda::range::all) = vec;
-        ++row;
-      }
-      for (auto const &[monomial, vec] : imag_rows) {
-        mat(row, nda::range::all) = vec;
-        ++row;
-      }
+      nda::matrix<double> mat(P, M);
+      int row = 0;
+      for (auto const *rows : {&real_rows, &imag_rows})
+        for (auto const &[monomial, vec] : *rows) mat(row++, nda::range::all) = vec;
 
-      auto [U, s, Vt]  = nda::linalg::svd(mat);
-      double s_max     = (s.size() > 0) ? s(0) : 0.0;
-      double threshold = 1.e-9 * std::max(s_max, 1.0);
-
+      // The right singular vectors of the vanishing singular values
+      auto [U, s, Vt]        = nda::linalg::svd(mat);
+      double const threshold = 1.e-9 * std::max(s.size() > 0 ? s(0) : 0.0, 1.0);
       std::vector<nda::vector<double>> conserved;
-      for (int i = 0; i < M; ++i) {
-        bool is_null = (i >= s.size()) || (s(i) < threshold);
-        if (!is_null) continue;
-        nda::vector<double> v(M);
-        for (int k = 0; k < M; ++k) v(k) = Vt(i, k);
-        conserved.push_back(v);
-      }
+      for (int i = 0; i < M; ++i)
+        if (i >= s.size() || s(i) < threshold) conserved.emplace_back(Vt(i, nda::range::all));
       return conserved;
     }
   } // namespace
@@ -403,8 +390,7 @@ namespace triqs_cthyb {
       many_body_op_t op;
       for (int a = 0; a < M; ++a) {
         v(a) = (std::abs(A(i, a)) < 1.e-10) ? 0.0 : A(i, a);
-        if (v(a) == 0.0) continue;
-        op = op + v(a) * many_body_op_t::make_canonical(true, fops_indices[a]) * many_body_op_t::make_canonical(false, fops_indices[a]);
+        if (v(a) != 0.0) op = op + v(a) * density(fops_indices, a);
       }
       result.vectors.push_back(v);
       result.operators.push_back(op);
@@ -488,11 +474,8 @@ namespace triqs_cthyb {
 
     // One vertex per pair with a non-zero entry, round-off level entries dropped
     double const threshold = 1.e-10 * max_element(nda::abs(D));
-    auto fops_indices      = fundamental_operator_set::data_t(fops);
-    auto density           = [&](int a) {
-      return many_body_op_t::make_canonical(true, fops_indices[a]) * many_body_op_t::make_canonical(false, fops_indices[a]);
-    };
-    auto add_vertices = [&](nda::array<double, 3> const &coupling_matrix, std::vector<dyn_vertex_t> &out) {
+    auto const fops_indices = fundamental_operator_set::data_t(fops);
+    auto add_vertices       = [&](nda::array<double, 3> const &coupling_matrix, std::vector<dyn_vertex_t> &out) {
       int added = 0;
       for (int a = 0; a < M; ++a) {
         for (int b = 0; b < M; ++b) {
@@ -501,7 +484,7 @@ namespace triqs_cthyb {
           if (largest <= threshold) continue;
           auto coupling = gf<imtime, scalar_valued>{mesh};
           for (auto const &tau : mesh) coupling[tau] = coupling_matrix(tau.index(), a, b);
-          out.push_back({density(a), density(b), coupling});
+          out.push_back({density(fops_indices, a), density(fops_indices, b), coupling});
           ++added;
         }
       }

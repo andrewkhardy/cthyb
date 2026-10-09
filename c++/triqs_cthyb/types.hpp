@@ -52,8 +52,12 @@ namespace triqs_cthyb {
   using op_t        = std::pair<time_pt, int>;
   using histo_map_t = std::map<std::string, histogram>;
 
-  using indices_type = triqs::operators::indices_t;
-  using gf_struct_t  = triqs::hilbert_space::gf_struct_t;
+  // A histogram on [0, beta] with 100 bins, added to histos under name (nullptr if there are no histos)
+  inline histogram *add_histo(std::string const &name, histo_map_t *histos, double beta) {
+    if (!histos) return nullptr;
+    auto new_histo = histos->insert({name, {.0, beta, 100}});
+    return &(new_histo.first->second);
+  }
 
   // One-particle Green's function types
   using G_tau_t          = block_gf<imtime, matrix_valued>;
@@ -64,6 +68,7 @@ namespace triqs_cthyb {
   // Density-density correlator (bosonic)
   using Q_tau_t = block2_gf<imtime, matrix_valued>;
   using Q_l_t   = block2_gf<triqs::gfs::legendre, matrix_valued>;
+  using Q_dlr_t = block2_gf<triqs::mesh::dlr, matrix_valued>;
 
   // Correlators of the stochastic dynamical vertices' bilinears, one entry per catalog type
   using dyn_vertex_corr_tau_t = std::vector<gf<imtime, scalar_valued>>;

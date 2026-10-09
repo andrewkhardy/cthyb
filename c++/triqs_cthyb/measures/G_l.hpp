@@ -21,7 +21,7 @@
 #pragma once
 #include <triqs/gfs.hpp>
 #include <triqs/mesh.hpp>
-#include <triqs/utility/legendre.hpp>
+#include "../math_utils.hpp"
 #include "../qmc_data.hpp"
 
 namespace triqs_cthyb {
@@ -41,6 +41,12 @@ namespace triqs_cthyb {
     qmc_data const &data;
     mc_weight_t average_sign;
     G_l_t::view_type G_l;
+    std::vector<nda::array<mc_weight_t, 3>> accumulated; // by block: (i, j, l), copied into G_l by collect_results
+
+    // Work space, kept between measurements: by block and i * size + j, the Legendre arguments and weights of M's elements
+    std::vector<std::vector<std::vector<double>>> pair_x;
+    std::vector<std::vector<std::vector<mc_weight_t>>> pair_w;
+    legendre_sums moments;
   };
 
 } // namespace triqs_cthyb
