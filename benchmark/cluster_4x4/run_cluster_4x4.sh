@@ -9,22 +9,26 @@
 #SBATCH --time=23:00:00
 #
 # Cluster DCA / CDMFT of the square-lattice Hubbard model, CTHYB (cluster_4x4.py) against CTINT (cluster_ctint.py).
-#   usage:  sbatch run_cluster_4x4.sh cthyb|ctint 2x2|4x4 [extra driver arguments]     (from this directory)
+#   usage:  sbatch run_cluster_4x4.sh cthyb|ctint 2x2|4x4|8A [extra driver arguments]     (from this directory)
 # Every solve runs for MAX_TIME seconds (n_cycles is only a cap), so the two solvers get the same time per iteration:
 # compare the noise of Sigma, the sign and the order across iterations.
 # cthyb: DCA and CDMFT at pauli_prob = 0 and 0.5. For 4x4 it bounds the memory of the local problem first and stops
 #        with the numbers if the node cannot hold it; pass --force to attempt it anyway.
 # ctint: DCA and CDMFT, in the site basis.
+# The Betts cluster 8A runs DCA only.
 # Later arguments win, so e.g. "--max_time 1800 --U 4" overrides the settings below.
 
 set -euo pipefail
 SOLVER="${1:-}"
 MODE="${2:-}"
 case "$SOLVER/$MODE" in
-  cthyb/2x2|cthyb/4x4|ctint/2x2|ctint/4x4) shift 2 ;;
-  *) echo "usage: sbatch $0 cthyb|ctint 2x2|4x4 [extra driver arguments]" >&2; exit 2 ;;
+  cthyb/2x2|cthyb/4x4|cthyb/8A|ctint/2x2|ctint/4x4|ctint/8A) shift 2 ;;
+  *) echo "usage: sbatch $0 cthyb|ctint 2x2|4x4|8A [extra driver arguments]" >&2; exit 2 ;;
 esac
-L="${MODE%x*}"
+case "$MODE" in
+  8A) SCHEMES="DCA" ;;
+  *)  SCHEMES="DCA CDMFT" ;;
+esac
 
 module load modules/2.5-20261005
 module load triqs/multiorbital
@@ -39,12 +43,12 @@ mkdir -p "$OUT"
 
 run () {  # run <driver> <scheme> [extra...]; a failed run does not stop the next one
   local driver="$1" scheme="$2"; shift 2
-  echo "=== $driver ${L}x${L} $scheme  $* ==="
-  mpirun -n "$NRANKS" python "$driver" --L "$L" --scheme "$scheme" $MODEL --out_dir "$OUT" "$@" \
-    || echo "=== $driver ${L}x${L} $scheme exited with $? ==="
+  echo "=== $driver $MODE $scheme  $* ==="
+  mpirun -n "$NRANKS" python "$driver" --cluster "$MODE" --scheme "$scheme" $MODEL --out_dir "$OUT" "$@" \
+    || echo "=== $driver $MODE $scheme exited with $? ==="
 }
 
-for scheme in DCA CDMFT; do
+for scheme in $SCHEMES; do
   if [ "$SOLVER" = cthyb ]; then
     for pp in 0.0 0.5; do
       run cluster_4x4.py "$scheme" --pauli_prob "$pp" "$@"
