@@ -2,8 +2,12 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
+<<<<<<< HEAD
 r"""CTINT counterpart of cluster_4x4.py: the same DCA / CDMFT for the square-lattice Hubbard model, on an LxL cluster
 or, in DCA, the Betts cluster 8A (cluster_geometry.py),
+=======
+r"""CTINT counterpart of cluster_4x4.py: the same cluster DCA / CDMFT (clusters.py) for the square-lattice Hubbard model,
+>>>>>>> b88742fc005ae8c58dc190939b94d6d83039d9be
 
     H = -t sum_<ij>,s c^dag_is c_js + U sum_i n_i,up n_i,dn - mu sum_i,s n_i,s,
 
@@ -11,6 +15,7 @@ with the same coarse graining, starting point and per-iteration report, to compa
 
 CTINT expands in density-density vertices (n_a - alpha)(n_b - alpha), so it works in the site basis, where U is one
 such term per site: gf_struct is one block of N sites per spin, in DCA as in CDMFT. In DCA the coarse graining is
+<<<<<<< HEAD
 done per cluster momentum in the real cos/sin basis of cluster_geometry.py and rotated back to the sites. The alpha
 shifts are the signed ones of ../dynamic_int/common/ctint.py, and CTINT takes G0 on its DLR mesh: G0 is built on a
 regular Matsubara mesh, Fourier transformed and DLR-fitted, as in the dynamic_int CTINT runs.
@@ -27,6 +32,13 @@ Sigma comes from CTINT's M(tau), binned on n_tau points, rather than from its G:
 In DCA, Sigma is then reduced to its DCA form, diagonal in the waves and shared by the cos and sin waves of a K. The
 report gives the eps of each spin and Sigma_1 as the data alone give it, against the exact value imposed.
 
+=======
+done per cluster momentum in the real cos/sin basis of cluster_4x4.py and rotated back to the sites. The alpha shifts
+are the signed ones of ../dynamic_int/common/ctint.py, and CTINT takes G0 on its DLR mesh: G0 is built on a regular
+Matsubara mesh, Fourier transformed and DLR-fitted, as in the dynamic_int CTINT runs. Sigma = G0^-1 - G^-1 on the
+regular mesh, from CTINT's G (a DLR expansion, so its high-frequency tail is smooth).
+
+>>>>>>> b88742fc005ae8c58dc190939b94d6d83039d9be
     mpirun -n 8 python cluster_ctint.py --cluster 4x4 --scheme DCA
 """
 import argparse
@@ -45,7 +57,12 @@ from triqs_ctint import Solver
 from cluster_geometry import BETTS, geometry
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "dynamic_int"))
+<<<<<<< HEAD
 from common import ctint  # noqa: E402  (the alpha shifts of the dynamic_int CTINT runs)
+=======
+from common import ctint  # noqa: E402  (alpha shifts and DLR conversions of the dynamic_int CTINT runs)
+from clusters import SUPERLATTICES, Cluster  # noqa: E402
+>>>>>>> b88742fc005ae8c58dc190939b94d6d83039d9be
 
 SPINS = ("up", "dn")
 EPS_SCAN = [10.0**-k for k in range(2, 11)]  # DLR eps tried for M, coarse to fine
@@ -53,7 +70,11 @@ EPS_NOISE = 1e-7  # beyond it, a finer basis can only gain chi^2 on the noise of
 NOISE_WINDOW = 101  # tau bins over which the noise of M(tau) is averaged
 
 parser = argparse.ArgumentParser(description="Cluster DCA / CDMFT for the square-lattice Hubbard model, solved by CTINT")
+<<<<<<< HEAD
 parser.add_argument("--cluster", default="4x4", help="LxL, or the Betts cluster 8A (DCA only)")
+=======
+parser.add_argument("--cluster", choices=tuple(SUPERLATTICES), default="4x4")
+>>>>>>> b88742fc005ae8c58dc190939b94d6d83039d9be
 parser.add_argument("--scheme", choices=("DCA", "CDMFT"), default="DCA")
 parser.add_argument("--U", type=float, default=6.0)
 parser.add_argument("--t", type=float, default=1.0)
@@ -75,7 +96,15 @@ args = parser.parse_args()
 if args.scheme == "CDMFT" and args.cluster in BETTS:
     parser.error("CDMFT takes an LxL cluster: a Betts superlattice does not fix the shape of the CDMFT cluster")
 mu = args.U / 2 if args.mu is None else args.mu
+<<<<<<< HEAD
 N, SITES, K_VECS, P, K_OF, _, KT = geometry(args.cluster, args.n_k)
+=======
+
+# ---- Cluster and lattice, as in cluster_4x4.py ----
+
+CL = Cluster(args.cluster, args.n_k)
+P, K_OF, N = CL.P, CL.K_of, CL.N
+>>>>>>> b88742fc005ae8c58dc190939b94d6d83039d9be
 
 
 def eps(k):
@@ -87,6 +116,7 @@ mesh = MeshImFreq(beta=args.beta, S="Fermion", n_iw=args.n_iw)
 iw = np.array([complex(w) for w in mesh.values()])
 iw0 = len(iw) // 2
 
+<<<<<<< HEAD
 
 def dca_sigma(sigma):
     """Sigma in the site basis reduced to its DCA form: diagonal in the cos/sin waves, one value per K"""
@@ -94,6 +124,9 @@ def dca_sigma(sigma):
     for k in set(K_OF):  # the cos and sin waves of a K share Sigma(K)
         sigma_w[:, K_OF == k] = sigma_w[:, K_OF == k].mean(axis=1, keepdims=True)
     return np.einsum("rj,wj,sj->wrs", P, sigma_w, P)
+=======
+KT = CL.k_patch
+>>>>>>> b88742fc005ae8c58dc190939b94d6d83039d9be
 
 
 def coarse_grain(sigma):
@@ -101,6 +134,7 @@ def coarse_grain(sigma):
     zeta = iw + mu
     if args.scheme == "DCA":  # per wave of the cos/sin basis, with the dispersion of its K
         sigma_w = np.einsum("rj,wrs,sj->wj", P, sigma, P)
+<<<<<<< HEAD
         G_w = sum(1 / (zeta[:, None] - eps(kt + K_VECS[K_OF])[None, :] - sigma_w) for kt in KT) / len(KT)
         return np.einsum("rj,wj,sj->wrs", P, G_w, P)
     G = 0
@@ -117,6 +151,22 @@ S = Solver(beta=args.beta, gf_struct=GF_STRUCT, n_tau=args.n_tau, use_D=False, d
 
 def set_G0(G0):
     """Hand G0 (n_w, N, N), on the regular mesh, to both spin blocks of CTINT's DLR G0_iw"""
+=======
+        for k in set(K_OF):  # the cos and sin waves of a K share Sigma(K)
+            sigma_w[:, K_OF == k] = sigma_w[:, K_OF == k].mean(axis=1, keepdims=True)
+        G_w = sum(1 / (zeta[:, None] - eps(kt + CL.K[K_OF])[None, :] - sigma_w) for kt in KT) / len(KT)
+        return np.einsum("rj,wj,sj->wrs", P, G_w, P)
+    G = 0
+    for kt in KT:
+        G = G + np.linalg.inv(zeta[:, None, None] * np.eye(N) - CL.superlattice_hamiltonian(eps, kt) - sigma)
+    return G / len(KT)
+
+
+def solver_for(G0):
+    """A new CTINT solver whose DLR G0_iw, in both spin blocks, is G0 (n_w, N, N) of the regular mesh. One solver per
+    iteration: the runs of 2026-10-09 that reused one all stopped at the start of the second solve."""
+    S = Solver(beta=args.beta, gf_struct=GF_STRUCT, n_tau=args.n_tau, use_D=False, dlr_wmax=args.dlr_wmax)
+>>>>>>> b88742fc005ae8c58dc190939b94d6d83039d9be
     g0_iw = Gf(mesh=mesh, target_shape=(N, N))
     g0_iw.data[:] = G0
     g0_dlr = make_gf_dlr_imfreq(fit_gf_dlr(make_gf_from_fourier(g0_iw, args.n_tau), w_max=args.dlr_wmax, eps=args.dlr_eps,
@@ -126,6 +176,7 @@ def set_G0(G0):
     g0_dlr.data[:] = (g0_dlr.data + g0_dlr.data[::-1].conj().transpose(0, 2, 1)) / 2
     for s in SPINS:
         S.G0_iw[s].data[:] = g0_dlr.data[:]
+    return S
 
 
 def symmetric(m):
@@ -211,7 +262,6 @@ def sigma_from_M(b, G0, n_site):
 # Start from the Hartree self-energy of the paramagnetic half-filled solution
 sigma = args.U / 2 * np.eye(N) * np.ones((len(iw), 1, 1), dtype=complex)
 G0 = np.linalg.inv(np.linalg.inv(coarse_grain(sigma)) + sigma)
-set_G0(G0)
 
 h_int = args.U * sum(n("up", r) * n("dn", r) for r in range(N))
 alpha_kwargs, alpha_report = ctint.alpha_kwargs(args, h_int, [])
@@ -225,6 +275,7 @@ if mpi.is_master_node():
         A["gf_struct"] = GF_STRUCT
 
 for it in range(args.n_loops):
+    S = solver_for(G0)
     t0 = time.time()
     S.solve(h_int=h_int, **alpha_kwargs, length_cycle=args.length_cycle, n_warmup_cycles=args.n_warmup_cycles,
             n_cycles=args.n_cycles, max_time=args.max_time, measure_M_tau=True, post_process=True)
@@ -239,7 +290,6 @@ for it in range(args.n_loops):
     if args.scheme == "DCA":
         sigma = dca_sigma(sigma)
     G0 = np.linalg.inv(np.linalg.inv(coarse_grain(sigma)) + sigma)
-    set_G0(G0)
 
     density = 2 * n_site.mean()
     sign = float(np.real(S.average_sign))
