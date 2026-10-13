@@ -10,8 +10,9 @@ r"""Plots of the cluster_4x4.py (CTHYB) and cluster_ctint.py (CTINT) runs in a d
                Markers: the first iteration, where every solver starts from the same Hartree G0, so the solvers
                compare directly; lines: the last iteration of runs with more than one.
 
-Sigma(K) is the diagonal of the cluster Fourier transform: from the cos/sin K blocks of CTHYB (the tail-fitted Sigma_iw
-the loop went on with), from the site-basis matrix of CTINT. It is averaged over the spins and over the K of a star. Both the --L files of the earlier drivers and
+Sigma(K) is the diagonal of the cluster Fourier transform: from the cos/sin K blocks of CTHYB (the Sigma_iw the loop
+went on with: by CRM on the DLR frequencies, tail-fitted on the regular mesh in earlier runs), from the site-basis
+matrix of CTINT. Each run is drawn on the frequencies of its own mesh. It is averaged over the spins and over the K of a star. Both the --L files of the earlier drivers and
 the --cluster files of the current ones are read. A summary table of every run goes to stdout.
 
     python plot_cluster.py --data_dir ~/Documents/Data/cluster_4x4 --save "cluster_{cluster}_{figure}.pdf"
@@ -90,21 +91,26 @@ def star_name(s):
 # ---- Loading ----
 
 def sigma_by_star(it_group, params):
-    """{star: Sigma(K, iw) on the full Matsubara mesh}, averaged over spins and the K of each star"""
+    """`(w_n, {star: Sigma(K, iw_n)})` on the positive frequencies of the run's Matsubara mesh (regular, or DLR), averaged
+    over spins and the K of each star"""
     acc = {}
-    if "Sigma" in it_group:  # CTINT, (n_w, N, N) in the site basis
+    if "Sigma" in it_group:  # CTINT, (n_w, N, N) in the site basis, on the regular mesh
         sites, K = sites_and_momenta(params)
         U = np.exp(1j * sites @ K.T) / np.sqrt(len(sites))  # [R, K]
         sigma_K = np.einsum("rk,wrs,sk->wk", U.conj(), it_group["Sigma"], U)
+        n_w = len(sigma_K)
+        w = (2 * np.arange(-(n_w // 2), n_w - n_w // 2) + 1) * np.pi / float(params["beta"])
         for k, Kv in enumerate(K):
             acc.setdefault(star(Kv), []).append(sigma_K[:, k])
     else:  # CTHYB, blocks of the cos/sin waves joined by "|" (one wave per block in DCA), per spin
         L = int(params.get("L", 0))
         sigma = it_group["Sigma_iw"]
         for name, g in sigma:
+            w = np.array([complex(x).imag for x in g.mesh.values()])
             for i, wave in enumerate(name.split("_", 1)[1].split("|")):
                 acc.setdefault(star(momentum_of_block(wave, L)), []).append(g.data[:, i, i])
-    return {s: np.mean(v, axis=0) for s, v in sorted(acc.items())}
+    pos = w > 0
+    return w[pos], {s: np.mean(v, axis=0)[pos] for s, v in sorted(acc.items())}
 
 
 def load(path):
@@ -116,15 +122,13 @@ def load(path):
         its = []
         for i in range(A["n_iter"]):
             g = A[f"it{i}"]
-            its.append(dict(sigma=sigma_by_star(g, params), **{k: g[k] for k in ("density", "average_sign", "average_order",
-                                                                                   "solve_seconds", "auto_corr_time")
-                                                                if k in g}))
-    beta = float(params["beta"])
-    n_w = len(next(iter(its[0]["sigma"].values())))
-    wn = (2 * np.arange(n_w // 2) + 1) * np.pi / beta  # the positive half of the mesh
+            wn, sigma = sigma_by_star(g, params)
+            its.append(dict(sigma=sigma, **{k: g[k] for k in ("density", "average_sign", "average_order",
+                                                              "solve_seconds", "auto_corr_time")
+                                           if k in g}))
     keep = wn <= args.w_max
     for it in its:
-        it["sigma"] = {s: v[n_w // 2:][keep] for s, v in it["sigma"].items()}
+        it["sigma"] = {s: v[keep] for s, v in it["sigma"].items()}
     return dict(params=params, wn=wn[keep], its=its)
 
 

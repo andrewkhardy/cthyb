@@ -19,7 +19,7 @@ import numpy as np
 import triqs.utility.mpi as mpi
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common import calibrate, selfenergy  # noqa: E402
+from common import calibrate, grids  # noqa: E402
 import model as model_def  # noqa: E402
 from model import N_PATCH  # noqa: E402
 
@@ -36,6 +36,7 @@ parser.add_argument('--n_ph', type=int, default=2, help='ED phonon levels for th
 parser.add_argument('--probe_cycles', type=int, default=20000, help='CTHYB cycles per probe')
 parser.add_argument('--length_cycle', type=int, default=50, help='CTHYB moves per cycle')
 parser.add_argument('--dyn_n_l', type=int, default=50, help='Legendre coefficients for the dynamical interaction')
+grids.add_dlr_args(parser)
 args = parser.parse_args()
 
 # -J positive semidefinite is exactly the condition for a real-boson Hamiltonian, i.e. an ED.
@@ -56,8 +57,7 @@ BASE = ['--beta', str(args.beta), '--t', str(args.t), '--tp', str(args.tp), '--U
 
 
 def density_cthyb(mu):
-    """Mean density per spin-orbital from a short CTHYB run."""
-    from triqs.gfs import Fourier
+    """Mean density per spin-orbital from a short CTHYB run, Delta in on the DLR mesh as in run_cthyb.py."""
     from triqs_cthyb import Solver
 
     probe = argparse.Namespace(**vars(args))
@@ -65,10 +65,9 @@ def density_cthyb(mu):
     M = model_def.Model(probe)
 
     n_iw, n_tau, n_tau_bosonic = 256, 1025, 501
-    S = Solver(beta=M.beta, gf_struct=M.gf_struct, n_iw=n_iw, n_tau=n_tau, n_l=30,
-               n_tau_bosonic=n_tau_bosonic, delta_interface=True)
-    for bl, delta in M.delta_iw(n_iw):
-        S.Delta_tau[bl] << Fourier(delta)
+    S = Solver(beta=M.beta, gf_struct=M.gf_struct, n_iw=n_iw, n_tau=n_tau, n_tau_bosonic=n_tau_bosonic,
+               delta_interface=True, dlr_wmax=args.dlr_wmax, dlr_eps=args.dlr_eps)
+    S.Delta_iw << M.delta_iw(S.dlr_mesh)
     Q = M.Q(np.linspace(0, M.beta, n_tau_bosonic))
     for i, j in product(range(N_PATCH), repeat=2):
         D = -M.J[i, j] * Q
@@ -81,10 +80,10 @@ def density_cthyb(mu):
     S.solve(h_int=M.h_int(), h_loc0=M.h_loc0(), lang_firsov=True,
             n_cycles=args.probe_cycles, n_warmup_cycles=max(args.probe_cycles // 20, 500),
             length_cycle=args.length_cycle, dyn_n_l=args.dyn_n_l,
-            measure_G_tau=True, measure_G_l=True)
+            measure_G_tau=True, measure_density_matrix=True, use_norm_as_weight=True)
 
-    # From G_l, not -G(beta): a short probe's -G(beta) is noisy enough to break the bisection.
-    return float(np.mean(selfenergy.density_from_G_iw(selfenergy.G_iw_from_G_l(S.G_l, n_iw))))
+    # From the density matrix, not -G(beta): a short probe's -G(beta) is noisy enough to break the bisection.
+    return float(np.mean([S.orbital_occupations[bl][i, i].real for bl, size in M.gf_struct for i in range(size)]))
 
 
 guess = argparse.Namespace(**vars(args))

@@ -108,15 +108,19 @@ sigma = args.U / 2 * np.eye(N) * np.ones((len(iw), 1, 1), dtype=complex)
 G0 = np.linalg.inv(np.linalg.inv(coarse_grain(sigma)) + sigma)
 
 h_int = args.U * sum(n("up", r) * n("dn", r) for r in range(N))
-alpha_kwargs, alpha_report = ctint.alpha_kwargs(args, h_int, [])
+# The density per site and spin is 1/2 only at mu = U/2; elsewhere 'centred' needs --alpha_center.
+alpha_kwargs, alpha_report, alpha_record = ctint.alpha_kwargs(args, h_int, [], args.beta,
+                                                              density=0.5 if mu == args.U / 2 else None)
 mpi.report(alpha_report)
 
-out = os.path.join(args.out_dir, f"cluster_{args.cluster}_{args.scheme}_U{args.U:.2f}_beta{args.beta:.1f}_mu{mu:.3f}_ctint.h5")
+out = os.path.join(args.out_dir, f"cluster_{args.cluster}_{args.scheme}_U{args.U:.2f}_beta{args.beta:.1f}_mu{mu:.3f}_ctint"
+                   + (f"_{ctint.file_tag(args)}" if args.alpha_tag else "") + ".h5")
 if mpi.is_master_node():
     with HDFArchive(out, "w") as A:
         A["params"] = {k: v for k, v in vars(args).items() if v is not None}
         A["mu"] = mu
         A["gf_struct"] = GF_STRUCT
+        A["alpha"] = alpha_record
 
 for it in range(args.n_loops):
     S = solver_for(G0)

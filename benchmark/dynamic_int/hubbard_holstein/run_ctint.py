@@ -8,6 +8,8 @@ CTINT's action has no 1/2, so its D0 is half of CTSEG's and CTHYB's, fed as a DL
 same boson_Q array on every ordered spin pair, diagonal included. It takes G0_iw instead of
 Delta_tau: the G0^-1 = iw + mu - Delta of common/selfenergy.py.
 """
+import time
+
 import numpy as np
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
@@ -45,10 +47,12 @@ if use_d:
 # D0 < 0 in every channel, U > 0; channels in the library's (block1, block2) order.
 names = [bl for bl, _ in M.GF_STRUCT]
 d0_channels = [d0[bl1, bl2] for bl1 in names for bl2 in names] if use_d else []
-alpha_kwargs, alpha_report = ctint.alpha_kwargs(args, model.h_int(), d0_channels)
+alpha_kwargs, alpha_report, alpha_record = ctint.alpha_kwargs(args, model.h_int(), d0_channels, model.beta,
+                                                              density=args.filling)
 if mpi.is_master_node():
     print(alpha_report)
 
+t0 = time.time()
 S.solve(h_int=model.h_int(), **alpha_kwargs,
         length_cycle=args.length_cycle,
         n_warmup_cycles=args.n_warmup_cycles, n_cycles=args.n_cycles, max_time=args.max_time,
@@ -56,6 +60,7 @@ S.solve(h_int=model.h_int(), **alpha_kwargs,
         # On the shared grid rather than the library's 201 points (common/grids.py).
         measure_chiAB_tau=True, chi_A_vec=[M.N_TOT], chi_B_vec=[M.N_TOT], n_tau_chi2=model.n_tau,
         post_process=True)
+solve_seconds = time.time() - t0
 
 if mpi.is_master_node():
     mu, delta_block = model.sigma_inputs()
@@ -78,7 +83,7 @@ if mpi.is_master_node():
     print(f"  average sign = {S.average_sign:.4f}   average order = {S.average_k:.2f}   "
           f"<n> = {np.round(density, 5)}")
 
-    path = model.output_file("ctint")
+    path = model.output_file("ctint", ctint.file_tag(args))
     with HDFArchive(path, "w") as A:
         A["params"] = {k: v for k, v in vars(args).items() if v is not None}
         A["beta"], A["mu"] = model.beta, mu
@@ -88,5 +93,7 @@ if mpi.is_master_node():
             A["Sigma_alt"] = sigma_up_alt
         A["tau_corr"], A["corr"] = np.array([float(t) for t in chi_tau.mesh]), nn_tot
         A["density"], A["average_sign"] = density, float(np.real(S.average_sign))
+        A["average_order"], A["solve_seconds"] = float(np.real(S.average_k)), solve_seconds
+        A["alpha"], A["G_down"] = alpha_record, G_tau["down"].data[:, 0, 0].real
         A["G_iw_gf"], A["chiAB_tau_gf"] = S.G_iw, S.chiAB_tau
     print(f"Saved {path}")

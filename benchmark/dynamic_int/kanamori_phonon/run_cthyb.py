@@ -1,7 +1,8 @@
 # CTHYB run of the model in model.py (same Hamiltonian as run_ed.py): the bath enters as
 # Delta_a(iw) = V^2 / (iw - eps_bath), the phonon as S_dyn = 1/2 int int Q(tau - tau') X(tau) X(tau')
 # with X = sum_a g_a n_a. Equal g is a coupling to N_up and N_down and goes entirely to Lang-Firsov;
-# unequal g leaves a residual that is sampled stochastically.
+# unequal g leaves a residual that is sampled stochastically. The solver runs in its DLR mode: Delta goes
+# in, and G comes out, on the DLR Matsubara mesh (common/grids.py), and Sigma is saved on its positive frequencies.
 #
 #   mpirun -np <N> python run_cthyb.py --g 0.5 0.5 --n_cycles 1000000
 
@@ -10,7 +11,6 @@ import os
 import time
 import numpy as np
 import triqs.utility.mpi as mpi
-from triqs.gfs import Fourier
 from triqs.operators import n
 from h5 import HDFArchive
 from triqs_cthyb import Solver
@@ -26,7 +26,7 @@ parser.add_argument('--n_cycles', type=int, default=1000000)
 parser.add_argument('--n_warmup_cycles', type=int, default=20000)
 parser.add_argument('--length_cycle', type=int, default=100)
 parser.add_argument('--max_time', type=int, default=2700, help='MC wall-clock cap in seconds, -1 for none')
-parser.add_argument('--n_l', type=int, default=50, help='Legendre coefficients for G_l (Sigma route)')
+grids.add_dlr_args(parser)
 parser.add_argument('--dyn_n_l', type=int, default=50, help='Legendre coefficients for the dynamical interaction and Q')
 parser.add_argument('--lang_firsov', type=str2bool, default=True, help='False forces every vertex stochastic')
 parser.add_argument('--density_matrix', type=str2bool, default=True,
@@ -44,10 +44,11 @@ M = model_def.Model(args)
 # One tau grid for G, the kernel and Q, shared with run_ed.py (common/grids.py).
 n_iw, n_tau = grids.N_IW, grids.N_TAU
 n_tau_bosonic = n_tau
-S = Solver(beta=M.beta, gf_struct=M.gf_struct, n_iw=n_iw, n_tau=n_tau, n_l=args.n_l,
-           n_tau_bosonic=n_tau_bosonic, delta_interface=True)
-for bl, delta in M.delta_iw(n_iw):
-    S.Delta_tau[bl] << Fourier(delta)
+S = Solver(beta=M.beta, gf_struct=M.gf_struct, n_iw=n_iw, n_tau=n_tau,
+           n_tau_bosonic=n_tau_bosonic, delta_interface=True, dlr_wmax=args.dlr_wmax, dlr_eps=args.dlr_eps)
+# The *input* hybridization, which Sigma is built from below.
+delta_block = M.delta_iw(S.dlr_mesh)
+S.Delta_iw << delta_block
 
 # Phonon: S_dyn = 1/2 int int Q(tau - tau') X(tau) X(tau'), with X = sum_a g_a n_a
 Q = M.Q(np.linspace(0, M.beta, n_tau_bosonic))
@@ -68,7 +69,6 @@ S.solve(h_int=M.h_int(),
         lang_firsov=args.lang_firsov,
         dyn_n_l=args.dyn_n_l,
         measure_G_tau=True,
-        measure_G_l=True,
         measure_D0_corr=True,
         measure_pert_order=True,
         measure_density_matrix=args.density_matrix,
@@ -95,20 +95,16 @@ if mpi.is_master_node():
                                   for Oj in ops] for Oi in ops])
         A_occupations = np.array([np.real(S.orbital_occupations[bl][o, o]) for bl, o in M.labels])
 
-    # Sigma from the *input* mu and Delta (common/selfenergy): G_l preferred, G(tau) the cross-check.
-    delta_block = M.delta_iw(n_iw)
+    # Sigma from the *input* mu and Delta (common/selfenergy), on the DLR frequencies.
     mu_per_block = {bl: np.array([M.mu[a] for a, (s, o) in enumerate(M.labels) if s == bl])
                     for bl, _ in M.gf_struct}
-    sigma_l = selfenergy.sigma_from_G_l(S.G_l, n_iw, mu_per_block, delta_block)
-    sigma_tau = selfenergy.sigma_from_G_tau(S.G_tau, n_iw, mu_per_block, delta_block)
+    sigma = selfenergy.sigma_from_G_iw(S.G_iw, mu_per_block, delta_block)
 
     # One curve per spin-orbital, in M.labels order, to line up with the ED output.
-    w_n = selfenergy.matsubara_frequencies(sigma_l[M.gf_struct[0][0]].mesh)
-    sigma_orb = np.array([selfenergy.positive_frequency_part(sigma_l[s], (o, o))[1]
+    w_n = selfenergy.matsubara_frequencies(sigma[M.gf_struct[0][0]].mesh)
+    sigma_orb = np.array([selfenergy.positive_frequency_part(sigma[s], (o, o))[1]
                           for s, o in M.labels])
-    sigma_orb_alt = np.array([selfenergy.positive_frequency_part(sigma_tau[s], (o, o))[1]
-                              for s, o in M.labels])
-    density = selfenergy.density_from_G_iw(selfenergy.G_iw_from_G_l(S.G_l, n_iw))
+    density = selfenergy.density_from_G_dlr(S.G_dlr)
     print("  " + selfenergy.diagnose(sigma_orb[0], w_n)["text"])
     print(f"  <n> = {np.round(density, 5)}")
 
@@ -134,10 +130,9 @@ if mpi.is_master_node():
     filename = os.path.join(args.out_dir, f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}{O_tau_tag}{nn_tau_tag}{seed_tag}.h5")
     with HDFArchive(filename, 'w') as A:
         A['G_tau'] = S.G_tau
-        A['G_l'] = S.G_l
+        A['G_dlr'] = S.G_dlr
         A['w_n'] = w_n
         A['Sigma'] = sigma_orb
-        A['Sigma_alt'] = sigma_orb_alt
         A['density'] = density
         A['Q_conserved_tau'] = S.Q_conserved_tau
         A['conserved_vectors'] = conserved_vectors

@@ -14,7 +14,7 @@
 
 from itertools import product
 import numpy as np
-from triqs.gfs import BlockGf, GfImFreq, inverse, iOmega_n
+from triqs.gfs import BlockGf, Gf, inverse, iOmega_n
 from triqs.operators import c, c_dag
 
 SPIN_NAMES = ('up', 'down')
@@ -109,18 +109,18 @@ class Model:
             / np.sum(rho_patch[1][1] * (rho_patch[1][0] - eps_patch[1] - self.eps_asymmetry)**2))
         return eps_patch, rho_patch
 
-    def delta_iw(self, n_iw):
-        """Hybridization Delta_K(iw), diagonal in the patch index, with eps_K removed (it is in h_loc0)."""
+    def delta_iw(self, mesh):
+        """Hybridization Delta_K(iw) on the Matsubara `mesh` (regular or DLR), diagonal in the patch index,
+        with eps_K removed (it is in h_loc0)."""
         delta = BlockGf(name_list=list(SPIN_NAMES),
-                        block_list=[GfImFreq(beta=self.beta, n_points=n_iw, target_shape=(N_PATCH, N_PATCH))
-                                    for _ in SPIN_NAMES])
+                        block_list=[Gf(mesh=mesh, target_shape=(N_PATCH, N_PATCH)) for _ in SPIN_NAMES])
         for _, d in delta:
             d.zero()
             for K in range(N_PATCH):
                 if self.bath == 'discrete':
                     d[K, K] << self.V**2 * inverse(iOmega_n - self.eps_bath)
                 else:
-                    G_K = GfImFreq(beta=self.beta, n_points=n_iw, target_shape=(1, 1))
+                    G_K = Gf(mesh=mesh, target_shape=(1, 1))
                     G_K.zero()
                     centres, weights = self.rho_patch[K]
                     for eps, w in zip(centres, weights):

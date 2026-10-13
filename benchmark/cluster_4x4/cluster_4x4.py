@@ -22,9 +22,11 @@ patch of clusters.py,
     DCA    G(K) = < [iw + mu - eps(K + k~) - Sigma(K)]^-1 >_k~
     CDMFT  G    = < [iw + mu - t(k~) - Sigma]^-1 >_k~,   t(k~)_RR' = 1/N sum_K e^{i (K + k~).(R - R')} eps(K + k~)
 
-and G0^-1 = G^-1 + Sigma. Sigma comes from the Legendre G by Dyson, its tail fitted on [--fit_min_w, --fit_max_w] with
-the known moments. At U = 6 the 1/w^3 tail only holds above w ~ 10: the [4, 10] of plaquette_2x2.py puts a kink at the
-splice and is ~20% off up to w ~ 12, against CTINT.
+and G0^-1 = G^-1 + Sigma. The loop runs on the frequencies of the DLR Matsubara mesh (--dlr_wmax, --dlr_eps), on which
+the solver takes G0 and returns G, the DLR fit of the measured G(tau). Sigma is the solver's constrained residual
+minimization of Dyson's equation (dlr_sigma='crm') with the density-matrix moments Sigma_0 and Sigma_1, which holds the
+tail without a fit window: a plain Dyson inversion amplifies the noise of G by w^2 at the high DLR frequencies and feeds
+it back into G0. That plain Dyson Sigma is saved as Sigma_iw_raw.
 
 Feasibility: CTHYB diagonalizes the cluster Hamiltonian in its invariant subspaces and keeps dense matrices of them.
 Before building anything, the script bounds the largest subspace from below, as if the cluster momenta and the 8
@@ -43,15 +45,13 @@ from math import comb
 import numpy as np
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
-from triqs.gfs import MeshImFreq, dyson
+from triqs.gfs import MeshDLRImFreq, inverse
 from triqs.operators import c, dagger
 from triqs_cthyb import Solver
-from triqs_cthyb.tail_fit import tail_fit
 
 from clusters import SUPERLATTICES, Cluster
 
 SPINS = ("up", "dn")
-N_IW = 1025
 
 parser = argparse.ArgumentParser(description="Cluster DCA / CDMFT for the square-lattice Hubbard model, solved by CTHYB")
 parser.add_argument("--cluster", choices=tuple(SUPERLATTICES), default="4x4")
@@ -63,9 +63,8 @@ parser.add_argument("--mu", type=float, default=None, help="Chemical potential (
 parser.add_argument("--pauli_prob", type=float, default=0.5, help="Probability of the Pauli proposal of the pair moves")
 parser.add_argument("--n_loops", type=int, default=10)
 parser.add_argument("--n_k", type=int, default=16, help="k~ points per direction of the reduced zone")
-parser.add_argument("--n_l", type=int, default=40, help="Legendre coefficients for G_l")
-parser.add_argument("--fit_min_w", type=float, default=10.0, help="Sigma is replaced by its fitted tail above this")
-parser.add_argument("--fit_max_w", type=float, default=20.0)
+parser.add_argument("--dlr_wmax", type=float, default=20.0, help="DLR frequency cutoff (CTINT's of cluster_ctint.py)")
+parser.add_argument("--dlr_eps", type=float, default=1e-10, help="DLR accuracy")
 parser.add_argument("--n_cycles", type=int, default=100000, help="QMC cycles per rank")
 parser.add_argument("--n_warmup_cycles", type=int, default=5000)
 parser.add_argument("--length_cycle", type=int, default=100)
@@ -102,8 +101,9 @@ def eps(k):
     return -2 * args.t * (np.cos(k[..., 0]) + np.cos(k[..., 1]))
 
 
-iw = np.array([complex(w) for w in MeshImFreq(beta=args.beta, S="Fermion", n_iw=N_IW).values()])
-iw0 = len(iw) // 2
+MESH = MeshDLRImFreq(beta=args.beta, statistic="Fermion", w_max=args.dlr_wmax, eps=args.dlr_eps, symmetrize=True)
+iw = np.array([complex(w) for w in MESH.values()])
+iw0 = int(np.argmin(np.where(iw.imag > 0, iw.imag, np.inf)))  # the lowest positive frequency
 
 KT = CL.k_patch
 
@@ -161,7 +161,8 @@ def c_site(s, r):
     return sum(P[r, j] * c(f"{s}_{WHERE[j][0]}", WHERE[j][1]) for j in range(N) if abs(P[r, j]) > 1e-14)
 
 
-S = Solver(beta=args.beta, gf_struct=GF_STRUCT, n_iw=N_IW, n_l=args.n_l)
+S = Solver(beta=args.beta, gf_struct=GF_STRUCT, dlr_wmax=args.dlr_wmax, dlr_eps=args.dlr_eps)
+assert S.dlr_mesh == MESH
 
 
 def set_G0(G, sigma):
@@ -176,7 +177,7 @@ set_G0(G, sigma)
 h_int = args.U * sum(dagger(c_site("up", r)) * c_site("up", r) * dagger(c_site("dn", r)) * c_site("dn", r) for r in range(N))
 
 params = dict(h_int=h_int, n_cycles=args.n_cycles, n_warmup_cycles=args.n_warmup_cycles, length_cycle=args.length_cycle,
-              max_time=args.max_time, pauli_prob=args.pauli_prob, measure_G_l=True, measure_density_matrix=True,
+              max_time=args.max_time, pauli_prob=args.pauli_prob, dlr_sigma="crm", measure_density_matrix=True,
               use_norm_as_weight=True, imag_threshold=1e-10)  # the k~ sum leaves ~1e-13 in Im Delta(infty) of CDMFT blocks
 
 if args.probe:
@@ -197,12 +198,9 @@ for it in range(args.n_loops):
     S.solve(**params)
     wall = time.time() - t0
 
-    G_iw = S.G0_iw.copy()
-    for name, g in G_iw:
-        g.set_from_legendre(S.G_l[name])
-    Sigma_iw_raw = dyson(G0_iw=S.G0_iw, G_iw=G_iw)
-    Sigma_iw = tail_fit(Sigma_iw_raw.copy(), fit_min_w=args.fit_min_w, fit_max_w=args.fit_max_w,
-                        fit_max_moment=3, fit_known_moments=S.Sigma_moments)
+    G_iw, Sigma_iw = S.G_iw, S.Sigma_iw
+    Sigma_iw_raw = S.G0_iw.copy()
+    Sigma_iw_raw << inverse(S.G0_iw) - inverse(G_iw)
 
     # Paramagnetic, and in DCA one Sigma per K, shared by its cos and sin waves
     sigma = np.zeros((len(iw), N, N), dtype=complex)
@@ -224,7 +222,7 @@ for it in range(args.n_loops):
 
     if mpi.is_master_node():
         with HDFArchive(out, "a") as A:
-            A[f"it{it}"] = dict(G0_iw=S.G0_iw, G_iw=G_iw, Sigma_iw=Sigma_iw, Sigma_iw_raw=Sigma_iw_raw, G_l=S.G_l,
+            A[f"it{it}"] = dict(G0_iw=S.G0_iw, G_iw=G_iw, Sigma_iw=Sigma_iw, Sigma_iw_raw=Sigma_iw_raw, G_tau=S.G_tau,
                                 density=density, average_sign=sign, average_order=S.average_order,
                                 auto_corr_time=S.auto_corr_time, solve_seconds=wall)
             A["n_iter"] = it + 1

@@ -109,15 +109,15 @@ class Model:
     def h_loc0(self):
         return -self.mu * (n("up", 0) + n("down", 0))
 
-    def delta_iw(self):
-        """Hybridization as a (1, 1) Gf."""
-        mesh = baths.imfreq_mesh(self.beta, self.n_iw)
+    def delta_iw(self, mesh=None):
+        """Hybridization as a (1, 1) Gf, on `mesh` (default the regular n_iw one)."""
+        mesh = baths.imfreq_mesh(self.beta, self.n_iw) if mesh is None else mesh
         return baths.build_delta(mesh, self.args.bath, half_bandwidth=self.args.half_bandwidth,
                                  v_sq=self.args.V_sq, target_shape=(1, 1))
 
-    def sigma_inputs(self):
-        """The input mu and Delta (as a BlockGf) for common/selfenergy.py's Dyson equation."""
-        delta = self.delta_iw()
+    def sigma_inputs(self, mesh=None):
+        """The input mu and Delta (as a BlockGf on `mesh`) for common/selfenergy.py's Dyson equation."""
+        delta = self.delta_iw(mesh)
         names = [bl for bl, _ in GF_STRUCT]
         return self.mu, BlockGf(name_list=names, block_list=[delta.copy() for _ in names])
 

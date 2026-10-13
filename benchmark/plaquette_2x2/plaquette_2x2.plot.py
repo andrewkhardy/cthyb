@@ -4,7 +4,8 @@
 # See LICENSE in the root of this distribution for details.
 """Plot plaquette_2x2.py runs, one PDF next to each archive: Sigma_K(iw_n) and G_K(tau) at the
 last iteration, and the convergence of Im Sigma_K(iw_0). Y is not shown, being X by symmetry.
-G_K(tau) is rebuilt from G_l: the binned G_tau is far noisier under use_norm_as_weight.
+G_K(tau) is the DLR fit G_dlr (rebuilt from G_l for earlier runs): the binned G_tau is far
+noisier under use_norm_as_weight. Runs on the DLR mesh show its frequencies as markers.
 
     python plaquette_2x2.plot.py plaquette_2x2_DCA_U6.00_beta10.0_mu3.000.h5 [more.h5 ...]
 """
@@ -12,7 +13,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from h5 import HDFArchive
-from triqs.gfs import Gf, MeshImTime
+from triqs.gfs import Gf, MeshImTime, make_gf_imtime
 
 K_SHOWN = ("G", "X", "M")
 LABELS = {"G": r"$\Gamma=(0,0)$", "X": r"$X=(\pi,0)$", "M": r"$M=(\pi,\pi)$"}
@@ -22,6 +23,8 @@ for path in sys.argv[1:]:
         params, mu = A["params"], A["mu"]
         iters = [A[f"it{i}"] for i in range(A["n_iter"])]
     last = iters[-1]
+    dlr = "G_dlr" in last  # the DLR drivers; earlier runs have G_l and a tail-fit window
+    marks = dict(marker="o", ms=3) if dlr else {}
 
     mesh = last["Sigma_iw"]["up_G"].mesh
     w = np.array([complex(x).imag for x in mesh.values()])
@@ -34,22 +37,27 @@ for path in sys.argv[1:]:
     for K in K_SHOWN:
         sig = last["Sigma_iw"][f"up_{K}"].data[pos, 0, 0]
         raw = last["Sigma_iw_raw"][f"up_{K}"].data[pos, 0, 0]
-        line, = ax_im.plot(w[pos], sig.imag, label=LABELS[K])
+        line, = ax_im.plot(w[pos], sig.imag, label=LABELS[K], **marks)
         ax_im.plot(w[pos], raw.imag, ".", color=line.get_color(), alpha=0.3, ms=3)
-        ax_re.plot(w[pos], sig.real, color=line.get_color(), label=LABELS[K])
+        ax_re.plot(w[pos], sig.real, color=line.get_color(), label=LABELS[K], **marks)
         ax_re.plot(w[pos], raw.real, ".", color=line.get_color(), alpha=0.3, ms=3)
-        g_tau.set_from_legendre(last["G_l"][f"up_{K}"])
+        if dlr:
+            g_tau = make_gf_imtime(last["G_dlr"][f"up_{K}"], len(tau))
+        else:
+            g_tau.set_from_legendre(last["G_l"][f"up_{K}"])
         ax_tau.plot(tau, g_tau.data[:, 0, 0].real, color=line.get_color(), label=LABELS[K])
         ax_conv.plot([it["Sigma_iw"][f"up_{K}"].data[pos, 0, 0][0].imag for it in iters], "o-",
                      color=line.get_color(), label=LABELS[K])
 
     for ax in (ax_im, ax_re):
-        ax.axvspan(params["fit_min_w"], params["fit_max_w"], color="0.9", zorder=0)
-        ax.set_xlim(0, 3 * params["fit_max_w"])
+        if not dlr:
+            ax.axvspan(params["fit_min_w"], params["fit_max_w"], color="0.9", zorder=0)
+        ax.set_xlim(0, 30 if dlr else 3 * params["fit_max_w"])
         ax.set_xlabel(r"$\omega_n$")
     ax_im.set_ylabel(r"Im $\Sigma_K(i\omega_n)$")
     ax_re.set_ylabel(r"Re $\Sigma_K(i\omega_n)$")
-    ax_im.set_title("lines: used, dots: raw Dyson, grey: tail-fit window", fontsize=9)
+    ax_im.set_title("lines: used (CRM), dots: raw Dyson, on the DLR frequencies" if dlr
+                    else "lines: used, dots: raw Dyson, grey: tail-fit window", fontsize=9)
     ax_tau.set_xlabel(r"$\tau$")
     ax_tau.set_ylabel(r"$G_K(\tau)$")
     ax_conv.set_xlabel("iteration")

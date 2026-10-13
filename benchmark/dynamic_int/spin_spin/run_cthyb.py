@@ -5,24 +5,24 @@
 """CTHYB run for the spin-spin benchmark (model and conventions: model.py).
 
 The Sz.Sz part couples conserved densities and is resummed analytically (Lang-Firsov) when
-lang_firsov=True; the spin flips are always sampled stochastically. Saves Sigma from G_l and, as Sigma_alt, from G(tau);
-<Sz(tau)Sz(0)> from O_tau and, as corr_alt, from the Legendre kink estimator Q_tau.
+lang_firsov=True; the spin flips are always sampled stochastically. The solver runs in its DLR
+mode: Delta goes in, and G comes out, on the DLR Matsubara mesh (common/grids.py). Saves Sigma on the
+positive DLR frequencies; <Sz(tau)Sz(0)> from O_tau and, as corr_alt, from the Legendre kink estimator Q_tau.
 """
 import numpy as np
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
-from triqs.gfs import Fourier
 from triqs_cthyb import Solver
 
 import model as M  # puts common/ on sys.path
-from common import selfenergy, str2bool
+from common import grids, selfenergy, str2bool
 
 
 def add_cthyb_args(parser):
     parser.add_argument("--lang_firsov", type=str2bool, default=True,
                         help="Route the Sz.Sz (D0) part through Lang-Firsov (False: fully stochastic)")
     parser.add_argument("--dyn_n_l", type=int, default=50, help="Legendre coefficients for the Lang-Firsov kernel")
-    parser.add_argument("--n_l", type=int, default=50, help="Legendre coefficients for G_l")
+    grids.add_dlr_args(parser)
     parser.add_argument("--move_double", type=str2bool, default=True, help="Four-operator insert/remove moves")
     parser.add_argument("--spin_flip_move", type=str2bool, default=False,
                         help="Global up <-> down swap of every operator, a symmetry of this model")
@@ -42,8 +42,9 @@ if args.spin_flip_move:
                      move_global_full=True, move_global_prob=0.002)
 
 S = Solver(beta=model.beta, gf_struct=M.GF_STRUCT, n_iw=model.n_iw, n_tau=model.n_tau,
-           n_l=args.n_l, n_tau_bosonic=model.n_tau_bosonic, delta_interface=True)
-S.Delta_tau << Fourier(model.delta_iw())
+           n_tau_bosonic=model.n_tau_bosonic, delta_interface=True, dlr_wmax=args.dlr_wmax, dlr_eps=args.dlr_eps)
+mu, delta_block = model.sigma_inputs(S.dlr_mesh)
+S.Delta_iw << delta_block
 
 # S_dyn = 1/2 int int lambda(tau - tau') [szsz Sz Sz + jperp (S+ S- + S- S+) / 2]
 lam = model.spin_kernel
@@ -55,7 +56,7 @@ S.solve(h_int=model.h_int(), h_loc0=model.h_loc0(),
         length_cycle=args.length_cycle, n_warmup_cycles=args.n_warmup_cycles, move_double=args.move_double,
         **spin_flip,
         n_cycles=args.n_cycles, max_time=args.max_time,
-        measure_G_tau=True, measure_G_l=True,
+        measure_G_tau=True,
         measure_pert_order=True,
         measure_O_tau=(M.SZ, M.SZ),
         measure_D0_corr=True,
@@ -63,21 +64,17 @@ S.solve(h_int=model.h_int(), h_loc0=model.h_loc0(),
         lang_firsov=args.lang_firsov, dyn_n_l=args.dyn_n_l, **model.seed_kwargs())
 
 if mpi.is_master_node():
-    mu, delta_block = model.sigma_inputs()
-
-    sigma_l = selfenergy.sigma_from_G_l(S.G_l, model.n_iw, mu, delta_block)
-    sigma_tau = selfenergy.sigma_from_G_tau(S.G_tau, model.n_iw, mu, delta_block)
-    w_n, sigma_up = selfenergy.positive_frequency_part(sigma_l["up"])
-    _, sigma_up_alt = selfenergy.positive_frequency_part(sigma_tau["up"])
+    sigma = selfenergy.sigma_from_G_iw(S.G_iw, mu, delta_block)
+    w_n, sigma_up = selfenergy.positive_frequency_part(sigma["up"])
 
     G_up = S.G_tau["up"]
     tau_G = np.array([float(t) for t in G_up.mesh])
     # The density matrix gives the equal-time occupations directly, with far less variance
-    # than the tail of G_l.
+    # than the ends of the DLR fit of G(tau).
     if args.density_matrix:
         density = np.array([S.orbital_occupations[bl][i, i].real for bl, size in M.GF_STRUCT for i in range(size)])
     else:
-        density = selfenergy.density_from_G_iw(selfenergy.G_iw_from_G_l(S.G_l, model.n_iw))
+        density = selfenergy.density_from_G_dlr(S.G_dlr)
 
     # With the density matrix measured, the Python Solver has already added the equal-time
     # <n_a n_b> to Q_tau; without it Q_tau is a different observable from O_tau, so not saved.
@@ -99,7 +96,7 @@ if mpi.is_master_node():
         A["params"] = {k: v for k, v in vars(args).items() if v is not None}
         A["beta"], A["mu"] = model.beta, mu
         A["tau_G"], A["G"] = tau_G, G_up.data[:, 0, 0].real
-        A["w_n"], A["Sigma"], A["Sigma_alt"] = w_n, sigma_up, sigma_up_alt
+        A["w_n"], A["Sigma"] = w_n, sigma_up
         A["tau_corr"], A["corr"] = np.array([float(t) for t in S.O_tau.mesh]), S.O_tau.data.real
         if szsz_kink is not None:
             A["corr_alt"] = szsz_kink
@@ -108,5 +105,5 @@ if mpi.is_master_node():
         # Counts stochastic vertices only, so None when all are analytic; the plots read NaN.
         if S.perturbation_order_dyn is not None:
             A["pert_order_dyn"] = S.perturbation_order_dyn.data
-        A["G_tau_gf"], A["G_l_gf"] = S.G_tau, S.G_l
+        A["G_tau_gf"], A["G_dlr"] = S.G_tau, S.G_dlr
     print(f"Saved {path}")

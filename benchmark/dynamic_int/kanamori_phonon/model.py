@@ -15,7 +15,7 @@
 
 from itertools import product
 import numpy as np
-from triqs.gfs import BlockGf, GfImFreq, inverse, iOmega_n
+from triqs.gfs import BlockGf, Gf, inverse, iOmega_n
 from triqs.operators import n
 from triqs.operators.util.hamiltonians import h_int_kanamori
 
@@ -77,9 +77,10 @@ class Model:
     def Q(self, tau):
         return -np.cosh(self.omega_0 * (tau - self.beta / 2)) / (2 * self.omega_0 * np.sinh(self.omega_0 * self.beta / 2))
 
-    def delta_iw(self, n_iw):
+    def delta_iw(self, mesh):
+        """Hybridization Delta_a(iw) on the Matsubara `mesh` (regular or DLR)."""
         delta = BlockGf(name_list=list(SPIN_NAMES),
-                        block_list=[GfImFreq(beta=self.beta, n_points=n_iw, target_shape=(N_ORB, N_ORB)) for _ in SPIN_NAMES])
+                        block_list=[Gf(mesh=mesh, target_shape=(N_ORB, N_ORB)) for _ in SPIN_NAMES])
         for _, d in delta:
             d.zero()
             for o in range(N_ORB):

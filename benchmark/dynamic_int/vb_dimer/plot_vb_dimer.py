@@ -183,12 +183,14 @@ def make_figure(filling, columns):
             axes[4][col].text(0.5, 0.45, why_empty, ha="center", va="center", fontsize=9,
                               color="#c1121f", transform=axes[4][col].transAxes)
 
-        n_l = sorted({int(r["n_l"]) for r in runs.values() if "n_l" in r})
+        n_l = sorted({int(r["n_l"]) for r in runs.values() if "n_l" in r})  # earlier CTHYB runs, Sigma from G_l
+        wmax = sorted({float(r["dlr_wmax"]) for r in runs.values() if "dlr_wmax" in r})
         axes[0][col].set_title(r"$\beta$" + f"={beta:g}, U={U:g}, "
                                + r"$J_{\rm intra}$" + f"={J_INTRA:g}, "
                                + r"$J_{\rm inter}$" + f"={J_INTER:g}, bath={BATH}\n"
                                + r"$\mu$" + f"={mu}, n={filling:g}, rotation={ROTATION}"
-                               + (f", n_l={'/'.join(map(str, n_l))}" if n_l else ""))
+                               + (f", n_l={'/'.join(map(str, n_l))}" if n_l else "")
+                               + (f", DLR " + r"$\omega_{\rm max}$" + f"={'/'.join(f'{w:g}' for w in wmax)}" if wmax else ""))
         axes[4][col].axhline(0.0, color="k", linewidth=0.8)
         for row in (1, 2):
             axes[row][col].axhline(0.0, color="k", linewidth=0.5, alpha=0.3)
