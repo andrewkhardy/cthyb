@@ -23,9 +23,14 @@ Sigma comes from CTINT's M(tau), binned on n_tau points, rather than from its G:
     M_dyn decays as 1/iw, so Sigma tends to Sigma_hartree + Sigma_1 / iw with no tail fit, whereas Dyson from G,
     G0^-1 - G^-1, grows as iw times the error of the 1/iw moment of G, and is not symmetric to the 1e-12 that CTINT
     asks of G0.
-Sigma is then averaged over the spins and the symmetries of the cluster (clusters.py), as in cluster_cthyb.py, which in
-DCA leaves its DCA form, diagonal in K with one Sigma(K) per star of K. The report gives the eps of each spin and
-Sigma_1 as the data alone give it, against the exact value imposed.
+Sigma is then averaged over the spins and the symmetries of the cluster (clusters.py), which in DCA leaves its DCA form,
+diagonal in K with one Sigma(K) per star of K, and saved as Sigma_sites, as in cluster_cthyb.py. The report gives the eps
+of each spin and Sigma_1 as the data alone give it, against the exact value imposed.
+
+After the loop, a final solve of --final_time seconds at the converged Sigma, saved as the group final, also measures
+<n_a(tau) n_b(0)>, a = sigma N + R, for every pair (nn_tau_sites, by chiAB_tau), and from it the equal-time <n_a n_b>
+(nn_sites) and <S^z_Q(tau) S^z_Q(0)> at Q = (pi, pi) (szsz_Q_tau), as cluster_cthyb.py saves them. The defaults are
+those of the production runs (run_cluster.sh): 12 iterations of 900 s, then a final solve of 3600 s.
 
     mpirun -n 8 python cluster_ctint.py --cluster 4x4 --scheme DCA
 """
@@ -37,13 +42,13 @@ import time
 import numpy as np
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
-from triqs.gfs import Gf, MeshDLR, MeshDLRImFreq, make_gf_imfreq, make_gf_imtime
+from triqs.gfs import Gf, MeshDLR, make_gf_imfreq, make_gf_imtime
 from triqs.operators import n
 from triqs_ctint import Solver
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "dynamic_int"))
 from common import ctint  # noqa: E402  (the alpha shifts of the dynamic_int CTINT runs)
-from clusters import SUPERLATTICES, Cluster  # noqa: E402
+from clusters import Cluster, add_model_args, coarse_grain, dlr_frequencies, gf_on, run_name, start_archive  # noqa: E402
 
 SPINS = ("up", "dn")
 EPS_SCAN = [10.0**-k for k in range(2, 11)]  # DLR eps tried for M, coarse to fine
@@ -51,51 +56,25 @@ EPS_NOISE = 1e-7  # beyond it, a finer basis can only gain chi^2 on the noise of
 NOISE_WINDOW = 101  # tau bins over which the noise of M(tau) is averaged
 
 parser = argparse.ArgumentParser(description="Cluster DCA / CDMFT for the square-lattice Hubbard model, solved by CTINT")
-parser.add_argument("--cluster", choices=tuple(SUPERLATTICES), default="4x4")
-parser.add_argument("--scheme", choices=("DCA", "CDMFT"), default="DCA")
-parser.add_argument("--U", type=float, default=6.0)
-parser.add_argument("--t", type=float, default=1.0)
-parser.add_argument("--beta", type=float, default=10.0)
-parser.add_argument("--mu", type=float, default=None, help="Chemical potential (default U/2, half filling)")
-parser.add_argument("--n_loops", type=int, default=10)
-parser.add_argument("--n_k", type=int, default=16, help="k~ points per direction of the reduced zone")
-parser.add_argument("--n_tau", type=int, default=10001, help="tau points of the M(tau) bins")
-parser.add_argument("--dlr_wmax", type=float, default=20.0, help="DLR frequency cutoff")
-parser.add_argument("--dlr_eps", type=float, default=1e-10, help="DLR accuracy of CTINT's mesh, on which the loop runs")
-parser.add_argument("--n_cycles", type=int, default=100000, help="QMC cycles per rank")
-parser.add_argument("--n_warmup_cycles", type=int, default=5000)
+add_model_args(parser)
 parser.add_argument("--length_cycle", type=int, default=100)
-parser.add_argument("--max_time", type=int, default=-1, help="Seconds per solve, -1 for none")
-parser.add_argument("--out_dir", default=".")
+parser.add_argument("--n_warmup_cycles", type=int, default=5000)
+parser.add_argument("--n_tau", type=int, default=10001, help="tau points of the M(tau) bins")
+parser.add_argument("--dlr_eps", type=float, default=1e-10, help="DLR accuracy of CTINT's mesh, on which the loop runs")
 ctint.add_alpha_args(parser)
 args = parser.parse_args()
 mu = args.U / 2 if args.mu is None else args.mu
 
-# ---- Cluster and lattice, as in cluster_cthyb.py ----
+# ---- Cluster and lattice, as in cluster_cthyb.py, in the site basis ----
 
 CL = Cluster(args.cluster, args.n_k)
 N = CL.N
-
-
-def eps(k):
-    return -2 * args.t * (np.cos(k[..., 0]) + np.cos(k[..., 1]))
-
-
+H = CL.hamiltonians(args.scheme, args.t)  # H(k~)
 GF_STRUCT = [(s, N) for s in SPINS]
-MESH = MeshDLRImFreq(beta=args.beta, statistic="Fermion", w_max=args.dlr_wmax, eps=args.dlr_eps, symmetrize=True)
-iw = np.array([complex(w) for w in MESH.values()])
-iw0 = int(np.argmin(np.where(iw.imag > 0, iw.imag, np.inf)))  # the lowest positive frequency
+MESH, iw, iw0 = dlr_frequencies(args.beta, args.dlr_wmax, args.dlr_eps)
 N_OF_IW = np.rint((iw.imag * args.beta / np.pi - 1) / 2).astype(int)  # the n of iw = (2n + 1) i pi / beta
 N_REG = np.abs(N_OF_IW).max() + 1  # positive frequencies of the regular mesh that holds every node
-
-H = CL.hamiltonians(eps, args.scheme)  # H(k~) in the site basis
 mpi.report(f"{args.scheme}: Sigma averaged over {len(CL.perms[args.scheme])} symmetries of the cluster")
-
-
-def coarse_grain(sigma):
-    """The cluster G in the site basis, (n_w, N, N), from Sigma in the site basis: < [iw + mu - H(k~) - Sigma]^-1 >_k~"""
-    zeta = (iw + mu)[:, None, None] * np.eye(N) - sigma
-    return sum(np.linalg.inv(zeta - h) for h in H) / len(H)
 
 
 def solver_for(G0):
@@ -110,13 +89,6 @@ def solver_for(G0):
     for s in SPINS:
         S.G0_iw[s].data[:] = G0
     return S
-
-
-def on_mesh(data):
-    """data (n_w, N, N) as a Gf on the DLR mesh"""
-    g = Gf(mesh=MESH, target_shape=(N, N))
-    g.data[:] = data
-    return g
 
 
 def symmetric(m):
@@ -208,21 +180,23 @@ alpha_kwargs, alpha_report, alpha_record = ctint.alpha_kwargs(args, h_int, [], a
                                                               density=0.5 if mu == args.U / 2 else None)
 mpi.report(alpha_report)
 
-out = os.path.join(args.out_dir, f"cluster_{args.cluster}_{args.scheme}_U{args.U:.2f}_beta{args.beta:.1f}_mu{mu:.3f}_ctint"
-                   + (f"_{ctint.file_tag(args)}" if args.alpha_tag else "") + ".h5")
-if mpi.is_master_node():
-    with HDFArchive(out, "w") as A:
-        A["params"] = {k: v for k, v in vars(args).items() if v is not None}
-        A["mu"] = mu
-        A["gf_struct"] = GF_STRUCT
-        A["alpha"] = alpha_record
+# The final solve measures <n_a(tau) n_b(0)>, a = sigma N + R, for every pair
+NN_OPS = [n(s, r) for s in SPINS for r in range(N)]
+final_kwargs = dict(measure_chiAB_tau=True, chi_A_vec=NN_OPS, chi_B_vec=NN_OPS)
 
-for it in range(args.n_loops):
-    G0 = np.linalg.inv(np.linalg.inv(coarse_grain(sigma)) + sigma)
+
+out = os.path.join(args.out_dir, run_name(args, mu) + "_ctint" + (f"_{ctint.file_tag(args)}" if args.alpha_tag else "") + ".h5")
+if mpi.is_master_node():
+    start_archive(out, args, mu, CL, gf_struct=GF_STRUCT, alpha=alpha_record)
+
+for it in range(args.n_loops + (args.final_time > 0)):
+    final = it == args.n_loops  # the longer solve at the converged Sigma, which measures the correlators
+    G0 = np.linalg.inv(np.linalg.inv(coarse_grain(H, iw + mu, sigma)) + sigma)
     S = solver_for(G0)
     t0 = time.time()
     S.solve(h_int=h_int, **alpha_kwargs, length_cycle=args.length_cycle, n_warmup_cycles=args.n_warmup_cycles,
-            n_cycles=args.n_cycles, max_time=args.max_time, measure_M_tau=True, post_process=True)
+            n_cycles=args.n_cycles, max_time=args.final_time if final else args.max_time, measure_M_tau=True,
+            post_process=True, **(final_kwargs if final else {}))
     wall = time.time() - t0
 
     # Paramagnetic Sigma from M, averaged over the symmetries of the cluster, as the densities
@@ -234,14 +208,18 @@ for it in range(args.n_loops):
     density = 2 * n_site.mean()
     sign = float(np.real(S.average_sign))
     sig0 = np.diagonal(sigma[iw0])
-    mpi.report(f"iteration {it}: <n> = {density:.4f}, sign = {sign:.4f}, order = {S.average_k:.1f}, solve {wall:.0f} s, "
+    mpi.report(f"{'final' if final else f'iteration {it}'}: <n> = {density:.4f}, sign = {sign:.4f}, order = {S.average_k:.1f}, solve {wall:.0f} s, "
                f"max |Im Sigma_ii(iw_0)| = {np.abs(sig0.imag).max():.4f}; M fitted at eps "
                f"{', '.join(f'{e:.0e}' for e in eps_M)}, Sigma_1 from the data "
                f"{', '.join(f'{d:.3f}' for d, _ in sigma_1)} against {', '.join(f'{x:.3f}' for _, x in sigma_1)} imposed")
 
     if mpi.is_master_node():
+        data = dict(Sigma_sites=gf_on(MESH, sigma), G0_iw=gf_on(MESH, G0), G_iw=S.G_iw, density=density, average_sign=sign,
+                    average_order=float(np.real(S.average_k)), auto_corr_time=S.auto_corr_time, solve_seconds=wall,
+                    M_eps=list(eps_M), sigma_1=np.array(sigma_1))
+        if final:  # the equal-time <n_a n_b> is the tau = 0 point, where n_a is put after n_b
+            data.update(nn_tau_sites=S.chiAB_tau, nn_sites=S.chiAB_tau.data[0].real, szsz_Q_tau=CL.szsz_Q(S.chiAB_tau))
         with HDFArchive(out, "a") as A:
-            A[f"it{it}"] = dict(Sigma_iw=on_mesh(sigma), G0_iw=on_mesh(G0), G_iw=S.G_iw, density=density, average_sign=sign,
-                                average_order=float(np.real(S.average_k)), solve_seconds=wall, M_eps=list(eps_M),
-                                sigma_1=np.array(sigma_1))
-            A["n_iter"] = it + 1
+            A["final" if final else f"it{it}"] = data
+            if not final:
+                A["n_iter"] = it + 1

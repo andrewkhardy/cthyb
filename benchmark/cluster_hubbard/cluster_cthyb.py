@@ -8,12 +8,16 @@ clusters.py (2x2 by default, the 8-site Betts cluster 8A, 4x4, or any superlatti
     H = -t sum_<ij>,s c^dag_is c_js + U sum_i n_i,up n_i,dn - mu sum_i,s n_i,s,
 
 with the Pauli proposal of the pair moves mixed in at --pauli_prob (0.5 by default; neither scheme is in the regime
-where it defaults to 1).
+where it defaults to 1). On 2x2 it sampled the same sign, order and Sigma as 0, with the same (DCA) or half (CDMFT) the
+autocorrelation time. A cycle is about one autocorrelation time by default, 250 moves in DCA and 1000 in CDMFT (100-move
+cycles gave ~2 and ~9 on 2x2), after 5e5 warmup moves. On 8A a DCA move took ~0.3 s on 8 threads locally: try --probe
+first, and pass e.g. --n_warmup_cycles 20 --length_cycle 10 there.
 
 The solver works in one of three real bases of the cluster orbitals, c_R = sum_o Q[R, o] c_o (--basis), and the
 blocks of its gf_struct are the orbitals that the coarse-grained G of the Hartree start connects; every iteration checks
-that G stays inside them.
-  waves   (default) K and -K combined into the waves cos(K.R) and sin(K.R) (one wave when K = -K), with h_int the
+that G stays inside them. By default (auto) it takes the waves, or the irreps where their blocks are smaller, which is
+CDMFT beyond 2x2.
+  waves   K and -K combined into the waves cos(K.R) and sin(K.R) (one wave when K = -K), with h_int the
           momentum-conserving scattering of U, as in plaquette_2x2.py. In DCA, G0, Delta and Sigma are diagonal in it by
           construction (G(K) = G(-K) by inversion); in CDMFT only by the point group, which on 2x2 still leaves blocks
           of size 1, but on 8A one block of all 8 waves per spin. For 8A DCA the invariant subspaces CTHYB finds in this
@@ -29,6 +33,15 @@ Every iteration averages Sigma over the spins and over the symmetries of the clu
 group of the periodic cluster, which leaves one Sigma(K) per star of K (X = Y on 2x2), shared by the cos and sin waves;
 in CDMFT the point operations that map the cluster onto itself. Sigma_iw, in the blocks of the solver, is the one fed
 back, and Sigma_sites the same in the site basis.
+
+The loop measures only what it needs, G and the density matrix (for the CRM). After it, a final solve of --final_time
+seconds at the converged Sigma, saved as the group final, also measures the density-density correlators of the sites:
+<n_a(tau) n_b(0)>, a = sigma N + R, of every pair (nn_tau_sites, by measure_O_tau with the list of the n_a, in any
+basis of the solver), from it <S^z_Q(tau) S^z_Q(0)> at Q = (pi, pi) (szsz_Q_tau), and the equal-time <n_a n_b>
+exactly, from the density matrix (nn_sites). It saves the density matrix and the eigenbasis of h_loc too, for any
+other equal-time observable (triqs.atom_diag.trace_rho_op, with the operators c_site
+builds from Q). Every file holds Q and the names of its orbitals, the sites and momenta of the cluster and the git
+version of the code.
 
 With eps(k) = -2t (cos kx + cos ky) and the H(k~) of clusters.py on the k~ of its DCA patch,
 
@@ -47,11 +60,11 @@ basis.
 
 Feasibility: CTHYB diagonalizes the cluster Hamiltonian in its invariant subspaces and keeps dense matrices of them.
 Before building anything, the script estimates the largest subspace: the half-filled (N_up, N_dn) sector, split evenly
-by the symmetries of the cluster (not at all in the site basis; an optimistic split, 8A DCA has 660 against 77), and
-compares one dense matrix of that size with the memory of the node. For 4x4 that is about 1.3e6 states, 13 TB, and the
-script stops unless --force. --probe stops after building the atomic problem.
+by the symmetries of the cluster (not at all in the site basis). That is a lower bound, 77 states for 8A DCA where CTHYB
+finds 660, so a stop on it is safe; it compares one dense matrix of that size with the memory of the node. For 4x4 that
+is about 1.3e6 states, 13 TB, and the script stops unless --force. --probe stops after building the atomic problem.
 
-    mpirun -n 8 python cluster_cthyb.py --cluster 8A --scheme DCA --pauli_prob 0.5
+    mpirun -n 8 python cluster_cthyb.py --cluster 2x2 --scheme CDMFT
 """
 import argparse
 import os
@@ -62,42 +75,71 @@ from math import comb
 import numpy as np
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
-from triqs.gfs import Gf, MeshDLRImFreq, inverse
+from triqs.atom_diag import trace_rho_op
+from triqs.gfs import inverse
 from triqs.operators import c, dagger
 from triqs.operators.util import op_from_block_matrix
 from triqs_cthyb import Solver
 
-from clusters import SUPERLATTICES, Cluster
+from clusters import (Cluster, add_model_args, coarse_grain, connected_blocks, dlr_frequencies, gf_on, run_name,
+                      start_archive)
 
 SPINS = ("up", "dn")
 
 parser = argparse.ArgumentParser(description="Cluster DCA / CDMFT for the square-lattice Hubbard model, solved by CTHYB")
-parser.add_argument("--cluster", choices=tuple(SUPERLATTICES), default="2x2")
-parser.add_argument("--scheme", choices=("DCA", "CDMFT"), default="DCA")
-parser.add_argument("--basis", choices=("waves", "irreps", "sites"), default="waves",
+add_model_args(parser)
+parser.add_argument("--basis", choices=("auto", "waves", "irreps", "sites"), default="auto",
                     help="Basis of the solver: waves (Delta diagonal in DCA, U scatters momenta), irreps (the sites combined by "
-                         "the symmetries of the scheme: the finest CDMFT blocks) or sites (Delta off-diagonal, U local)")
-parser.add_argument("--U", type=float, default=6.0)
-parser.add_argument("--t", type=float, default=1.0)
-parser.add_argument("--beta", type=float, default=10.0)
-parser.add_argument("--mu", type=float, default=None, help="Chemical potential (default U/2, half filling)")
+                         "the symmetries of the scheme), sites (Delta off-diagonal, U local), or auto: the waves, or the irreps "
+                         "where their blocks are smaller")
 parser.add_argument("--pauli_prob", type=float, default=0.5, help="Probability of the Pauli proposal of the pair moves")
-parser.add_argument("--n_loops", type=int, default=10)
-parser.add_argument("--n_k", type=int, default=16, help="k~ points per direction of the reduced zone")
-parser.add_argument("--dlr_wmax", type=float, default=20.0, help="DLR frequency cutoff (CTINT's of cluster_ctint.py)")
+parser.add_argument("--length_cycle", type=int, default=None, help="Moves per cycle, by default 250 in DCA, 1000 in CDMFT")
+parser.add_argument("--n_warmup_cycles", type=int, default=None, help="Warmup cycles, by default 5e5 moves")
 parser.add_argument("--dlr_eps", type=float, default=1e-7, help="DLR accuracy, matched to the noise of G for the CRM")
 parser.add_argument("--dlr_sigma", choices=("crm", "dyson"), default="crm", help="Sigma fed back: CRM or plain Dyson")
-parser.add_argument("--n_cycles", type=int, default=100000, help="QMC cycles per rank")
-parser.add_argument("--n_warmup_cycles", type=int, default=5000)
-parser.add_argument("--length_cycle", type=int, default=100)
-parser.add_argument("--max_time", type=int, default=-1, help="Seconds per solve, -1 for none")
 parser.add_argument("--probe", action="store_true", help="Only build the atomic problem and report its size")
 parser.add_argument("--force", action="store_true", help="Go on even if the memory estimate exceeds the node")
-parser.add_argument("--out_dir", default=".")
 args = parser.parse_args()
 mu = args.U / 2 if args.mu is None else args.mu
+if args.length_cycle is None:
+    args.length_cycle = {"DCA": 250, "CDMFT": 1000}[args.scheme]
+if args.n_warmup_cycles is None:
+    args.n_warmup_cycles = 500000 // args.length_cycle
+
+# ---- Cluster and lattice ----
+
 CL = Cluster(args.cluster, args.n_k)
 N = CL.N
+H_SITES = CL.hamiltonians(args.scheme, args.t)  # H(k~)
+MESH, iw, iw0 = dlr_frequencies(args.beta, args.dlr_wmax, args.dlr_eps)
+mpi.report(f"{args.scheme}: Sigma averaged over {len(CL.perms[args.scheme])} symmetries of the cluster")
+
+# Start from the Hartree self-energy of the paramagnetic half-filled solution
+sigma = np.full(len(iw), args.U / 2, dtype=complex)[:, None, None] * np.eye(N)
+
+# ---- Basis of the solver, Q[R, o] with c_R = sum_o Q[R, o] c_o, and its blocks: the orbitals G connects ----
+
+BASES = {"waves": (CL.P, CL.wave_names), "irreps": CL.symmetric_basis(args.scheme),
+         "sites": (np.eye(N), [f"R{i}" for i in range(N)])}
+
+
+def blocks_in(Q):
+    return connected_blocks(coarse_grain(Q.T @ H_SITES @ Q, iw + mu, sigma))
+
+
+if args.basis == "auto":
+    size = {basis: max(map(len, blocks_in(BASES[basis][0]))) for basis in ("waves", "irreps")}
+    args.basis = "irreps" if size["irreps"] < size["waves"] else "waves"
+Q, NAMES = BASES[args.basis]
+H_Q = Q.T @ H_SITES @ Q
+BLOCKS = blocks_in(Q)
+BLOCK_NAMES = ["|".join(NAMES[j] for j in b) for b in BLOCKS]
+INSIDE = np.zeros((N, N), dtype=bool)
+for b in BLOCKS:
+    INSIDE[np.ix_(b, b)] = True
+mpi.report(f"{args.scheme} blocks of the {args.basis} basis: {', '.join(BLOCK_NAMES)}")
+GF_STRUCT = [(f"{s}_{name}", len(b)) for s in SPINS for name, b in zip(BLOCK_NAMES, BLOCKS)]
+WHERE = {o: (name, i) for name, b in zip(BLOCK_NAMES, BLOCKS) for i, o in enumerate(b)}  # orbital -> (block, index)
 
 # ---- Feasibility, before any operator is built ----
 
@@ -110,62 +152,11 @@ except (ValueError, OSError, AttributeError):
     have = float("nan")
 split = f"split by the {n_sym} symmetries of the cluster" if n_sym > 1 else "not split by symmetry in the site basis"
 mpi.report(f"{args.cluster} cluster, {2 * N} spin-orbitals, {2.0 ** (2 * N):.2e} states; half-filled (N_up, N_dn) sector "
-           f"{comb(N, N // 2) ** 2:.2e} states, largest invariant subspace ~ {largest:.2e} ({split});"
+           f"{comb(N, N // 2) ** 2:.2e} states, largest invariant subspace at least ~{largest:.2e} ({split});"
            f" one dense matrix of it ~ {need / 1e9:.3g} GB, node memory {have / 1e9:.3g} GB")
 if need > have and not args.force:
     mpi.report("Stopping: the local problem cannot be diagonalized on this node (use --force to try anyway).")
     sys.exit(3)
-
-# ---- Lattice, and the basis of the solver: Q[R, o] with c_R = sum_o Q[R, o] c_o ----
-
-if args.basis == "waves":
-    Q, NAMES = CL.P, CL.wave_names
-elif args.basis == "irreps":
-    Q, NAMES = CL.symmetric_basis(args.scheme)
-else:
-    Q, NAMES = np.eye(N), [f"R{i}" for i in range(N)]
-
-
-def eps(k):
-    return -2 * args.t * (np.cos(k[..., 0]) + np.cos(k[..., 1]))
-
-
-MESH = MeshDLRImFreq(beta=args.beta, statistic="Fermion", w_max=args.dlr_wmax, eps=args.dlr_eps, symmetrize=True)
-iw = np.array([complex(w) for w in MESH.values()])
-iw0 = int(np.argmin(np.where(iw.imag > 0, iw.imag, np.inf)))  # the lowest positive frequency
-
-H_Q = Q.T @ CL.hamiltonians(eps, args.scheme) @ Q  # H(k~) in the basis of the solver
-mpi.report(f"{args.scheme}: Sigma averaged over {len(CL.perms[args.scheme])} symmetries of the cluster")
-
-
-def coarse_grain(sigma):
-    """The cluster G, (n_w, N, N), from Sigma, both in the basis of the solver: < [iw + mu - H(k~) - Sigma]^-1 >_k~"""
-    zeta = (iw + mu)[:, None, None] * np.eye(N) - sigma
-    return sum(np.linalg.inv(zeta - h) for h in H_Q) / len(H_Q)
-
-
-# Start from the Hartree self-energy of the paramagnetic half-filled solution
-sigma = np.full(len(iw), args.U / 2, dtype=complex)[:, None, None] * np.eye(N)
-G = coarse_grain(sigma)
-
-# ---- Blocks: the orbitals connected by the coarse-grained G ----
-
-linked = np.abs(G).max(axis=0) > 1e-8 * np.abs(G).max()
-BLOCKS = []
-for j in range(N):
-    if any(j in b for b in BLOCKS):
-        continue
-    block = {j}
-    while (grown := block | set(np.nonzero(linked[sorted(block)].any(axis=0))[0])) != block:
-        block = grown
-    BLOCKS.append(sorted(block))
-BLOCK_NAMES = ["|".join(NAMES[j] for j in b) for b in BLOCKS]
-INSIDE = np.zeros((N, N), dtype=bool)
-for b in BLOCKS:
-    INSIDE[np.ix_(b, b)] = True
-mpi.report(f"{args.scheme} blocks of the {args.basis} basis: {', '.join(BLOCK_NAMES)}")
-GF_STRUCT = [(f"{s}_{name}", len(b)) for s in SPINS for name, b in zip(BLOCK_NAMES, BLOCKS)]
-WHERE = {o: (name, i) for name, b in zip(BLOCK_NAMES, BLOCKS) for i, o in enumerate(b)}  # orbital -> (block, index)
 
 
 def block_view(m, b):
@@ -184,6 +175,10 @@ def c_site(s, r):
     return sum(Q[r, o] * c(f"{s}_{WHERE[o][0]}", WHERE[o][1]) for o in range(N) if abs(Q[r, o]) > 1e-14)
 
 
+def n_site(s, r):
+    return dagger(c_site(s, r)) * c_site(s, r)
+
+
 S = Solver(beta=args.beta, gf_struct=GF_STRUCT, delta_interface=True, dlr_wmax=args.dlr_wmax, dlr_eps=args.dlr_eps)
 assert S.dlr_mesh == MESH
 
@@ -199,7 +194,7 @@ h_loc0 = op_from_block_matrix(h0_blocks, GF_STRUCT)
 def set_delta(sigma):
     """Coarse-grain Sigma, check that G stays in the blocks, and set S.Delta_iw = iw - h_loc0 - G0^-1 with
     G0^-1 = G^-1 + Sigma; G0 as a BlockGf"""
-    G = coarse_grain(sigma)
+    G = coarse_grain(H_Q, iw + mu, sigma)
     check_blocks(G)
     G0_iw = S.Delta_iw.copy()
     for name, b in zip(BLOCK_NAMES, BLOCKS):
@@ -210,11 +205,24 @@ def set_delta(sigma):
     return G0_iw
 
 
-h_int = args.U * sum(dagger(c_site("up", r)) * c_site("up", r) * dagger(c_site("dn", r)) * c_site("dn", r) for r in range(N))
+h_int = args.U * sum(n_site("up", r) * n_site("dn", r) for r in range(N))
 
 params = dict(h_int=h_int, h_loc0=h_loc0, n_cycles=args.n_cycles, n_warmup_cycles=args.n_warmup_cycles,
               length_cycle=args.length_cycle, max_time=args.max_time, pauli_prob=args.pauli_prob, dlr_sigma=args.dlr_sigma,
               measure_density_matrix=True, use_norm_as_weight=True, imag_threshold=1e-10)  # the k~ sum leaves ~1e-13 in Im Delta of CDMFT blocks
+
+# The final solve also measures <n_a(tau) n_b(0)>, a = sigma N + R, for every pair
+NN_OPS = [n_site(s, r) for s in SPINS for r in range(N)]
+final_params = dict(params, max_time=args.final_time, measure_O_tau=(NN_OPS, NN_OPS))
+
+
+def equal_time_nn():
+    """<n_a n_b>, a = sigma N + R, from the density matrix of the last solve"""
+    nn = np.zeros((2 * N, 2 * N))
+    for a in range(2 * N):
+        for b in range(a, 2 * N):
+            nn[a, b] = nn[b, a] = trace_rho_op(S.density_matrix, NN_OPS[a] * NN_OPS[b], S.h_loc_diagonalization).real
+    return nn
 
 if args.probe:
     set_delta(sigma)
@@ -223,18 +231,16 @@ if args.probe:
     mpi.report(f"Atomic problem built in {time.time() - t0:.1f} s")
     sys.exit(0)
 
-out = os.path.join(args.out_dir, f"cluster_{args.cluster}_{args.scheme}_U{args.U:.2f}_beta{args.beta:.1f}_mu{mu:.3f}"
-                                 f"_pauli{args.pauli_prob:.2f}_{args.dlr_sigma}_eps{args.dlr_eps:.0e}_{args.basis}.h5")
+out = os.path.join(args.out_dir, run_name(args, mu) + f"_pauli{args.pauli_prob:.2f}_{args.dlr_sigma}_eps{args.dlr_eps:.0e}"
+                                                    f"_{args.basis}.h5")
 if mpi.is_master_node():
-    with HDFArchive(out, "w") as A:
-        A["params"] = {k: v for k, v in vars(args).items() if v is not None}
-        A["mu"] = mu
-        A["gf_struct"] = GF_STRUCT
+    start_archive(out, args, mu, CL, gf_struct=GF_STRUCT, Q=Q, orbital_names=NAMES)
 
-for it in range(args.n_loops):
+for it in range(args.n_loops + (args.final_time > 0)):
+    final = it == args.n_loops  # the longer solve at the converged Sigma, which measures the correlators
     G0_iw = set_delta(sigma)
     t0 = time.time()
-    S.solve(**params)
+    S.solve(**(final_params if final else params))
     wall = time.time() - t0
 
     G_iw, Sigma_iw = S.G_iw, S.Sigma_iw.copy()
@@ -249,8 +255,7 @@ for it in range(args.n_loops):
     for name, b in zip(BLOCK_NAMES, BLOCKS):
         for s in SPINS:
             Sigma_iw[f"{s}_{name}"].data[:] = block_view(sigma, b)
-    Sigma_sites = Gf(mesh=MESH, target_shape=(N, N))
-    Sigma_sites.data[:] = Q @ sigma @ Q.T
+    Sigma_sites = gf_on(MESH, Q @ sigma @ Q.T)
 
     density = sum(np.trace(occ).real for occ in S.orbital_occupations.values()) / N
     sign = np.real(S.average_sign)
@@ -258,14 +263,19 @@ for it in range(args.n_loops):
     dims = np.array(S.h_loc_diagonalization.get_subspace_dims())
     cost = dict(n_measures=S.n_measures, warmup_seconds=S.warmup_time, accumulation_seconds=S.accumulation_time,
                 n_ranks=mpi.size, n_subspaces=len(dims), largest_subspace=int(dims.max()))
-    mpi.report(f"iteration {it}: <n> = {density:.4f}, sign = {sign:.4f}, order = {S.average_order:.1f}, "
+    mpi.report(f"{'final' if final else f'iteration {it}'}: <n> = {density:.4f}, sign = {sign:.4f}, order = {S.average_order:.1f}, "
                f"autocorrelation {S.auto_corr_time:.2f} cycles, solve {wall:.0f} s, max |Im Sigma(iw_0)| = {np.abs(sig0.imag).max():.4f}, "
                f"{S.n_measures / (mpi.size * S.accumulation_time):.3g} measurements/s per rank, "
                f"{len(dims)} subspaces of at most {dims.max()} states")
 
     if mpi.is_master_node():
+        data = dict(G0_iw=G0_iw, G_iw=G_iw, Sigma_iw=Sigma_iw, Sigma_sites=Sigma_sites, Sigma_iw_raw=Sigma_iw_raw,
+                    G_tau=S.G_tau, G_dlr=S.G_dlr, density=density, average_sign=sign, average_order=S.average_order,
+                    auto_corr_time=S.auto_corr_time, solve_seconds=wall, **cost)
+        if final:
+            data.update(nn_tau_sites=S.O_tau, nn_sites=equal_time_nn(), szsz_Q_tau=CL.szsz_Q(S.O_tau),
+                        density_matrix=S.density_matrix, h_loc_diagonalization=S.h_loc_diagonalization)
         with HDFArchive(out, "a") as A:
-            A[f"it{it}"] = dict(G0_iw=G0_iw, G_iw=G_iw, Sigma_iw=Sigma_iw, Sigma_sites=Sigma_sites, Sigma_iw_raw=Sigma_iw_raw,
-                                G_tau=S.G_tau, G_dlr=S.G_dlr, density=density, average_sign=sign, average_order=S.average_order,
-                                auto_corr_time=S.auto_corr_time, solve_seconds=wall, **cost)
-            A["n_iter"] = it + 1
+            A["final" if final else f"it{it}"] = data
+            if not final:
+                A["n_iter"] = it + 1

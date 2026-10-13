@@ -358,7 +358,8 @@ h_loc0 : {par_58}, default={}
                        c2py::python_typename<int>(),
                        c2py::python_typename<bool>(),
                        c2py::python_typename<bool>(),
-                       c2py::python_typename<std::optional<std::pair<triqs_cthyb::many_body_op_t, triqs_cthyb::many_body_op_t>>>(),
+                       c2py::python_typename<
+                          std::optional<std::pair<std::vector<triqs_cthyb::many_body_op_t>, std::vector<triqs_cthyb::many_body_op_t>>>>(),
                        c2py::python_typename<bool>(),
                        c2py::python_typename<double>(),
                        c2py::python_typename<double>(),
@@ -430,10 +431,12 @@ constexpr auto _c2py_doc_member_b49d62c9 = R"DOC(Number of Legendre coefficients
 constexpr auto _c2py_doc_member_19ebb74f = R"DOC(Measure :math:`G(\tau)`? Hermiticity :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` is enforced.)DOC";
 constexpr auto _c2py_doc_member_9fe4e2b9 = R"DOC(Measure :math:`G_l` (Legendre)? No hermiticity is enforced.)DOC";
 constexpr auto _c2py_doc_member_c478e947 =
-   R"DOC(Measure :math:`\langle O_2(\tau) O_1(0) \rangle` for measure_O_tau = (O_1, O_2), bosonic operators (an even number
-of c and c^dagger in every term), whether or not they commute with h_loc. Measured at the nodes of a DLR grid
-(dlr_w_max, dlr_eps), with the result in O_dlr and, on n_tau points, in O_tau. Operators that change the block of
-h_loc (S^+, c^dagger_a c_b, ...) cost more.)DOC";
+   R"DOC(Measure :math:`\langle O_2(\tau) O_1(0) \rangle` for measure_O_tau = (O_1, O_2), lists of bosonic operators (an
+even number of c and c^dagger in every term), whether or not they commute with h_loc: O_tau[tau](i, j) is
+<O_2[i](tau) O_1[j](0)>, every pair measured on the same configurations, which share most of the work. (The Python
+Solver also takes two single operators, for a scalar O_tau.) Measured at the nodes of a DLR grid (dlr_w_max,
+dlr_eps), with the result in O_dlr and, on n_tau points, in O_tau. Operators that change the block of h_loc (S^+,
+c^dagger_a c_b, ...) cost more.)DOC";
 constexpr auto _c2py_doc_member_bce605dc =
    R"DOC(Measure :math:`\langle n_a(\tau) n_b(0) \rangle` for every pair of spin-orbitals, whether or not the n_a commute
 with h_loc. If they do and measure_D0_corr and measure_density_matrix are set, nn_tau is Q_tau from the occupation
@@ -689,7 +692,7 @@ constexpr auto _c2py_doc_member_a630495a = R"DOC(Single-particle Green's functio
 constexpr auto _c2py_doc_member_789d035e = R"DOC(Intermediate Green's function used to accumulate :math:`G(\tau)` (real or complex).)DOC";
 constexpr auto _c2py_doc_member_c4b4ab9c = R"DOC(Violation of the property :math:`G_{ij}(\tau) = G_{ji}^*(\tau)` after the measurement.)DOC";
 constexpr auto _c2py_doc_member_bb9bd800 = R"DOC(Single-particle Green's function :math:`G_l` in the Legendre representation.)DOC";
-constexpr auto _c2py_doc_member_2fc3b9f2 = R"DOC(:math:` O_2() O_1(0) ` for measure_O_tau = (O_1, O_2).)DOC";
+constexpr auto _c2py_doc_member_2fc3b9f2 = R"DOC(:math:` O_2[i]() O_1[j](0) ` as O_tau[tau](i, j) for measure_O_tau = (O_1, O_2).)DOC";
 constexpr auto _c2py_doc_member_0ce5333f = R"DOC(:math:` n_a() n_b(0) ` for every pair of spin-orbitals, as nn_tau[bl_a, bl_b][tau](i_a, i_b).)DOC";
 constexpr auto _c2py_doc_member_d1a0e7f4 = R"DOC(O_tau as DLR coefficients, from which it is evaluated at any tau or Matsubara frequency.)DOC";
 constexpr auto _c2py_doc_member_d1a0e7f5 = R"DOC(nn_tau as DLR coefficients, from which it is evaluated at any tau or Matsubara frequency.)DOC";

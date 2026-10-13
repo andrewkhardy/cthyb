@@ -2,23 +2,28 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-r"""Plots of the cluster_cthyb.py (CTHYB) and cluster_ctint.py (CTINT) runs in a data directory, two figures per cluster:
+r"""Plots of the cluster_cthyb.py (CTHYB) and cluster_ctint.py (CTINT) runs in a data directory, three figures per cluster:
 
   iterations   rows DCA / CDMFT; columns average sign, expansion order, autocorrelation time (CTHYB) and the change of
                Sigma between successive iterations, max over K and 0 <= w_n <= --w_max of |Sigma_it - Sigma_it-1|.
   sigma        rows Im / Re Sigma(K, iw_n) for DCA and CDMFT; one column per star of K under the point group.
                Markers: the first iteration, where every solver starts from the same Hartree G0, so the solvers
-               compare directly; lines: the last iteration of runs with more than one.
+               compare directly; lines: the final solve, or the last iteration of runs with more than one.
+  correlations rows DCA / CDMFT, for the runs with a final solve; columns, by star of q, the equal-time spin and
+               charge structure factors S(q) = 1/N sum_RR' e^{iq.(R - R')} C_RR', C = <S^z_R S^z_R'> and
+               <n_R n_R'> - <n_R><n_R'>, and the static susceptibilities chi(q), the same with C(tau) integrated over
+               tau; and <S^z_Q(tau) S^z_Q(0)> / N at Q = (pi, pi), whose integral is chi_s(pi, pi).
 
-Sigma(K) is the diagonal of the cluster Fourier transform: from the cos/sin K blocks of CTHYB (the Sigma_iw the loop
-went on with: by CRM on the DLR frequencies, tail-fitted on the regular mesh in earlier runs), from the site-basis
-matrix of CTINT (on its DLR frequencies, on the regular mesh in earlier runs) and of CTHYB --basis sites (labelled
-"sites"); from Sigma_sites, the site-basis Sigma of CTHYB, in every basis of the runs that save it. Each run is drawn on the frequencies of its own mesh. It
+Sigma(K) is the diagonal of the cluster Fourier transform of Sigma_sites, the site-basis Sigma that both drivers feed
+back and save, on the frequencies of their DLR mesh. Earlier runs are read too: CTHYB from the Sigma_iw of its cos/sin
+K blocks or of --basis sites (labelled "sites"), by CRM on the DLR frequencies or tail-fitted on the regular mesh, and
+CTINT from its site-basis Sigma on the regular mesh. Each run is drawn on the frequencies of its own mesh. It
 is averaged over the spins and over the K of a star, which assumes the full point group of the square. Both the --L
 files of the earlier drivers and the --cluster files of the current ones are read. A summary table of every run goes to
 stdout, with the cost of the last CTHYB solve where the file has it: measurements per second and rank, independent
 samples per second and rank (sign^2 / (1 + 2 tau) of them), the seconds outside the Monte Carlo (atomic problem and
-post-processing) and the invariant subspaces of h_loc.
+post-processing) and the invariant subspaces of h_loc; and one of the final solves: the double occupancy, S_s(pi, pi)
+and the static AF susceptibility.
 
     python plot_cluster.py --data_dir ~/Documents/Data/cluster_hubbard --save "cluster_{cluster}_{figure}.pdf"
 """
@@ -30,7 +35,7 @@ from fractions import Fraction
 
 import matplotlib.pyplot as plt
 import numpy as np
-from triqs.gfs import Gf  # also registers Gf and BlockGf with h5
+import triqs.gfs  # noqa: F401  (registers Gf and BlockGf with h5)
 from h5 import HDFArchive
 
 from clusters import Cluster
@@ -117,30 +122,70 @@ def sigma_by_star(it_group, params):
     """`(w_n, {star: Sigma(K, iw_n)})` on the positive frequencies of the run's Matsubara mesh (regular, or DLR), averaged
     over spins and the K of each star"""
     acc = {}
-    sigma = it_group["Sigma_iw"] if "Sigma_iw" in it_group else None
-    if "Sigma_sites" in it_group:  # CTHYB, in any basis, from its Sigma in the site basis
-        sigma = it_group["Sigma_sites"]
-        w = np.array([complex(x).imag for x in sigma.mesh.values()])
-        add_by_star(acc, sigma.data, params)
-    elif "Sigma" in it_group:  # CTINT before the DLR loop, (n_w, N, N) in the site basis, on the regular mesh
+    if "Sigma_sites" in it_group:  # both solvers, the Sigma fed back, N x N in the site basis, on the DLR mesh
+        g = it_group["Sigma_sites"]
+        w = np.array([complex(x).imag for x in g.mesh.values()])
+        add_by_star(acc, g.data, params)
+    elif "Sigma" in it_group:  # earlier CTINT runs, (n_w, N, N) in the site basis, on the regular mesh
         add_by_star(acc, it_group["Sigma"], params)
         n_w = len(it_group["Sigma"])
         w = (2 * np.arange(-(n_w // 2), n_w - n_w // 2) + 1) * np.pi / float(params["beta"])
-    elif isinstance(sigma, Gf):  # CTINT, N x N in the site basis, on its DLR mesh
-        w = np.array([complex(x).imag for x in sigma.mesh.values()])
-        add_by_star(acc, sigma.data, params)
-    elif params.get("basis") == "sites":  # CTHYB in the site basis, one N x N block per spin
-        for name, g in sigma:
+    elif params.get("basis") == "sites":  # earlier CTHYB runs in the site basis, one N x N block per spin
+        for name, g in it_group["Sigma_iw"]:
             w = np.array([complex(x).imag for x in g.mesh.values()])
             add_by_star(acc, g.data, params)
-    else:  # CTHYB, blocks of the cos/sin waves joined by "|" (one wave per block in DCA), per spin
+    else:  # earlier CTHYB runs, blocks of the cos/sin waves joined by "|" (one wave per block in DCA), per spin
         L = int(params.get("L", 0))
-        for name, g in sigma:
+        for name, g in it_group["Sigma_iw"]:
             w = np.array([complex(x).imag for x in g.mesh.values()])
             for i, wave in enumerate(name.split("_", 1)[1].split("|")):
                 acc.setdefault(star(momentum_of_block(wave, L)), []).append(g.data[:, i, i])
     pos = w > 0
     return w[pos], {s: np.mean(v, axis=0)[pos] for s, v in sorted(acc.items())}
+
+
+def correlations(nn, nn_tau, szsz_Q, params):
+    """From the final solve: by star of q, the spin and charge structure factors from the equal-time <n_a n_b>,
+    a = sigma N + R, and the static susceptibilities from <n_a(tau) n_b(0)>; the double occupancy; and
+    (tau, <S^z_Q(tau) S^z_Q(0)> / N)"""
+    sites, K = sites_and_momenta(params)
+    N = len(sites)
+    U = np.exp(1j * sites @ K.T) / np.sqrt(N)  # [R, q]
+    s = np.array([0.5, -0.5])
+
+    def by_star(C):  # 1/N sum_RR' e^{iq.(R - R')} C_RR', averaged over each star
+        C_q = np.einsum("rk,rs,sk->k", U.conj(), C, U).real
+        stars = {}
+        for k, q in enumerate(K):
+            stars.setdefault(star(q), []).append(C_q[k])
+        return {st: np.mean(v) for st, v in stars.items()}
+
+    nn = np.asarray(nn).reshape(2, N, 2, N)
+    n = np.einsum("arar->r", nn)
+    tau = np.array([float(t) for t in nn_tau.mesh.values()])
+    nn_static = np.trapezoid(nn_tau.data.real, tau, axis=0).reshape(2, N, 2, N)  # int_0^beta dtau <n_a(tau) n_b(0)>
+    beta = float(params["beta"])
+    corr = dict(double_occupancy=np.mean([nn[0, r, 1, r] for r in range(N)]),
+                spin=by_star(np.einsum("a,arbs,b->rs", s, nn, s)),
+                charge=by_star(nn.sum(axis=(0, 2)) - np.outer(n, n)),
+                chi_spin=by_star(np.einsum("a,arbs,b->rs", s, nn_static, s)),
+                chi_charge=by_star(nn_static.sum(axis=(0, 2)) - beta * np.outer(n, n)))
+    tau = np.array([float(t) for t in szsz_Q.mesh.values()])
+    corr["szsz_Q"] = (tau, szsz_Q.data.real.reshape(len(tau)) / N)
+    return corr
+
+
+STATS = ("density", "average_sign", "average_order", "solve_seconds", "auto_corr_time", "n_measures", "warmup_seconds",
+         "accumulation_seconds", "n_ranks", "n_subspaces", "largest_subspace")
+
+
+def read_solve(g, params):
+    """The frequencies, and Sigma by star, the statistics and, for a final solve, the correlations of one solve"""
+    wn, sigma = sigma_by_star(g, params)
+    solve = dict(sigma=sigma, **{k: g[k] for k in STATS if k in g})
+    if "nn_sites" in g:
+        solve["corr"] = correlations(g["nn_sites"], g["nn_tau_sites"], g["szsz_Q_tau"], params)
+    return wn, solve
 
 
 def load(path):
@@ -151,17 +196,13 @@ def load(path):
         params = A["params"]
         its = []
         for i in range(A["n_iter"]):
-            g = A[f"it{i}"]
-            wn, sigma = sigma_by_star(g, params)
-            its.append(dict(sigma=sigma, **{k: g[k] for k in ("density", "average_sign", "average_order", "solve_seconds",
-                                                              "auto_corr_time", "n_measures", "warmup_seconds",
-                                                              "accumulation_seconds", "n_ranks", "n_subspaces",
-                                                              "largest_subspace")
-                                           if k in g}))
+            wn, solve = read_solve(A[f"it{i}"], params)
+            its.append(solve)
+        final = read_solve(A["final"], params)[1] if "final" in A else None
     keep = wn <= args.w_max
-    for it in its:
-        it["sigma"] = {s: v[keep] for s, v in it["sigma"].items()}
-    return dict(params=params, wn=wn[keep], its=its)
+    for solve in its + ([final] if final else []):
+        solve["sigma"] = {s: v[keep] for s, v in solve["sigma"].items()}
+    return dict(params=params, wn=wn[keep], its=its, final=final)
 
 
 runs = {}  # (cluster, U, beta, mu) -> scheme -> label -> run
@@ -209,6 +250,18 @@ for (cluster, U, beta, mu), schemes in runs.items():
             print(f"{f'{cluster} {scheme} U={U} beta={beta} {label}':66s} {len(run['its']):4d} {last['density']:7.4f} "
                   f"{last['average_sign']:7.4f} {last['average_order']:7.1f} {last.get('auto_corr_time', np.nan):8.2f} "
                   f"{last['solve_seconds']:8.0f} {cost_columns(last)}")
+
+finals = [(f"{cluster} {scheme} U={U} beta={beta} {label}", run["final"]) for (cluster, U, beta, mu), schemes in runs.items()
+          for scheme, by_label in schemes.items() for label, run in sorted(by_label.items())
+          if run["final"] and "corr" in run["final"]]
+if finals:
+    AF = star((np.pi, np.pi))
+    print(f"\n{'final solve':66s} {'<n>':>7s} {'sign':>7s} {'docc':>7s} {'S_s(pi,pi)':>10s} {'chi_AF':>8s}")
+    for name, final in finals:
+        corr = final["corr"]
+        tau, szsz = corr["szsz_Q"]
+        print(f"{name:66s} {final['density']:7.4f} {final['average_sign']:7.4f} {corr['double_occupancy']:7.4f} "
+              f"{corr['spin'][AF]:10.4f} {np.trapezoid(szsz, tau):8.4f}")
 
 # ---- Figures ----
 
@@ -268,14 +321,15 @@ def sigma_figure(key, schemes):
     for r, (scheme, part) in enumerate(rows):
         take = np.imag if part == "Im" else np.real
         for label, run in sorted(schemes[scheme].items()):
-            first, last = run["its"][0], run["its"][-1]
+            first, last = run["its"][0], run["final"] or run["its"][-1]
+            last_label = "final" if run["final"] else f"it {len(run['its']) - 1}"
             for c, s in enumerate(stars):
                 ax = axes[r, c]
                 ax.plot(run["wn"], take(first["sigma"][s]), linestyle="none", marker=MARKER[label], markersize=5.5,
                         markerfacecolor="none", markeredgewidth=1.1, color=COLOR[label], label=f"{label}, it 0")
-                if len(run["its"]) > 1:
+                if run["final"] or len(run["its"]) > 1:
                     ax.plot(run["wn"], take(last["sigma"][s]), linewidth=2, color=COLOR[label],
-                            label=f"{label}, it {len(run['its']) - 1}")
+                            label=f"{label}, {last_label}")
         for c, s in enumerate(stars):
             ax = axes[r, c]
             style(ax)
@@ -295,10 +349,49 @@ def sigma_figure(key, schemes):
     finish(fig, cluster, "sigma")
 
 
+def correlation_figure(key, schemes):
+    cluster, U, beta, mu = key
+    rows = [scheme for scheme in SCHEMES
+            if any(run["final"] and "corr" in run["final"] for run in schemes.get(scheme, {}).values())]
+    if not rows:
+        return
+    parts = ("spin", "charge", "chi_spin", "chi_charge")
+    titles = ("spin structure factor $S_s(q)$", "charge structure factor $S_c(q)$", r"static spin $\chi_s(q)$",
+              r"static charge $\chi_c(q)$", r"$\langle S^z_Q(\tau) S^z_Q(0) \rangle / N$, $Q = (\pi, \pi)$")
+    fig, axes = plt.subplots(len(rows), len(titles), figsize=(4.4 * len(titles), 3.4 * len(rows)), squeeze=False)
+    for r, scheme in enumerate(rows):
+        corrs = {label: run["final"]["corr"] for label, run in sorted(schemes[scheme].items())
+                 if run["final"] and "corr" in run["final"]}
+        stars = sorted({s for corr in corrs.values() for s in corr["spin"]})
+        for i, (label, corr) in enumerate(corrs.items()):
+            x = np.arange(len(stars)) + 0.12 * (i - (len(corrs) - 1) / 2)  # side by side
+            for c, part in enumerate(parts):
+                axes[r, c].plot(x, [corr[part].get(s, np.nan) for s in stars], linestyle="none", marker=MARKER[label],
+                                markersize=6, color=COLOR[label], label=label)
+            tau, szsz = corr["szsz_Q"]
+            axes[r, -1].plot(tau, szsz, linewidth=2, color=COLOR[label],
+                            label=f"{label}: χ = {np.trapezoid(szsz, tau):.3g}, D = {corr['double_occupancy']:.4f}")
+        for c, title in enumerate(titles):
+            ax = axes[r, c]
+            style(ax)
+            ax.set_title(f"{scheme}: {title}", fontsize=10, color=INK)
+            if c < len(parts):
+                ax.set_xticks(range(len(stars)), [star_name(s) for s in stars], fontsize=8)
+                ax.set_xlabel("q", fontsize=9, color=INK)
+            else:
+                ax.set_xlabel(r"$\tau$", fontsize=9, color=INK)
+        axes[r, 0].legend(fontsize=8, frameon=False)
+        axes[r, -1].legend(fontsize=7, frameon=False)
+    fig.suptitle(f"{cluster}, U = {U}, β = {beta}, μ = {mu}: correlations of the final solve (χ: static AF "
+                 "susceptibility, D: double occupancy)", fontsize=11, color=INK)
+    finish(fig, cluster, "correlations")
+
+
 for key, schemes in runs.items():
     if any(len(run["its"]) > 1 for by_label in schemes.values() for run in by_label.values()):
         iteration_figure(key, schemes)
     sigma_figure(key, schemes)
+    correlation_figure(key, schemes)
 
 if not args.save:
     plt.show()

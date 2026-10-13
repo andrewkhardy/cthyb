@@ -134,13 +134,13 @@ TEST(OccupationCorrelators, SingleOrbital) {
 
   // The sweep: O_tau = <n_do(tau) n_up(0)> and every <n_a(tau) n_b(0)>
   auto sweep = run([&](solve_parameters_t &sp) {
-    sp.measure_O_tau  = std::pair{n_up, n_do};
+    sp.measure_O_tau  = std::pair{std::vector<many_body_op_t>{n_up}, std::vector<many_body_op_t>{n_do}};
     sp.measure_nn_tau = true;
   });
   auto const &O  = *sweep.O_tau;
   auto const &nn = *sweep.nn_tau;
   double const dev_O_tau =
-     max_deviation(O.mesh(), [&](auto const &tau) { return std::real(O[tau]); }, [&](double t) { return exact.correlator(n_do, n_up, t); }, 10);
+     max_deviation(O.mesh(), [&](auto const &tau) { return std::real(O[tau](0, 0)); }, [&](double t) { return exact.correlator(n_do, n_up, t); }, 10);
   double const dev_nn_up_do = max_deviation(
      nn(0, 1).mesh(), [&](auto const &tau) { return std::real(nn(0, 1)[tau](0, 0)); }, [&](double t) { return exact.correlator(n_up, n_do, t); }, 10);
   double const dev_nn_up_up = max_deviation(
@@ -215,7 +215,7 @@ TEST(OccupationCorrelators, OffDiagonalOperators) {
     sp.random_seed     = seed;
     sp.measure_G_tau   = false;
     sp.verbosity       = 0;
-    sp.measure_O_tau   = std::pair{O1, O2};
+    sp.measure_O_tau   = std::pair{std::vector<many_body_op_t>{O1}, std::vector<many_body_op_t>{O2}};
     solver.solve(sp);
     return *solver.O_tau;
   };
@@ -230,7 +230,7 @@ TEST(OccupationCorrelators, OffDiagonalOperators) {
     auto const S_plus = spin_plus(1), S_minus = dagger(S_plus);
 
     auto O        = measure(beta, gf_struct, bath, h_int, h_loc0, S_minus, S_plus, 50000, 4127);
-    double const dev = max_deviation(O.mesh(), [&](auto const &tau) { return std::real(O[tau]); },
+    double const dev = max_deviation(O.mesh(), [&](auto const &tau) { return std::real(O[tau](0, 0)); },
                                      [&](double t) { return exact.correlator(S_plus, S_minus, t); }, 10);
     std::cout << "one orbital, max |QMC - ED| of <S+(tau) S-(0)>: " << dev << std::endl;
     EXPECT_LT(dev, 0.02);
@@ -246,12 +246,12 @@ TEST(OccupationCorrelators, OffDiagonalOperators) {
 
     auto const S_plus = spin_plus(2), S_minus = dagger(S_plus);
     auto const O_S    = measure(beta, gf_struct, bath, h_int, h_loc0, S_minus, S_plus, 30000, 6011);
-    double const dev_S = max_deviation(O_S.mesh(), [&](auto const &tau) { return std::real(O_S[tau]); },
+    double const dev_S = max_deviation(O_S.mesh(), [&](auto const &tau) { return std::real(O_S[tau](0, 0)); },
                                        [&](double t) { return exact.correlator(S_plus, S_minus, t); }, 20);
 
     auto const T   = c_dag("up", 1) * c("up", 0) + c_dag("do", 1) * c("do", 0);
     auto const O_T = measure(beta, gf_struct, bath, h_int, h_loc0, dagger(T), T, 30000, 6029);
-    double const dev_T = max_deviation(O_T.mesh(), [&](auto const &tau) { return std::real(O_T[tau]); },
+    double const dev_T = max_deviation(O_T.mesh(), [&](auto const &tau) { return std::real(O_T[tau](0, 0)); },
                                        [&](double t) { return exact.correlator(T, dagger(T), t); }, 20);
 
     std::cout << "two orbitals, max |QMC - ED| of <S+(tau) S-(0)>: " << dev_S << ",  <T(tau) T+(0)>: " << dev_T << std::endl;
@@ -281,7 +281,7 @@ TEST(OccupationCorrelators, TwoOrbitalKanamori) {
   sp.random_seed            = 5279;
   sp.measure_G_tau          = false;
   sp.verbosity              = 0;
-  sp.measure_O_tau          = std::pair{N, N};
+  sp.measure_O_tau          = std::pair{std::vector<many_body_op_t>{N}, std::vector<many_body_op_t>{N}};
   sp.measure_nn_tau         = true;
   sp.measure_D0_corr        = true;
   sp.measure_density_matrix = true;
@@ -301,7 +301,7 @@ TEST(OccupationCorrelators, TwoOrbitalKanamori) {
                                        [&](double t) { return exact.correlator(n(blocks[b1], a1), n(blocks[b2], a2), t); }, 20));
   auto const &O = *solver.O_tau;
   double const dev_O_tau =
-     max_deviation(O.mesh(), [&](auto const &tau) { return std::real(O[tau]); }, [&](double t) { return exact.correlator(N, N, t); }, 20);
+     max_deviation(O.mesh(), [&](auto const &tau) { return std::real(O[tau](0, 0)); }, [&](double t) { return exact.correlator(N, N, t); }, 20);
 
   // The occupation kinks of the conserved combinations
   auto const &ops = solver.conserved_density_operators;

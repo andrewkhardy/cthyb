@@ -32,22 +32,22 @@ namespace triqs_cthyb {
   using namespace triqs::gfs;
   using namespace triqs::mesh;
 
-  // <O2(tau) O1(0)> for measure_O_tau = (O1, O2), bosonic operators: measured at the DLR nodes, kept as DLR coefficients
-  // (O_dlr) and evaluated on the regular mesh of n_tau points (O_tau)
+  // <O2[i](tau) O1[j](0)> for measure_O_tau = (O1, O2), lists of bosonic operators: measured at the DLR nodes, kept as DLR
+  // coefficients (O_dlr) and evaluated on the regular mesh of n_tau points (O_tau)
   class measure_O_tau_ins {
 
     public:
-    measure_O_tau_ins(std::optional<gf<imtime, scalar_valued>> &O_tau_opt, std::optional<gf<dlr, scalar_valued>> &O_dlr_opt, qmc_data const &data,
-                      dlr_imtime const &nodes, int n_tau, many_body_op_t const &op1, many_body_op_t const &op2);
+    measure_O_tau_ins(std::optional<gf<imtime, matrix_valued>> &O_tau_opt, std::optional<gf<dlr, matrix_valued>> &O_dlr_opt, qmc_data const &data,
+                      dlr_imtime const &nodes, int n_tau, std::vector<many_body_op_t> const &ops1, std::vector<many_body_op_t> const &ops2);
     void accumulate(mc_weight_t s) { sweep.accumulate(s); }
     void collect_results(mpi::communicator const &c);
 
     private:
     occupation_sweep sweep;
     dlr_imtime nodes;
-    bool symmetric; // O1 = O2, so that O(tau) = O(beta - tau)
-    gf<imtime, scalar_valued>::view_type O_tau;
-    gf<dlr, scalar_valued>::view_type O_dlr;
+    bool symmetric; // O1 = O2, so that O[i, j](tau) = O[j, i](beta - tau)
+    gf<imtime, matrix_valued>::view_type O_tau;
+    gf<dlr, matrix_valued>::view_type O_dlr;
   };
 
 } // namespace triqs_cthyb

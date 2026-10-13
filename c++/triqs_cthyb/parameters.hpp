@@ -132,11 +132,13 @@ namespace triqs_cthyb {
     /// Measure \f$ G_l \f$ (Legendre)? No hermiticity is enforced.
     bool measure_G_l = false;
 
-    /// Measure \f$ \langle O_2(\tau) O_1(0) \rangle \f$ for measure_O_tau = (O_1, O_2), bosonic operators (an even number
-    /// of c and c^dagger in every term), whether or not they commute with h_loc. Measured at the nodes of a DLR grid
-    /// (dlr_w_max, dlr_eps), with the result in O_dlr and, on n_tau points, in O_tau. Operators that change the block of
-    /// h_loc (S^+, c^dagger_a c_b, ...) cost more.
-    std::optional<std::pair<many_body_op_t, many_body_op_t>> measure_O_tau = {};
+    /// Measure \f$ \langle O_2(\tau) O_1(0) \rangle \f$ for measure_O_tau = (O_1, O_2), lists of bosonic operators (an
+    /// even number of c and c^dagger in every term), whether or not they commute with h_loc: O_tau[tau](i, j) is
+    /// <O_2[i](tau) O_1[j](0)>, every pair measured on the same configurations, which share most of the work. (The Python
+    /// Solver also takes two single operators, for a scalar O_tau.) Measured at the nodes of a DLR grid (dlr_w_max,
+    /// dlr_eps), with the result in O_dlr and, on n_tau points, in O_tau. Operators that change the block of h_loc (S^+,
+    /// c^dagger_a c_b, ...) cost more.
+    std::optional<std::pair<std::vector<many_body_op_t>, std::vector<many_body_op_t>>> measure_O_tau = {};
 
     /// Measure \f$ \langle n_a(\tau) n_b(0) \rangle \f$ for every pair of spin-orbitals, whether or not the n_a commute
     /// with h_loc. If they do and measure_D0_corr and measure_density_matrix are set, nn_tau is Q_tau from the occupation

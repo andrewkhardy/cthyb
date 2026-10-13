@@ -63,6 +63,8 @@ are measured in the trace for bosonic operators, an even number of :math:`\hat{c
 
 This measurement is controlled by the argument ``measure_O_tau``. To enable it pass a tuple of the two operators, e.g. ``measure_O_tau = (n('up',0), n('do',0))`` measures :math:`\langle \hat{n}_\downarrow(\tau) \hat{n}_\uparrow(0) \rangle`: ``(O_1, O_2)`` gives :math:`\langle \hat{O}_2(\tau) \hat{O}_1(0) \rangle`. The result is the ``O_dlr`` attribute of the solver object (DLR coefficients: ``O_dlr(tau)`` evaluates it, ``make_gf_dlr_imfreq(O_dlr)`` gives it in Matsubara frequencies), and ``O_tau`` on the ``n_tau`` mesh.
 
+Each of the two can also be a list of operators, for every pair at once: ``measure_O_tau = (ops_1, ops_2)`` gives ``O_tau[i, j]`` :math:`= \langle \hat{O}_{2,i}(\tau) \hat{O}_{1,j}(0) \rangle`, so that ``measure_O_tau = (ops, ops)`` gives :math:`\langle \hat{O}_i(\tau) \hat{O}_j(0) \rangle`, e.g. the densities of the sites of a cluster in any one-body basis of the solver. The pairs are measured on the same configurations, which share most of the work: a list costs much less than a solve per pair.
+
 With ``measure_nn_tau = True`` the solver measures :math:`\langle \hat{n}_a(\tau) \hat{n}_b(0) \rangle` for every pair of spin-orbitals at once, as ``nn_dlr`` and as ``nn_tau[bl_a, bl_b][tau](i_a, i_b)`` on the ``n_tau_bosonic`` mesh. When every :math:`\hat{n}_a` commutes with the local Hamiltonian and ``measure_D0_corr`` and ``measure_density_matrix`` are set, ``nn_tau`` is ``Q_tau`` from the occupation kinks, and nothing more is measured.
 
 Two-particle Green's functions

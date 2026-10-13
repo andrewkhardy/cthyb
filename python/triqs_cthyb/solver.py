@@ -26,6 +26,7 @@ from .solver_core import SolverCore, ConstrParametersT, SolveParametersT
 from triqs.gfs import *
 import triqs.utility.mpi as mpi
 import numpy as np
+from triqs.operators import Operator
 from triqs.operators.util.extractors import block_matrix_from_op, op_from_block_matrix
 from .tail_fit import tail_fit as cthyb_tail_fit
 from .tail_fit import sigma_high_frequency_moments, green_high_frequency_moments
@@ -94,6 +95,7 @@ class Solver(SolverCore):
         self.G_dlr = None
         self.G_tau_dlr = None
         self._retarded = False  # set by add_dyn_int
+        self._O_tau_scalar = False  # measure_O_tau of the last solve was two single operators
         self.gf_struct = gf_struct
         self.n_iw = n_iw
         self.n_tau = n_tau
@@ -161,6 +163,20 @@ class Solver(SolverCore):
                 raise ValueError(f"add_dyn_int: complex coefficient {coeff} for "
                                  f"{bilinear(key1)} (x) {bilinear(key2)}; the coupling must stay real")
             self.add_dyn_vertex(bilinear(key1), bilinear(key2), np.real(coeff) * D)
+
+    @property
+    def O_tau(self):
+        r""":math:`\langle O_2[i](\tau) O_1[j](0) \rangle` as ``O_tau[i, j]`` on the n_tau mesh, for
+        ``measure_O_tau = (O_1, O_2)`` with lists of operators; :math:`\langle O_2(\tau) O_1(0) \rangle`, a scalar
+        Gf, for two single operators."""
+        O = SolverCore.O_tau.__get__(self)
+        return O[0, 0] if O is not None and self._O_tau_scalar else O
+
+    @property
+    def O_dlr(self):
+        """O_tau as DLR coefficients, from which it is evaluated at any tau or Matsubara frequency."""
+        O = SolverCore.O_dlr.__get__(self)
+        return O[0, 0] if O is not None and self._O_tau_scalar else O
 
     def solve(self, **params_kw):
         r"""
@@ -252,6 +268,13 @@ class Solver(SolverCore):
 
         # The moments come from this solve's density matrix, or are not known
         self.G_moments = self.Sigma_moments = self.Sigma_Hartree = self.orbital_occupations = None
+
+        # measure_O_tau = (O_1, O_2) takes two operators or two lists of them; the core takes lists, and O_tau and O_dlr
+        # are scalar for two operators
+        O_pair = params_kw.get("measure_O_tau")
+        self._O_tau_scalar = O_pair is not None and all(isinstance(O, Operator) for O in O_pair)
+        if O_pair is not None:
+            params_kw["measure_O_tau"] = tuple([O] if isinstance(O, Operator) else list(O) for O in O_pair)
 
         # Call the core solver's solve routine
         solve_status = SolverCore.solve(self, SolveParametersT(**params_kw))

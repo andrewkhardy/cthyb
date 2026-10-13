@@ -13,10 +13,11 @@
 # directly. Summarize with summarize_ctint_alpha.py.
 #   usage (from this directory):  sbatch run_ctint_alpha.sh hh|ss|cluster
 # hh and ss: 4 and 5 points x 7 schemes, about 5 and 6 hours at MAX_TIME = 600. cluster: iteration 0 only (the Hartree
-# start, the same G0 as the production runs), 2x2 DCA and CDMFT at five deltas and 4x4 at two, about 3 hours. At half
-# filling 'centred' is 'signed' with a smaller delta (the density is 1/2), which is sign-free there for any delta.
-# Every run tags its file with its alpha (--alpha_tag) and writes under $OUT, apart from the production runs, which the
-# summary uses as references. SCHEMES="scheme:delta ..." replaces the scheme list, e.g. SCHEMES="centred:0.15"
+# start, the same G0 as the production runs) and no final solve, 2x2 DCA and CDMFT at five deltas and 4x4 at two, about
+# 3 hours. At half filling 'centred' is 'signed' with a smaller delta (the density is 1/2), which is sign-free there for
+# any delta. Every run tags its file with its alpha (--alpha_tag) and writes under $OUT. The summary compares the
+# impurity points with the production runs and each cluster point with its own signed 0.51 run.
+# SCHEMES="scheme:delta ..." replaces the scheme list, e.g. SCHEMES="centred:0.15"
 # (SCHEMES_4X4 for the 4x4 cluster), and MAX_TIME the seconds per run.
 
 set -euo pipefail
@@ -76,7 +77,7 @@ case "$WHAT" in
     ;;
   cluster)  # as run_cluster.sh, one iteration
     CL="../../cluster_hubbard/cluster_ctint.py"
-    MODEL="--U 6.0 --beta 10.0 --n_loops 1 --n_warmup_cycles 5000"
+    MODEL="--U 6.0 --beta 10.0 --n_loops 1 --final_time 0 --n_warmup_cycles 5000"
     for scheme in DCA CDMFT; do
       scan "$CL" cluster $MODEL --cluster 2x2 --scheme "$scheme"
     done
