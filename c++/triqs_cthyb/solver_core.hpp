@@ -54,6 +54,9 @@ namespace triqs_cthyb {
     double _average_order;                            // average perturbation order
     double _auto_corr_time;                           // Auto-correlation time in units of MC cycles
     bool _auto_corr_time_converged = true;            // Whether the auto-correlation time estimate has saturated
+    long _n_measures               = 0;               // Measurements (cycles) of the last solve, summed over the MPI ranks
+    double _warmup_time            = 0;               // Seconds of warmup of the last solve, on this rank
+    double _accumulation_time      = 0;               // Seconds of accumulation of the last solve, on this rank
     int _solve_status;                                // Status of the solve upon exit: 0 for clean termination, > 0 otherwise.
     std::optional<configuration> _last_configuration; // Final configuration of the run
 
@@ -179,6 +182,15 @@ namespace triqs_cthyb {
 
     /// Whether the auto-correlation time estimate has saturated (false: it is only a lower bound, run longer).
     bool auto_corr_time_converged() const { return _auto_corr_time_converged; }
+
+    /// Number of measurements (cycles) of the last solve, summed over the MPI ranks.
+    long n_measures() const { return _n_measures; }
+
+    /// Seconds of warmup of the last solve, on this rank.
+    double warmup_time() const { return _warmup_time; }
+
+    /// Seconds of accumulation of the last solve, on this rank.
+    double accumulation_time() const { return _accumulation_time; }
 
     /// Status of the solve on exit.
     int solve_status() const { return _solve_status; }

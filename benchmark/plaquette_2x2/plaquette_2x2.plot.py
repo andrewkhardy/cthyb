@@ -7,7 +7,7 @@ last iteration, and the convergence of Im Sigma_K(iw_0). Y is not shown, being X
 G_K(tau) is the DLR fit G_dlr (rebuilt from G_l for earlier runs): the binned G_tau is far
 noisier under use_norm_as_weight. Runs on the DLR mesh show its frequencies as markers.
 
-    python plaquette_2x2.plot.py plaquette_2x2_DCA_U6.00_beta10.0_mu3.000.h5 [more.h5 ...]
+    python plaquette_2x2.plot.py plaquette_2x2_DCA_U6.00_beta10.0_mu3.000_crm.h5 [more.h5 ...]
 """
 import sys
 import numpy as np

@@ -93,6 +93,7 @@ class Solver(SolverCore):
         self.G_iw_raw = None
         self.G_dlr = None
         self.G_tau_dlr = None
+        self._retarded = False  # set by add_dyn_int
         self.gf_struct = gf_struct
         self.n_iw = n_iw
         self.n_tau = n_tau
@@ -153,6 +154,7 @@ class Solver(SolverCore):
             raise ValueError("add_dyn_int: the coupling D(tau) must be real")
         if np.abs(D.data).max() == 0.0:
             return
+        self._retarded = True
 
         for (key1, key2), coeff in expand_dyn_int(op1, op2).items():
             if abs(np.imag(coeff)) > 1e-12:
@@ -389,9 +391,42 @@ class Solver(SolverCore):
             params_kw['h_loc0'] = op_from_block_matrix(h_loc0_mat, self.gf_struct)
         self.Delta_tau << make_gf_imtime(self.Delta_iw, self.n_tau)
 
+    def _has_retarded_interaction(self):
+        return self._retarded or np.abs(self.Jperp_tau.data).max() > 0 or any(
+            np.abs(self.D0_tau[b1, b2].data).max() > 0 for b1, b2 in self.D0_tau.indices)
+
+    def _fit_G_dlr(self):
+        """The least-squares DLR fit of G_tau with its high-frequency moments held: the 1/iw one (the identity), and
+        the 1/iw^2 one from the density matrix when it is known and there is no retarded interaction, which it would
+        miss. A free fit misses them through the noisy ends of G(tau), and Sigma at the high DLR frequencies inherits
+        that error times w."""
+        mesh = MeshDLR(self.dlr_mesh)
+        unit = Gf(mesh=mesh, target_shape=[])
+        K = np.empty((self.n_tau, len(mesh)))  # G(tau) of each DLR coefficient alone: one exponential each
+        for l in range(len(mesh)):
+            unit.data[:] = 0
+            unit.data[l] = 1
+            K[:, l] = make_gf_imtime(unit, self.n_tau).data.real
+        rate = -np.log(K[1] / K[0]) * (self.n_tau - 1) / self.dlr_mesh.beta
+        A = -(K[0] + K[-1])[None, :]  # -(G(0) + G(beta)), the 1/iw moment
+        with_M2 = self.G_moments is not None and not self._has_retarded_interaction()
+        if with_M2:
+            A = np.vstack([A, rate * A])  # G'(0) + G'(beta), the 1/iw^2 moment
+        # c = c_p + N z with A c_p = b and A N = 0, z by least squares
+        N = np.linalg.svd(A)[2][len(A):].T
+        KN_pinv = np.linalg.pinv(K @ N, rcond=self.dlr_mesh.eps)  # no directions below the DLR accuracy
+
+        G_dlr = BlockGf(mesh=mesh, gf_struct=self.gf_struct)
+        for bl, g in self.G_tau:
+            moments = [np.eye(g.target_shape[0])] + ([self.G_moments[bl][2]] if with_M2 else [])
+            for i, j in np.ndindex(*g.target_shape):
+                c_p = np.linalg.lstsq(A, np.array([m[i, j] for m in moments]), rcond=None)[0]
+                G_dlr[bl].data[:, i, j] = c_p + N @ (KN_pinv @ (g.data[:, i, j] - K @ c_p))
+        return G_dlr
+
     def _post_proc_dlr(self, dlr_sigma):
         """DLR mode: G_iw from the DLR fit of G_tau, and Sigma_iw by Dyson on the DLR mesh."""
-        self.G_dlr = fit_gf_dlr(self.G_tau, MeshDLR(self.dlr_mesh))
+        self.G_dlr = self._fit_G_dlr()
         self.G_iw = make_gf_dlr_imfreq(self.G_dlr)
         self.G_tau_dlr = make_gf_dlr_imtime(self.G_dlr)
 

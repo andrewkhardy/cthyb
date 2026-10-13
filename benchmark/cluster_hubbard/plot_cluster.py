@@ -2,7 +2,7 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-r"""Plots of the cluster_4x4.py (CTHYB) and cluster_ctint.py (CTINT) runs in a data directory, two figures per cluster:
+r"""Plots of the cluster_cthyb.py (CTHYB) and cluster_ctint.py (CTINT) runs in a data directory, two figures per cluster:
 
   iterations   rows DCA / CDMFT; columns average sign, expansion order, autocorrelation time (CTHYB) and the change of
                Sigma between successive iterations, max over K and 0 <= w_n <= --w_max of |Sigma_it - Sigma_it-1|.
@@ -12,10 +12,14 @@ r"""Plots of the cluster_4x4.py (CTHYB) and cluster_ctint.py (CTINT) runs in a d
 
 Sigma(K) is the diagonal of the cluster Fourier transform: from the cos/sin K blocks of CTHYB (the Sigma_iw the loop
 went on with: by CRM on the DLR frequencies, tail-fitted on the regular mesh in earlier runs), from the site-basis
-matrix of CTINT. Each run is drawn on the frequencies of its own mesh. It is averaged over the spins and over the K of a star. Both the --L files of the earlier drivers and
-the --cluster files of the current ones are read. A summary table of every run goes to stdout.
+matrix of CTINT and of CTHYB --basis sites (labelled "sites"). Each run is drawn on the frequencies of its own mesh. It
+is averaged over the spins and over the K of a star, which assumes the full point group of the square. Both the --L
+files of the earlier drivers and the --cluster files of the current ones are read. A summary table of every run goes to
+stdout, with the cost of the last CTHYB solve where the file has it: measurements per second and rank, independent
+samples per second and rank (sign^2 / (1 + 2 tau) of them), the seconds outside the Monte Carlo (atomic problem and
+post-processing) and the invariant subspaces of h_loc.
 
-    python plot_cluster.py --data_dir ~/Documents/Data/cluster_4x4 --save "cluster_{cluster}_{figure}.pdf"
+    python plot_cluster.py --data_dir ~/Documents/Data/cluster_hubbard --save "cluster_{cluster}_{figure}.pdf"
 """
 import argparse
 import glob
@@ -30,27 +34,36 @@ from h5 import HDFArchive
 
 from clusters import Cluster
 
-DATA_DIRS = ("~/Documents/Data/cluster_4x4", "/mnt/home/ahardy/ceph/CTHYB_Data/cluster_4x4")  # the first that exists
+DATA_DIRS = ("~/Documents/Data/cluster_hubbard", "/mnt/home/ahardy/ceph/CTHYB_Data/cluster_hubbard")  # the first that exists
 
-parser = argparse.ArgumentParser(description="Plot the cluster DCA / CDMFT runs of cluster_4x4.py and cluster_ctint.py")
+parser = argparse.ArgumentParser(description="Plot the cluster DCA / CDMFT runs of cluster_cthyb.py and cluster_ctint.py")
 parser.add_argument("--data_dir", default=next((d for d in DATA_DIRS if os.path.isdir(os.path.expanduser(d))), DATA_DIRS[-1]))
 parser.add_argument("--w_max", type=float, default=10.0, help="Largest Matsubara frequency plotted")
 parser.add_argument("--save", default=None, help='Format for the files, e.g. "cluster_{cluster}_{figure}.pdf"; show if absent')
 args, _ = parser.parse_known_args()  # known only: a Jupyter kernel passes its own --f=...
 
 FILE = re.compile(r"cluster_(?P<cluster>[^_]+)_(?P<scheme>DCA|CDMFT)_U(?P<U>[\d.]+)_beta(?P<beta>[\d.]+)_mu(?P<mu>[-\d.]+)"
-                  r"_(?P<tag>ctint|pauli[\d.]+)\.h5$")
+                  r"_(?P<tag>ctint|pauli[\d.]+(?:_(?:crm|dyson)_eps[\de.+-]+)?(?:_(?:waves|sites))?)\.h5$")
 SCHEMES = ("DCA", "CDMFT")
 SPINS = ("up", "dn")
 
 COLOR = {"CTINT": "#2a78d6", "CTHYB p=0": "#eb6834", "CTHYB p=0.5": "#1baf7a"}  # slots 1-3 of the dataviz palette
 MARKER = {"CTINT": "o", "CTHYB p=0": "s", "CTHYB p=0.5": "^"}
+MORE = (("#eda100", "D"), ("#e87ba4", "v"), ("#008300", "P"), ("#6250d6", "X"), ("#e34948", "*"))  # slots 4-8, for the rest
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 MIN_SPAN = 0.05  # smallest y range of a Sigma panel
 
 
 def label_of(tag):
-    return "CTINT" if tag == "ctint" else f"CTHYB p={float(tag[5:]):g}"
+    """CTINT; CTHYB p=0.5 for the regular-mesh runs; CTHYB p=0.5 CRM ε=1e-07 for the DLR ones (Sigma fed back, DLR eps),
+    with " sites" for the site basis"""
+    if tag == "ctint":
+        return "CTINT"
+    m = re.fullmatch(r"pauli([\d.]+)(?:_(crm|dyson)_eps([^_]+))?(?:_(waves|sites))?", tag)
+    label = f"CTHYB p={float(m[1]):g}"
+    if m[2] is not None:
+        label += f" {'CRM' if m[2] == 'crm' else 'Dyson'} ε={float(m[3]):.0e}"
+    return label + (" sites" if m[4] == "sites" else "")
 
 
 # ---- Cluster momenta of a run, in either file format ----
@@ -90,18 +103,27 @@ def star_name(s):
 
 # ---- Loading ----
 
+def add_by_star(acc, sigma_site, params):
+    """Append the diagonal of the cluster Fourier transform of a site-basis Sigma, (n_w, N, N), to acc by star"""
+    sites, K = sites_and_momenta(params)
+    U = np.exp(1j * sites @ K.T) / np.sqrt(len(sites))  # [R, K]
+    sigma_K = np.einsum("rk,wrs,sk->wk", U.conj(), sigma_site, U)
+    for k, Kv in enumerate(K):
+        acc.setdefault(star(Kv), []).append(sigma_K[:, k])
+
+
 def sigma_by_star(it_group, params):
     """`(w_n, {star: Sigma(K, iw_n)})` on the positive frequencies of the run's Matsubara mesh (regular, or DLR), averaged
     over spins and the K of each star"""
     acc = {}
     if "Sigma" in it_group:  # CTINT, (n_w, N, N) in the site basis, on the regular mesh
-        sites, K = sites_and_momenta(params)
-        U = np.exp(1j * sites @ K.T) / np.sqrt(len(sites))  # [R, K]
-        sigma_K = np.einsum("rk,wrs,sk->wk", U.conj(), it_group["Sigma"], U)
-        n_w = len(sigma_K)
+        add_by_star(acc, it_group["Sigma"], params)
+        n_w = len(it_group["Sigma"])
         w = (2 * np.arange(-(n_w // 2), n_w - n_w // 2) + 1) * np.pi / float(params["beta"])
-        for k, Kv in enumerate(K):
-            acc.setdefault(star(Kv), []).append(sigma_K[:, k])
+    elif params.get("basis") == "sites":  # CTHYB in the site basis, one N x N block per spin
+        for name, g in it_group["Sigma_iw"]:
+            w = np.array([complex(x).imag for x in g.mesh.values()])
+            add_by_star(acc, g.data, params)
     else:  # CTHYB, blocks of the cos/sin waves joined by "|" (one wave per block in DCA), per spin
         L = int(params.get("L", 0))
         sigma = it_group["Sigma_iw"]
@@ -123,8 +145,10 @@ def load(path):
         for i in range(A["n_iter"]):
             g = A[f"it{i}"]
             wn, sigma = sigma_by_star(g, params)
-            its.append(dict(sigma=sigma, **{k: g[k] for k in ("density", "average_sign", "average_order",
-                                                              "solve_seconds", "auto_corr_time")
+            its.append(dict(sigma=sigma, **{k: g[k] for k in ("density", "average_sign", "average_order", "solve_seconds",
+                                                              "auto_corr_time", "n_measures", "warmup_seconds",
+                                                              "accumulation_seconds", "n_ranks", "n_subspaces",
+                                                              "largest_subspace")
                                            if k in g}))
     keep = wn <= args.w_max
     for it in its:
@@ -149,17 +173,34 @@ for path in sorted(glob.glob(os.path.join(os.path.expanduser(args.data_dir), "cl
     runs.setdefault(key, {}).setdefault(m["scheme"], {})[label_of(m["tag"])] = run
 if not runs:
     print(f"No cluster_*.h5 runs in {args.data_dir}")
+extra = sorted({label for schemes in runs.values() for by_label in schemes.values() for label in by_label} - set(COLOR))
+if len(extra) > len(MORE):
+    raise SystemExit(f"{len(extra)} kinds of CTHYB run in {args.data_dir}, more than the {len(MORE)} colors left: move some aside")
+for label, (color, marker) in zip(extra, MORE):
+    COLOR[label], MARKER[label] = color, marker
 
 # ---- Summary ----
 
-print(f"{'run':40s} {'iter':>4s} {'<n>':>7s} {'sign':>7s} {'order':>7s} {'autocorr':>8s} {'solve s':>8s}")
+def cost_columns(it):
+    """Measurements and independent samples per second and rank, seconds outside the Monte Carlo, subspaces"""
+    if "n_measures" not in it:
+        return f"{'':>9s} {'':>9s} {'':>8s} {'':>12s}"
+    rate = it["n_measures"] / (it["n_ranks"] * it["accumulation_seconds"])
+    indep = rate * it["average_sign"] ** 2 / (1 + 2 * it["auto_corr_time"])
+    other = it["solve_seconds"] - it["warmup_seconds"] - it["accumulation_seconds"]
+    subspaces = f"{it['n_subspaces']}/{it['largest_subspace']}"
+    return f"{rate:9.3g} {indep:9.3g} {other:8.1f} {subspaces:>12s}"
+
+
+print(f"{'run':66s} {'iter':>4s} {'<n>':>7s} {'sign':>7s} {'order':>7s} {'autocorr':>8s} {'solve s':>8s} "
+      f"{'meas/s':>9s} {'indep/s':>9s} {'other s':>8s} {'subspaces':>12s}")
 for (cluster, U, beta, mu), schemes in runs.items():
     for scheme, by_label in schemes.items():
         for label, run in sorted(by_label.items()):
             last = run["its"][-1]
-            print(f"{f'{cluster} {scheme} U={U} beta={beta} {label}':40s} {len(run['its']):4d} {last['density']:7.4f} "
+            print(f"{f'{cluster} {scheme} U={U} beta={beta} {label}':66s} {len(run['its']):4d} {last['density']:7.4f} "
                   f"{last['average_sign']:7.4f} {last['average_order']:7.1f} {last.get('auto_corr_time', np.nan):8.2f} "
-                  f"{last['solve_seconds']:8.0f}")
+                  f"{last['solve_seconds']:8.0f} {cost_columns(last)}")
 
 # ---- Figures ----
 

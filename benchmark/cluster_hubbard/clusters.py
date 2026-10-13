@@ -2,7 +2,7 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-r"""Square-lattice clusters for DCA and CDMFT, shared by cluster_4x4.py (CTHYB) and cluster_ctint.py (CTINT).
+r"""Square-lattice clusters for DCA and CDMFT, shared by cluster_cthyb.py (CTHYB) and cluster_ctint.py (CTINT).
 
 A cluster is given by its superlattice vectors A1, A2: the sites are the lattice points in the cell they span, the
 cluster momenta K the points of the reciprocal superlattice (B_i . A_j = 2 pi delta_ij) in the Brillouin zone, and k~

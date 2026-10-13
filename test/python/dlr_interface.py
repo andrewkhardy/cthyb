@@ -96,6 +96,9 @@ S = dlr_solver(eps=0.2)
 S.solve(h_int=0 * n('up', 0) * n('dn', 0), **mc)
 
 assert S.G_iw.mesh == dlr_mesh and S.Sigma_iw.mesh == dlr_mesh
+for bl, g in S.G_dlr:  # the fit holds the 1/iw moment: G(0) + G(beta) = -1
+    ends = make_gf_imtime(g, 2).data[:, 0, 0]
+    assert abs(ends[0] + ends[-1] + 1) < 1e-8, f"G_dlr[{bl}](0) + G_dlr[{bl}](beta) = {ends[0] + ends[-1]}"
 assert max_diff(S.G_iw, S.G0_iw) < 0.05, f"G_iw != G0_iw at U = 0: {max_diff(S.G_iw, S.G0_iw)}"
 low = [i for i, w in enumerate(dlr_mesh.values()) if abs((2 * w.n + 1) * np.pi / beta) < 2.0]
 for bl, sigma in S.Sigma_iw:

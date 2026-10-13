@@ -74,8 +74,8 @@ case "$WHAT" in
     scan "$SS" spin_spin $MODEL --beta 100 --filling 0.75 --mu 4.068123 --jperp 1 --szsz 1
     scan "$SS" spin_spin $MODEL --beta 10  --filling 0.5  --jperp 0 --szsz 1
     ;;
-  cluster)  # as run_cluster_4x4.sh, one iteration
-    CL="../../cluster_4x4/cluster_ctint.py"
+  cluster)  # as run_cluster.sh, one iteration
+    CL="../../cluster_hubbard/cluster_ctint.py"
     MODEL="--U 6.0 --beta 10.0 --n_loops 1 --n_warmup_cycles 5000"
     for scheme in DCA CDMFT; do
       scan "$CL" cluster $MODEL --cluster 2x2 --scheme "$scheme"

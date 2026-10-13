@@ -739,6 +739,9 @@ static constexpr auto prop_doc_92a8d1b7 = R"DOC(Parameters used in the last solv
 static constexpr auto prop_doc_31d56a88 = R"DOC(Is the solver compiled with support for a complex local Hamiltonian?)DOC";
 static constexpr auto prop_doc_5aaceaa3 = R"DOC(Histograms related to the performance analysis.)DOC";
 static constexpr auto prop_doc_33aa8ad4 = R"DOC(Status of the solve on exit.)DOC";
+static constexpr auto prop_doc_3e6581e1 = R"DOC(Number of measurements (cycles) of the last solve, summed over the MPI ranks.)DOC";
+static constexpr auto prop_doc_7d55ec0b = R"DOC(Seconds of warmup of the last solve, on this rank.)DOC";
+static constexpr auto prop_doc_f9eef849 = R"DOC(Seconds of accumulation of the last solve, on this rank.)DOC";
 
 // ----- Member and property table ----
 
@@ -787,6 +790,7 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_7e768e6a>[] = {
    {"Delta_tau", c2py::getter_from_method<c2py::castm<>(&triqs_cthyb::solver_core::Delta_tau)>, nullptr, prop_doc_8edb23e9, nullptr},
    {"G0_iw", c2py::getter_from_method<c2py::castm<>(&triqs_cthyb::solver_core::G0_iw)>, nullptr, prop_doc_2748acea, nullptr},
    {"Jperp_tau", c2py::getter_from_method<c2py::castm<>(&triqs_cthyb::solver_core::Jperp_tau)>, nullptr, prop_doc_2574c814, nullptr},
+   {"accumulation_time", c2py::getter_from_method<c2py::castmc<>(&triqs_cthyb::solver_core::accumulation_time)>, nullptr, prop_doc_f9eef849, nullptr},
    {"auto_corr_time", c2py::getter_from_method<c2py::castmc<>(&triqs_cthyb::solver_core::auto_corr_time)>, nullptr, prop_doc_2036d594, nullptr},
    {"auto_corr_time_converged", c2py::getter_from_method<c2py::castmc<>(&triqs_cthyb::solver_core::auto_corr_time_converged)>, nullptr,
     prop_doc_4545a854, nullptr},
@@ -807,9 +811,11 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_7e768e6a>[] = {
     nullptr},
    {"local_hamiltonian_is_complex", c2py::getter_from_method<c2py::castmc<>(&triqs_cthyb::solver_core::local_hamiltonian_is_complex)>, nullptr,
     prop_doc_31d56a88, nullptr},
+   {"n_measures", c2py::getter_from_method<c2py::castmc<>(&triqs_cthyb::solver_core::n_measures)>, nullptr, prop_doc_3e6581e1, nullptr},
    {"performance_analysis", c2py::getter_from_method<c2py::castmc<>(&triqs_cthyb::solver_core::get_performance_analysis)>, nullptr, prop_doc_5aaceaa3,
     nullptr},
    {"solve_status", c2py::getter_from_method<c2py::castmc<>(&triqs_cthyb::solver_core::solve_status)>, nullptr, prop_doc_33aa8ad4, nullptr},
+   {"warmup_time", c2py::getter_from_method<c2py::castmc<>(&triqs_cthyb::solver_core::warmup_time)>, nullptr, prop_doc_7d55ec0b, nullptr},
    {nullptr, nullptr, nullptr, nullptr, nullptr}};
 
 template <>

@@ -20,7 +20,7 @@ r"""Summary of an alpha scan (run_ctint_alpha.sh), one table per model point, wi
     python summarize_ctint_alpha.py [scan_dir] [--ref_root DIR] [--plot FILE]
 
 scan_dir holds hubbard_holstein/, spin_spin/ and cluster/; ref_root holds the production hubbard_holstein/,
-spin_spin/ and cluster_4x4/ (both default to the ceph data). Locally, e.g.
+spin_spin/ and cluster_hubbard/ (both default to the ceph data). Locally, e.g.
     python summarize_ctint_alpha.py ~/Documents/Data/ctint_alpha --ref_root ~/Documents/Data --plot alpha_scan.pdf
 """
 import argparse
@@ -36,7 +36,7 @@ DATA = "/mnt/home/ahardy/ceph/CTHYB_Data"
 FAMILIES = {  # scan subdirectory: (reference subdirectory, reference solvers in order of preference)
     "hubbard_holstein": ("hubbard_holstein", ["ctseg", "ctint"]),
     "spin_spin": ("spin_spin", ["ctseg", "ctint"]),
-    "cluster": ("cluster_4x4", ["ctint"]),
+    "cluster": ("cluster_hubbard", ["ctint"]),
 }
 BASELINE = "signed 0.51"
 SCHEME_ORDER = ["signed 0.51", "near 0.01", "centred 0.3", "centred 0.2", "centred 0.1", "centred 0.05", "library 0.1"]

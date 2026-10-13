@@ -2,7 +2,7 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-r"""CTINT counterpart of cluster_4x4.py: the same cluster DCA / CDMFT (clusters.py) for the square-lattice Hubbard model,
+r"""CTINT counterpart of cluster_cthyb.py: the same cluster DCA / CDMFT (clusters.py) for the square-lattice Hubbard model,
 
     H = -t sum_<ij>,s c^dag_is c_js + U sum_i n_i,up n_i,dn - mu sum_i,s n_i,s,
 
@@ -10,7 +10,7 @@ with the same coarse graining, starting point and per-iteration report, to compa
 
 CTINT expands in density-density vertices (n_a - alpha)(n_b - alpha), so it works in the site basis, where U is one
 such term per site: gf_struct is one block of N sites per spin, in DCA as in CDMFT. In DCA the coarse graining is
-done per cluster momentum in the real cos/sin basis of cluster_4x4.py and rotated back to the sites. The alpha shifts
+done per cluster momentum in the real cos/sin basis of cluster_cthyb.py and rotated back to the sites. The alpha shifts
 are the signed ones of ../dynamic_int/common/ctint.py, and CTINT takes G0 on its DLR mesh: G0 is built on a regular
 Matsubara mesh, Fourier transformed and DLR-fitted, as in the dynamic_int CTINT runs. Sigma = G0^-1 - G^-1 on the
 regular mesh, from CTINT's G (a DLR expansion, so its high-frequency tail is smooth).
@@ -57,7 +57,7 @@ ctint.add_alpha_args(parser)
 args = parser.parse_args()
 mu = args.U / 2 if args.mu is None else args.mu
 
-# ---- Cluster and lattice, as in cluster_4x4.py ----
+# ---- Cluster and lattice, as in cluster_cthyb.py ----
 
 CL = Cluster(args.cluster, args.n_k)
 P, K_OF, N = CL.P, CL.K_of, CL.N

@@ -573,6 +573,9 @@ namespace triqs_cthyb {
        qmc.warmup_and_accumulate(params.n_warmup_cycles, params.n_cycles, params.length_cycle,
                                  triqs::utility::clock_callback(params.max_time), sign);
     qmc.collect_results(_comm);
+    _n_measures        = mpi::all_reduce(long(qmc.get_nmeasures()), _comm);
+    _warmup_time       = qmc.get_warmup_time();
+    _accumulation_time = qmc.get_accumulation_time();
 
     // set the last configuration
     _last_configuration = data.config;
