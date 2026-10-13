@@ -8,8 +8,8 @@
 # span{N_up, N_down} can go to Lang-Firsov, and --lang_firsov False samples all of it.
 #
 # The solver runs in its DLR mode: Delta goes in, and G comes out, on the DLR Matsubara mesh (common/grids.py).
-# Saved: G(tau) and Sigma on the positive DLR frequencies per patch orbital, and corr = O_tau =
-# <S^z_tot(tau) S^z_tot(0)> (measure_O_tau needs [O, h_loc] = 0, which the site and patch spins fail).
+# Saved: G(tau) and Sigma on the positive DLR frequencies per patch orbital, and corr = chiAB_tau =
+# <S^z_tot(tau) S^z_tot(0)>.
 
 import argparse
 import os
@@ -43,7 +43,7 @@ parser.add_argument('--out_dir', default=os.path.join(os.path.dirname(os.path.ab
 args = parser.parse_args()
 M = model_def.Model(args)
 
-# One tau grid for G, the kernel and O_tau, shared with run_ed.py (common/grids.py).
+# One tau grid for G, the kernel and chiAB_tau, shared with run_ed.py (common/grids.py).
 n_iw, n_tau = grids.N_IW, grids.N_TAU
 n_tau_bosonic = n_tau
 S = Solver(beta=M.beta, gf_struct=M.gf_struct, n_iw=n_iw, n_tau=n_tau,
@@ -78,7 +78,7 @@ S.solve(h_int=M.h_int(), h_loc0=M.h_loc0(),
         dyn_n_l=args.dyn_n_l,
         measure_pert_order=True,
         measure_D0_corr=True,
-        measure_O_tau=(M.Sz_total, M.Sz_total),
+        measure_chiAB_tau=True, chi_A_vec=M.Sz_total, chi_B_vec=M.Sz_total,
         measure_density_matrix=args.density_matrix,
         use_norm_as_weight=args.density_matrix,
         **({} if args.random_seed is None else dict(random_seed=args.random_seed + 928374 * mpi.rank)))
@@ -116,11 +116,11 @@ if mpi.is_master_node():
         A['density'] = density
         A['labels'] = [f"{s},{K}" for s, K in M.labels]
         # <S^z_tot(tau) S^z_tot(0)> = sum_ij of run_ed.py's chi_zz
-        A['tau_corr'] = np.array([float(t) for t in S.O_tau.mesh])
-        A['corr'] = np.asarray(S.O_tau.data).real.flatten()
+        A['tau_corr'] = np.array([float(t) for t in S.chiAB_tau.mesh])
+        A['corr'] = np.asarray(S.chiAB_tau.data).real.flatten()
         A['G_tau'] = S.G_tau
         A['G_dlr'] = S.G_dlr
-        A['O_tau'] = S.O_tau
+        A['chiAB_tau'] = S.chiAB_tau
         A['Q_conserved_tau'] = S.Q_conserved_tau
         A['conserved_operators'] = [str(op) for op in S.conserved_density_operators]
         A['average_sign'] = S.average_sign

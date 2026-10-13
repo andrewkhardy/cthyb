@@ -132,24 +132,30 @@ namespace triqs_cthyb {
     /// Measure \f$ G_l \f$ (Legendre)? No hermiticity is enforced.
     bool measure_G_l = false;
 
-    /// Measure \f$ \langle O_2(\tau) O_1(0) \rangle \f$ for measure_O_tau = (O_1, O_2), lists of bosonic operators (an
-    /// even number of c and c^dagger in every term), whether or not they commute with h_loc: O_tau[tau](i, j) is
-    /// <O_2[i](tau) O_1[j](0)>, every pair measured on the same configurations, which share most of the work. (The Python
-    /// Solver also takes two single operators, for a scalar O_tau.) Measured at the nodes of a DLR grid (dlr_w_max,
-    /// dlr_eps), with the result in O_dlr and, on n_tau points, in O_tau. Operators that change the block of h_loc (S^+,
-    /// c^dagger_a c_b, ...) cost more.
-    std::optional<std::pair<std::vector<many_body_op_t>, std::vector<many_body_op_t>>> measure_O_tau = {};
+    /// Measure \f$ \chi_{AB}(\tau) = \langle A_i(\tau) B_j(0) \rangle \f$ by insertion, as CTINT's measure_chiAB_tau, for the
+    /// lists chi_A_vec and chi_B_vec of bosonic operators (an even number of c and c^dagger in every term), whether or not
+    /// they commute with h_loc: chiAB_tau[tau](i, j) is <A_i(tau) B_j(0)>, every pair measured on the same configurations,
+    /// which share most of the work. (The Python Solver also takes two single operators, for a scalar chiAB_tau.) Measured
+    /// at the nodes of a DLR grid (dlr_w_max, dlr_eps), with the result in chiAB_dlr and, on n_tau points, in chiAB_tau.
+    /// Operators that change the block of h_loc (S^+, c^dagger_a c_b, ...) cost more.
+    bool measure_chiAB_tau = false;
+
+    /// The operators \f$ A_i \f$ of measure_chiAB_tau, at tau.
+    std::vector<many_body_op_t> chi_A_vec = {};
+
+    /// The operators \f$ B_j \f$ of measure_chiAB_tau, at 0.
+    std::vector<many_body_op_t> chi_B_vec = {};
 
     /// Measure \f$ \langle n_a(\tau) n_b(0) \rangle \f$ for every pair of spin-orbitals, whether or not the n_a commute
     /// with h_loc. If they do and measure_D0_corr and measure_density_matrix are set, nn_tau is Q_tau from the occupation
-    /// kinks; otherwise it is measured like measure_O_tau, with the result in nn_dlr and, on n_tau_bosonic points, in nn_tau.
+    /// kinks; otherwise it is measured like measure_chiAB_tau, with the result in nn_dlr and, on n_tau_bosonic points, in nn_tau.
     bool measure_nn_tau = false;
 
-    /// Highest frequency of the DLR grid of measure_O_tau and measure_nn_tau. The correlators must have no spectral weight
+    /// Highest frequency of the DLR grid of measure_chiAB_tau and measure_nn_tau. The correlators must have no spectral weight
     /// above it; check by doubling it.
     double dlr_w_max = 20.0;
 
-    /// Accuracy of the DLR grid of measure_O_tau and measure_nn_tau.
+    /// Accuracy of the DLR grid of measure_chiAB_tau and measure_nn_tau.
     double dlr_eps = 1e-10;
 
     /// Measure density-density correlators from the occupation kinks: Q_conserved_tau for the density combinations that

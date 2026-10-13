@@ -95,7 +95,7 @@ class Solver(SolverCore):
         self.G_dlr = None
         self.G_tau_dlr = None
         self._retarded = False  # set by add_dyn_int
-        self._O_tau_scalar = False  # measure_O_tau of the last solve was two single operators
+        self._chiAB_scalar = False  # chi_A_vec and chi_B_vec of the last solve were single operators
         self.gf_struct = gf_struct
         self.n_iw = n_iw
         self.n_tau = n_tau
@@ -165,18 +165,18 @@ class Solver(SolverCore):
             self.add_dyn_vertex(bilinear(key1), bilinear(key2), np.real(coeff) * D)
 
     @property
-    def O_tau(self):
-        r""":math:`\langle O_2[i](\tau) O_1[j](0) \rangle` as ``O_tau[i, j]`` on the n_tau mesh, for
-        ``measure_O_tau = (O_1, O_2)`` with lists of operators; :math:`\langle O_2(\tau) O_1(0) \rangle`, a scalar
-        Gf, for two single operators."""
-        O = SolverCore.O_tau.__get__(self)
-        return O[0, 0] if O is not None and self._O_tau_scalar else O
+    def chiAB_tau(self):
+        r""":math:`\chi_{AB}(\tau) = \langle A_i(\tau) B_j(0) \rangle` as ``chiAB_tau[i, j]`` on the n_tau mesh, for
+        ``measure_chiAB_tau=True`` with the lists ``chi_A_vec`` and ``chi_B_vec``, as in CTINT; a scalar Gf
+        :math:`\langle A(\tau) B(0) \rangle` for two single operators."""
+        chi = SolverCore.chiAB_tau.__get__(self)
+        return chi[0, 0] if chi is not None and self._chiAB_scalar else chi
 
     @property
-    def O_dlr(self):
-        """O_tau as DLR coefficients, from which it is evaluated at any tau or Matsubara frequency."""
-        O = SolverCore.O_dlr.__get__(self)
-        return O[0, 0] if O is not None and self._O_tau_scalar else O
+    def chiAB_dlr(self):
+        """chiAB_tau as DLR coefficients, from which it is evaluated at any tau or Matsubara frequency."""
+        chi = SolverCore.chiAB_dlr.__get__(self)
+        return chi[0, 0] if chi is not None and self._chiAB_scalar else chi
 
     def solve(self, **params_kw):
         r"""
@@ -234,6 +234,10 @@ class Solver(SolverCore):
                 val = params_kw.pop(key)
                 params_kw[depr_params[key]] = val
 
+        if "measure_O_tau" in params_kw:
+            raise ValueError("measure_O_tau=(O_1, O_2) is now measure_chiAB_tau=True, chi_A_vec=O_2, chi_B_vec=O_1, as in "
+                             "CTINT, with the result <O_2(tau) O_1(0)> in chiAB_tau and chiAB_dlr")
+
         # -- Tail post proc flags
 
         perform_post_proc = params_kw.pop("perform_post_proc", True)
@@ -269,12 +273,13 @@ class Solver(SolverCore):
         # The moments come from this solve's density matrix, or are not known
         self.G_moments = self.Sigma_moments = self.Sigma_Hartree = self.orbital_occupations = None
 
-        # measure_O_tau = (O_1, O_2) takes two operators or two lists of them; the core takes lists, and O_tau and O_dlr
-        # are scalar for two operators
-        O_pair = params_kw.get("measure_O_tau")
-        self._O_tau_scalar = O_pair is not None and all(isinstance(O, Operator) for O in O_pair)
-        if O_pair is not None:
-            params_kw["measure_O_tau"] = tuple([O] if isinstance(O, Operator) else list(O) for O in O_pair)
+        # chi_A_vec and chi_B_vec take two operators or two lists of them; the core takes lists, and chiAB_tau and
+        # chiAB_dlr are scalar for two operators
+        chi_ops = [params_kw.get(key) for key in ("chi_A_vec", "chi_B_vec")]
+        self._chiAB_scalar = all(isinstance(O, Operator) for O in chi_ops)
+        for key, O in zip(("chi_A_vec", "chi_B_vec"), chi_ops):
+            if O is not None:
+                params_kw[key] = [O] if isinstance(O, Operator) else list(O)
 
         # Call the core solver's solve routine
         solve_status = SolverCore.solve(self, SolveParametersT(**params_kw))

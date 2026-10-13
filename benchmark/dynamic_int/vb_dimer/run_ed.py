@@ -256,7 +256,7 @@ for a, (s, K) in enumerate(labels):
     Sigma_iw[a] = (iw + M.mu - M.eps_patch[K] - delta_iw) - 1.0 / G_iw[a]
 print(f"Sigma: Im<0 on the first 20 w_n for every orbital: {bool(np.all(Sigma_iw[:, :20].imag < 0))}")
 
-# sum_ij chi^zz_ij is <S^z_tot(tau) S^z_tot(0)>, what CTHYB measures as O_tau.
+# sum_ij chi^zz_ij is <S^z_tot(tau) S^z_tot(0)>, what CTHYB measures as chiAB_tau.
 chi_tot = chi_zz.sum(axis=(0, 1))
 print(f"sum_ij chi^zz_ij(0) = {chi_tot[0]:.6f}   (= <(S^z_tot)^2>)")
 
@@ -271,7 +271,7 @@ with HDFArchive(filename, 'w') as A:
     A['Sigma'] = Sigma_iw
     A['chi_zz'] = chi_zz
     A['chi_zz_total'] = chi_tot
-    # Same keys CTHYB writes for its O_tau, so the plot compares them directly.
+    # Same keys CTHYB writes for its chiAB_tau, so the plot compares them directly.
     A['tau_corr'] = tau
     A['corr'] = chi_tot
     A['labels'] = [f"{s},{K}" for s, K in labels]

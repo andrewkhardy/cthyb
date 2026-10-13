@@ -2,7 +2,7 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 # See LICENSE in the root of this distribution for details.
-r"""Plots of the cluster_cthyb.py (CTHYB) and cluster_ctint.py (CTINT) runs in a data directory, three figures per cluster:
+r"""Plots of the cluster_cthyb.py (CTHYB) and cluster_ctint.py (CTINT) runs in a data directory, four figures per cluster:
 
   iterations   rows DCA / CDMFT; columns average sign, expansion order, autocorrelation time (CTHYB) and the change of
                Sigma between successive iterations, max over K and 0 <= w_n <= --w_max of |Sigma_it - Sigma_it-1|.
@@ -13,6 +13,10 @@ r"""Plots of the cluster_cthyb.py (CTHYB) and cluster_ctint.py (CTINT) runs in a
                charge structure factors S(q) = 1/N sum_RR' e^{iq.(R - R')} C_RR', C = <S^z_R S^z_R'> and
                <n_R n_R'> - <n_R><n_R'>, and the static susceptibilities chi(q), the same with C(tau) integrated over
                tau; and <S^z_Q(tau) S^z_Q(0)> / N at Q = (pi, pi), whose integral is chi_s(pi, pi).
+  estimators   for the CTHYB runs that feed back the CRM Sigma, the two estimators of Sigma from the same G: rows Im
+               Sigma(K, iw_n) of the final solve (or last iteration), CRM (line) against the plain Dyson Sigma
+               G0^-1 - G^-1 (markers), and |Sigma_CRM - Sigma_Dyson| of the first iteration (dotted) and of the final
+               solve (line), for DCA and CDMFT; one column per star of K; on every DLR frequency, not only up to --w_max.
 
 Sigma(K) is the diagonal of the cluster Fourier transform of Sigma_sites, the site-basis Sigma that both drivers feed
 back and save, on the frequencies of their DLR mesh. Earlier runs are read too: CTHYB from the Sigma_iw of its cos/sin
@@ -35,8 +39,8 @@ from fractions import Fraction
 
 import matplotlib.pyplot as plt
 import numpy as np
-import triqs.gfs  # noqa: F401  (registers Gf and BlockGf with h5)
 from h5 import HDFArchive
+from triqs.gfs import make_gf_imtime  # also registers Gf and BlockGf with h5
 
 from clusters import Cluster
 
@@ -118,12 +122,12 @@ def add_by_star(acc, sigma_site, params):
         acc.setdefault(star(Kv), []).append(sigma_K[:, k])
 
 
-def sigma_by_star(it_group, params):
+def sigma_by_star(it_group, params, key="Sigma_sites"):
     """`(w_n, {star: Sigma(K, iw_n)})` on the positive frequencies of the run's Matsubara mesh (regular, or DLR), averaged
-    over spins and the K of each star"""
+    over spins and the K of each star; `key` names another site-basis Sigma, e.g. CTHYB's Sigma_sites_dyson"""
     acc = {}
-    if "Sigma_sites" in it_group:  # both solvers, the Sigma fed back, N x N in the site basis, on the DLR mesh
-        g = it_group["Sigma_sites"]
+    if key in it_group:  # both solvers, the Sigma fed back, N x N in the site basis, on the DLR mesh
+        g = it_group[key]
         w = np.array([complex(x).imag for x in g.mesh.values()])
         add_by_star(acc, g.data, params)
     elif "Sigma" in it_group:  # earlier CTINT runs, (n_w, N, N) in the site basis, on the regular mesh
@@ -175,6 +179,8 @@ def correlations(nn, nn_tau, szsz_Q, params):
     return corr
 
 
+N_TAU_DLR = 2001  # tau points on which the DLR correlators of CTHYB are sampled
+
 STATS = ("density", "average_sign", "average_order", "solve_seconds", "auto_corr_time", "n_measures", "warmup_seconds",
          "accumulation_seconds", "n_ranks", "n_subspaces", "largest_subspace")
 
@@ -183,7 +189,12 @@ def read_solve(g, params):
     """The frequencies, and Sigma by star, the statistics and, for a final solve, the correlations of one solve"""
     wn, sigma = sigma_by_star(g, params)
     solve = dict(sigma=sigma, **{k: g[k] for k in STATS if k in g})
-    if "nn_sites" in g:
+    if "Sigma_sites_dyson" in g:  # CTHYB: the plain Dyson Sigma of the same G, averaged as the Sigma fed back
+        solve["sigma_dyson"] = sigma_by_star(g, params, "Sigma_sites_dyson")[1]
+    if "nn_dlr_sites" in g:  # CTHYB's chiAB as DLR coefficients, sampled on tau for the integrals and the plot
+        solve["corr"] = correlations(g["nn_sites"], make_gf_imtime(g["nn_dlr_sites"], N_TAU_DLR),
+                                     make_gf_imtime(g["szsz_Q_dlr"], N_TAU_DLR), params)
+    elif "nn_sites" in g:  # CTINT, and the CTHYB runs from before the DLR correlators
         solve["corr"] = correlations(g["nn_sites"], g["nn_tau_sites"], g["szsz_Q_tau"], params)
     return wn, solve
 
@@ -200,9 +211,10 @@ def load(path):
             its.append(solve)
         final = read_solve(A["final"], params)[1] if "final" in A else None
     keep = wn <= args.w_max
-    for solve in its + ([final] if final else []):
+    for solve in its + ([final] if final else []):  # sigma_all and sigma_dyson on every frequency, for the estimators
+        solve["sigma_all"] = solve["sigma"]
         solve["sigma"] = {s: v[keep] for s, v in solve["sigma"].items()}
-    return dict(params=params, wn=wn[keep], its=its, final=final)
+    return dict(params=params, wn=wn[keep], wn_all=wn, its=its, final=final)
 
 
 runs = {}  # (cluster, U, beta, mu) -> scheme -> label -> run
@@ -387,11 +399,56 @@ def correlation_figure(key, schemes):
     finish(fig, cluster, "correlations")
 
 
+def estimator_figure(key, schemes):
+    cluster, U, beta, mu = key
+
+    def compared(scheme):  # the runs that feed back the CRM Sigma and saved the plain Dyson one: in a Dyson run they agree
+        return {label: run for label, run in sorted(schemes.get(scheme, {}).items())
+                if " CRM" in label and "sigma_dyson" in run["its"][0]}
+
+    rows = [scheme for scheme in SCHEMES if compared(scheme)]
+    if not rows:
+        return
+    stars = sorted({s for scheme in rows for run in compared(scheme).values() for s in run["its"][0]["sigma"]})
+    fig, axes = plt.subplots(2 * len(rows), len(stars), figsize=(3.4 * len(stars), 2.7 * 2 * len(rows)), squeeze=False,
+                             sharex=True)
+    for r, scheme in enumerate(rows):
+        top, bottom = axes[2 * r], axes[2 * r + 1]
+        for label, run in compared(scheme).items():
+            first, last = run["its"][0], run["final"] or run["its"][-1]
+            last_label = "final" if run["final"] else f"it {len(run['its']) - 1}"
+            w, color = run["wn_all"], COLOR[label]
+            for c, s in enumerate(stars):
+                top[c].plot(w, last["sigma_all"][s].imag, linewidth=2, color=color, label=f"{label}, {last_label}: CRM")
+                top[c].plot(w, last["sigma_dyson"][s].imag, linestyle="none", marker=MARKER[label], markersize=4.5,
+                            markerfacecolor="none", markeredgewidth=1.0, color=color, label=f"{label}, {last_label}: Dyson")
+                bottom[c].plot(w, np.abs(first["sigma_all"][s] - first["sigma_dyson"][s]), linewidth=1.4, linestyle=":",
+                               color=color, label=f"{label}, it 0")
+                bottom[c].plot(w, np.abs(last["sigma_all"][s] - last["sigma_dyson"][s]), linewidth=2, color=color,
+                               label=f"{label}, {last_label}")
+        for c, s in enumerate(stars):
+            for ax, ylabel in ((top[c], r"Im $\Sigma(K, i\omega_n)$"), (bottom[c], r"$|\Sigma_{CRM} - \Sigma_{Dyson}|$")):
+                style(ax)
+                ax.set_xscale("log")
+                ax.set_title(f"{scheme}, K = {star_name(s)}", fontsize=10, color=INK)
+                if c == 0:
+                    ax.set_ylabel(ylabel, fontsize=9, color=INK)
+            bottom[c].set_yscale("log")
+            if r == len(rows) - 1:
+                bottom[c].set_xlabel(r"$\omega_n$", fontsize=9, color=INK)
+        top[-1].legend(fontsize=7, frameon=False, loc="best")
+        bottom[-1].legend(fontsize=7, frameon=False, loc="best")
+    fig.suptitle(f"{cluster}, U = {U}, β = {beta}, μ = {mu}: CRM against plain Dyson Sigma from the same G",
+                 fontsize=11, color=INK)
+    finish(fig, cluster, "estimators")
+
+
 for key, schemes in runs.items():
     if any(len(run["its"]) > 1 for by_label in schemes.values() for run in by_label.values()):
         iteration_figure(key, schemes)
     sigma_figure(key, schemes)
     correlation_figure(key, schemes)
+    estimator_figure(key, schemes)
 
 if not args.save:
     plt.show()

@@ -7,7 +7,7 @@
 The phonon couples to the total density N, which is conserved, so every vertex is resummed
 analytically; `--lang_firsov False` (all stochastic) is the internal cross-check. The solver runs in
 its DLR mode: Delta goes in, and G comes out, on the DLR Matsubara mesh (common/grids.py). Saves
-Sigma on the positive DLR frequencies; <N(tau)N(0)> from O_tau and, as corr_alt, from the Legendre
+Sigma on the positive DLR frequencies; <N(tau)N(0)> from chiAB_tau and, as corr_alt, from the Legendre
 kink estimator Q_tau.
 """
 import numpy as np
@@ -46,7 +46,7 @@ S.solve(h_int=model.h_int(), h_loc0=model.h_loc0(),
         n_cycles=args.n_cycles, max_time=args.max_time,
         measure_G_tau=True,
         measure_pert_order=True,
-        measure_O_tau=(M.N_TOT, M.N_TOT),
+        measure_chiAB_tau=True, chi_A_vec=M.N_TOT, chi_B_vec=M.N_TOT,
         measure_D0_corr=True,
         measure_density_matrix=args.density_matrix, use_norm_as_weight=args.density_matrix,
         lang_firsov=args.lang_firsov, dyn_n_l=args.dyn_n_l)
@@ -83,7 +83,7 @@ if mpi.is_master_node():
         A["beta"], A["mu"] = model.beta, mu
         A["tau_G"], A["G"] = np.array([float(t) for t in G_up.mesh]), G_up.data[:, 0, 0].real
         A["w_n"], A["Sigma"] = w_n, sigma_up
-        A["tau_corr"], A["corr"] = np.array([float(t) for t in S.O_tau.mesh]), S.O_tau.data.real
+        A["tau_corr"], A["corr"] = np.array([float(t) for t in S.chiAB_tau.mesh]), S.chiAB_tau.data.real
         if nn_kink is not None:
             A["corr_alt"] = nn_kink
         A["density"], A["average_sign"] = density, S.average_sign

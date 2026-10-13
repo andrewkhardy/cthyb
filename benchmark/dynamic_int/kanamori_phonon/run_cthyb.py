@@ -31,8 +31,8 @@ parser.add_argument('--dyn_n_l', type=int, default=50, help='Legendre coefficien
 parser.add_argument('--lang_firsov', type=str2bool, default=True, help='False forces every vertex stochastic')
 parser.add_argument('--density_matrix', type=str2bool, default=True,
                     help='Measure the density matrix, so the equal-time <O_i O_j> is added back to Q_conserved_tau')
-parser.add_argument('--measure_O_tau', type=int, nargs=2, default=None, metavar=('A', 'B'),
-                    help='Measure O_tau = <n_B(tau) n_A(0)>, A and B indices into model.labels (ED: chi[B, A])')
+parser.add_argument('--measure_chiAB_tau', type=int, nargs=2, default=None, metavar=('A', 'B'),
+                    help='Measure chiAB_tau = <n_A(tau) n_B(0)>, A and B indices into model.labels (ED: chi[A, B])')
 parser.add_argument('--measure_nn_tau', type=str2bool, default=False,
                     help='Measure nn_tau = <n_a(tau) n_b(0)> for every pair, saved in model.labels order (ED: chi[a, b])')
 parser.add_argument('--random_seed', type=int, default=None,
@@ -54,10 +54,10 @@ S.Delta_iw << delta_block
 Q = M.Q(np.linspace(0, M.beta, n_tau_bosonic))
 S.add_dyn_int(Q, M.X, M.X)
 
-O_tau_args = {}
-if args.measure_O_tau is not None:
-    A_idx, B_idx = args.measure_O_tau
-    O_tau_args = dict(measure_O_tau=(n(*M.labels[A_idx]), n(*M.labels[B_idx])))
+chiAB_args = {}
+if args.measure_chiAB_tau is not None:
+    A_idx, B_idx = args.measure_chiAB_tau
+    chiAB_args = dict(measure_chiAB_tau=True, chi_A_vec=n(*M.labels[A_idx]), chi_B_vec=n(*M.labels[B_idx]))
 
 solve_start = time.perf_counter()
 S.solve(h_int=M.h_int(),
@@ -74,7 +74,7 @@ S.solve(h_int=M.h_int(),
         measure_density_matrix=args.density_matrix,
         use_norm_as_weight=args.density_matrix,
         measure_nn_tau=args.measure_nn_tau,
-        **O_tau_args,
+        **chiAB_args,
         **({} if args.random_seed is None else dict(random_seed=args.random_seed + 928374 * mpi.rank)))
 solve_seconds = time.perf_counter() - solve_start
 
@@ -125,9 +125,9 @@ if mpi.is_master_node():
 
     os.makedirs(args.out_dir, exist_ok=True)
     seed_tag = '' if args.random_seed is None else f"_seed-{args.random_seed}"
-    O_tau_tag = '' if args.measure_O_tau is None else f"_Otau-{args.measure_O_tau[0]}-{args.measure_O_tau[1]}"
+    chiAB_tag = '' if args.measure_chiAB_tau is None else f"_chiAB-{args.measure_chiAB_tau[0]}-{args.measure_chiAB_tau[1]}"
     nn_tau_tag = '_nntau' if args.measure_nn_tau else ''
-    filename = os.path.join(args.out_dir, f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}{O_tau_tag}{nn_tau_tag}{seed_tag}.h5")
+    filename = os.path.join(args.out_dir, f"cthyb_{M.tag()}_lf-{args.lang_firsov}_nc-{args.n_cycles}{chiAB_tag}{nn_tau_tag}{seed_tag}.h5")
     with HDFArchive(filename, 'w') as A:
         A['G_tau'] = S.G_tau
         A['G_dlr'] = S.G_dlr
@@ -152,9 +152,9 @@ if mpi.is_master_node():
         A['auto_corr_time_converged'] = S.auto_corr_time_converged
         A['random_seed'] = -1 if args.random_seed is None else args.random_seed
         A['solve_seconds'] = solve_seconds
-        if args.measure_O_tau is not None:
-            A['O_tau'] = S.O_tau
-            A['O_tau_pair'] = np.array(args.measure_O_tau)
+        if args.measure_chiAB_tau is not None:
+            A['chiAB_tau'] = S.chiAB_tau
+            A['chiAB_pair'] = np.array(args.measure_chiAB_tau)
         if args.measure_nn_tau:
             A['nn_tau'] = np.array([[S.nn_tau[s1, s2].data[:, o1, o2].real for s2, o2 in M.labels]
                                     for s1, o1 in M.labels])

@@ -7,7 +7,7 @@
 The Sz.Sz part couples conserved densities and is resummed analytically (Lang-Firsov) when
 lang_firsov=True; the spin flips are always sampled stochastically. The solver runs in its DLR
 mode: Delta goes in, and G comes out, on the DLR Matsubara mesh (common/grids.py). Saves Sigma on the
-positive DLR frequencies; <Sz(tau)Sz(0)> from O_tau and, as corr_alt, from the Legendre kink estimator Q_tau.
+positive DLR frequencies; <Sz(tau)Sz(0)> from chiAB_tau and, as corr_alt, from the Legendre kink estimator Q_tau.
 """
 import numpy as np
 import triqs.utility.mpi as mpi
@@ -58,7 +58,7 @@ S.solve(h_int=model.h_int(), h_loc0=model.h_loc0(),
         n_cycles=args.n_cycles, max_time=args.max_time,
         measure_G_tau=True,
         measure_pert_order=True,
-        measure_O_tau=(M.SZ, M.SZ),
+        measure_chiAB_tau=True, chi_A_vec=M.SZ, chi_B_vec=M.SZ,
         measure_D0_corr=True,
         measure_density_matrix=args.density_matrix, use_norm_as_weight=args.density_matrix,
         lang_firsov=args.lang_firsov, dyn_n_l=args.dyn_n_l, **model.seed_kwargs())
@@ -77,7 +77,7 @@ if mpi.is_master_node():
         density = selfenergy.density_from_G_dlr(S.G_dlr)
 
     # With the density matrix measured, the Python Solver has already added the equal-time
-    # <n_a n_b> to Q_tau; without it Q_tau is a different observable from O_tau, so not saved.
+    # <n_a n_b> to Q_tau; without it Q_tau is a different observable from chiAB_tau, so not saved.
     Q = S.Q_tau
     szsz_kink = None
     if args.density_matrix and Q is not None:
@@ -97,7 +97,7 @@ if mpi.is_master_node():
         A["beta"], A["mu"] = model.beta, mu
         A["tau_G"], A["G"] = tau_G, G_up.data[:, 0, 0].real
         A["w_n"], A["Sigma"] = w_n, sigma_up
-        A["tau_corr"], A["corr"] = np.array([float(t) for t in S.O_tau.mesh]), S.O_tau.data.real
+        A["tau_corr"], A["corr"] = np.array([float(t) for t in S.chiAB_tau.mesh]), S.chiAB_tau.data.real
         if szsz_kink is not None:
             A["corr_alt"] = szsz_kink
         A["density"], A["average_sign"] = density, S.average_sign

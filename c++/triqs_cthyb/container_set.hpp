@@ -44,11 +44,11 @@ namespace triqs_cthyb {
     /// Single-particle Green's function \f$ G_l \f$ in the Legendre representation.
     std::optional<G_l_t> G_l;
 
-    /// :math:`\langle O_2[i](\tau) O_1[j](0) \rangle` as O_tau[tau](i, j) for measure_O_tau = (O_1, O_2).
-    std::optional<gf<imtime, matrix_valued>> O_tau;
+    /// :math:`\chi_{AB}(\tau) = \langle A_i(\tau) B_j(0) \rangle` as chiAB_tau[tau](i, j) for the operators chi_A_vec and chi_B_vec.
+    std::optional<gf<imtime, matrix_valued>> chiAB_tau;
 
-    /// O_tau as DLR coefficients, from which it is evaluated at any tau or Matsubara frequency.
-    std::optional<gf<dlr, matrix_valued>> O_dlr;
+    /// chiAB_tau as DLR coefficients, from which it is evaluated at any tau or Matsubara frequency.
+    std::optional<gf<dlr, matrix_valued>> chiAB_dlr;
 
     /// :math:`\langle n_a(\tau) n_b(0) \rangle` for every pair of spin-orbitals, as nn_tau[bl_a, bl_b][tau](i_a, i_b).
     std::optional<Q_tau_t> nn_tau;

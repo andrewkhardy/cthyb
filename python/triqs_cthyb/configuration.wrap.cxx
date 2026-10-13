@@ -285,38 +285,14 @@ static const auto _c2py_doc_a52e0d94 = _c2py_fun_a52e0d94.doc(R"DOC(
 Clear the configuration (remove all operators).
 )DOC");
 static const auto _c2py_doc_8b2b8697 = _c2py_fun_8b2b8697.doc(R"DOC(
-Erase the operator at a given imaginary time.
-
-Parameters
-----------
-tau : {par_0}
-   Imaginary time at which to erase the operator.
-)DOC",
-                                                              {{}});
-static const auto _c2py_doc_b3a77f9a =
-   _c2py_fun_b3a77f9a.doc(R"DOC(
-Insert a given operator at a given imaginary time.
-
-Parameters
-----------
-tau : {par_0}
-   Imaginary time at which to insert the operator.
-op : {par_1}
-   Description of the operator to insert.
-)DOC",
-                          {{c2py::python_typename<triqs::utility::time_pt>()}, {c2py::python_typename<triqs_cthyb::op_desc>()}});
-static const auto _c2py_doc_48eed345 =
-   _c2py_fun_48eed345.doc(R"DOC(
-Replace an existing operator at a given imaginary time with a new one.
-
-Parameters
-----------
-tau : {par_0}
-   Imaginary time at which to replace the operator.
-op : {par_1}
-   Description of the operator to insert.
-)DOC",
-                          {{c2py::python_typename<triqs::utility::time_pt>()}, {c2py::python_typename<triqs_cthyb::op_desc>()}});
+Erase the operator at imaginary time t.
+)DOC");
+static const auto _c2py_doc_b3a77f9a = _c2py_fun_b3a77f9a.doc(R"DOC(
+Insert the operator op at imaginary time tau.
+)DOC");
+static const auto _c2py_doc_48eed345 = _c2py_fun_48eed345.doc(R"DOC(
+Replace the operator at imaginary time tau with op.
+)DOC");
 
 // ----- Method table ----
 // clang-format off

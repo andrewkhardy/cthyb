@@ -36,11 +36,13 @@ back, and Sigma_sites the same in the site basis.
 
 The loop measures only what it needs, G and the density matrix (for the CRM). After it, a final solve of --final_time
 seconds at the converged Sigma, saved as the group final, also measures the density-density correlators of the sites:
-<n_a(tau) n_b(0)>, a = sigma N + R, of every pair (nn_tau_sites, by measure_O_tau with the list of the n_a, in any
-basis of the solver), from it <S^z_Q(tau) S^z_Q(0)> at Q = (pi, pi) (szsz_Q_tau), and the equal-time <n_a n_b>
-exactly, from the density matrix (nn_sites). It saves the density matrix and the eigenbasis of h_loc too, for any
-other equal-time observable (triqs.atom_diag.trace_rho_op, with the operators c_site
-builds from Q). Every file holds Q and the names of its orbitals, the sites and momenta of the cluster and the git
+<n_a(tau) n_b(0)>, a = sigma N + R, of every pair (nn_dlr_sites, by measure_chiAB_tau with chi_A_vec = chi_B_vec the n_a,
+in any basis of the solver, as cluster_ctint.py measures them by CTINT's), from it <S^z_Q(tau) S^z_Q(0)> at
+Q = (pi, pi) (szsz_Q_dlr), and the equal-time <n_a n_b> twice, to compare their accuracy: exactly from the density
+matrix (nn_sites), and as chiAB at tau = 0 (nn_sites_chiAB), the estimator CTINT has. The correlators are measured by
+insertion at the nodes of the bosonic DLR grid of --dlr_wmax and --dlr_eps only, and saved as its DLR coefficients, as
+G is (G_dlr): no file holds data on a regular tau or Matsubara mesh. It saves the density matrix and the eigenbasis of
+h_loc too, for any other equal-time observable (triqs.atom_diag.trace_rho_op, with the operators c_site builds from Q). Every file holds Q and the names of its orbitals, the sites and momenta of the cluster and the git
 version of the code.
 
 With eps(k) = -2t (cos kx + cos ky) and the H(k~) of clusters.py on the k~ of its DCA patch,
@@ -54,9 +56,10 @@ off by up to ~3t on 2x2 at 2e4 cycles. The loop runs on the frequencies of the D
 default (--dlr_sigma crm) Sigma is the solver's constrained residual minimization of Dyson's equation with the
 density-matrix moments Sigma_0 and Sigma_1, which holds the tail without a fit window; --dlr_sigma dyson feeds back the
 plain Dyson Sigma = G0^-1 - G^-1 at each DLR frequency instead, whose noise grows as w^2. Every run saves the plain
-Dyson Sigma as Sigma_iw_raw. --dlr_eps is 1e-7, not 1e-10: on 2x2 DCA at 2e4 cycles the constraint of the CRM is met to
-~1e-9 at 1e-7 and missed by 1e3-1e4 at 1e-10, whose basis fits the noise. The output file is tagged with the two and the
-basis.
+Dyson Sigma as Sigma_iw_raw, and, averaged over the spins and the symmetries of the cluster as the Sigma fed back is, in
+the sites as Sigma_sites_dyson: in a CRM run, the two estimators of Sigma from the same G (plot_cluster.py, estimators).
+--dlr_eps is 1e-7, not 1e-10: on 2x2 DCA at 2e4 cycles the constraint of the CRM is met to ~1e-9 at 1e-7 and missed by
+1e3-1e4 at 1e-10, whose basis fits the noise. The output file is tagged with the two and the basis.
 
 Feasibility: CTHYB diagonalizes the cluster Hamiltonian in its invariant subspaces and keeps dense matrices of them.
 Before building anything, the script estimates the largest subspace: the half-filled (N_up, N_dn) sector, split evenly
@@ -205,15 +208,26 @@ def set_delta(sigma):
     return G0_iw
 
 
+def symmetrized(sigma_iw):
+    """A Sigma in the blocks of the solver (a BlockGf), paramagnetic and averaged over the symmetries of the cluster:
+    (n_w, N, N) in the basis of the solver, zero outside its blocks"""
+    sigma = np.zeros((len(iw), N, N), dtype=complex)
+    for name, b in zip(BLOCK_NAMES, BLOCKS):
+        sigma[np.ix_(np.arange(len(iw)), b, b)] = np.mean([sigma_iw[f"{s}_{name}"].data for s in SPINS], axis=0)
+    return np.where(INSIDE, Q.T @ CL.symmetrize(Q @ sigma @ Q.T, args.scheme) @ Q, 0)
+
+
 h_int = args.U * sum(n_site("up", r) * n_site("dn", r) for r in range(N))
 
 params = dict(h_int=h_int, h_loc0=h_loc0, n_cycles=args.n_cycles, n_warmup_cycles=args.n_warmup_cycles,
               length_cycle=args.length_cycle, max_time=args.max_time, pauli_prob=args.pauli_prob, dlr_sigma=args.dlr_sigma,
               measure_density_matrix=True, use_norm_as_weight=True, imag_threshold=1e-10)  # the k~ sum leaves ~1e-13 in Im Delta of CDMFT blocks
 
-# The final solve also measures <n_a(tau) n_b(0)>, a = sigma N + R, for every pair
+# The final solve also measures <n_a(tau) n_b(0)>, a = sigma N + R, for every pair, at the nodes of the bosonic DLR grid
+# of the loop's w_max and eps: the cost of the insertions goes with the number of nodes
 NN_OPS = [n_site(s, r) for s in SPINS for r in range(N)]
-final_params = dict(params, max_time=args.final_time, measure_O_tau=(NN_OPS, NN_OPS))
+final_params = dict(params, max_time=args.final_time, measure_chiAB_tau=True, chi_A_vec=NN_OPS, chi_B_vec=NN_OPS,
+                    dlr_w_max=args.dlr_wmax, dlr_eps=args.dlr_eps)
 
 
 def equal_time_nn():
@@ -247,15 +261,14 @@ for it in range(args.n_loops + (args.final_time > 0)):
     Sigma_iw_raw = G0_iw.copy()
     Sigma_iw_raw << inverse(G0_iw) - inverse(G_iw)
 
-    # Paramagnetic, averaged over the symmetries of the cluster, in the blocks; saved as Sigma_iw, and in the sites
-    sigma = np.zeros((len(iw), N, N), dtype=complex)
-    for name, b in zip(BLOCK_NAMES, BLOCKS):
-        sigma[np.ix_(np.arange(len(iw)), b, b)] = np.mean([Sigma_iw[f"{s}_{name}"].data for s in SPINS], axis=0)
-    sigma = np.where(INSIDE, Q.T @ CL.symmetrize(Q @ sigma @ Q.T, args.scheme) @ Q, 0)
+    # Paramagnetic, averaged over the symmetries of the cluster, in the blocks; saved as Sigma_iw, and in the sites. The
+    # plain Dyson Sigma of the same G, averaged alike, is saved in the sites too, to compare the estimators
+    sigma = symmetrized(Sigma_iw)
     for name, b in zip(BLOCK_NAMES, BLOCKS):
         for s in SPINS:
             Sigma_iw[f"{s}_{name}"].data[:] = block_view(sigma, b)
     Sigma_sites = gf_on(MESH, Q @ sigma @ Q.T)
+    Sigma_sites_dyson = gf_on(MESH, Q @ symmetrized(Sigma_iw_raw) @ Q.T)
 
     density = sum(np.trace(occ).real for occ in S.orbital_occupations.values()) / N
     sign = np.real(S.average_sign)
@@ -270,10 +283,12 @@ for it in range(args.n_loops + (args.final_time > 0)):
 
     if mpi.is_master_node():
         data = dict(G0_iw=G0_iw, G_iw=G_iw, Sigma_iw=Sigma_iw, Sigma_sites=Sigma_sites, Sigma_iw_raw=Sigma_iw_raw,
-                    G_tau=S.G_tau, G_dlr=S.G_dlr, density=density, average_sign=sign, average_order=S.average_order,
-                    auto_corr_time=S.auto_corr_time, solve_seconds=wall, **cost)
-        if final:
-            data.update(nn_tau_sites=S.O_tau, nn_sites=equal_time_nn(), szsz_Q_tau=CL.szsz_Q(S.O_tau),
+                    Sigma_sites_dyson=Sigma_sites_dyson, G_dlr=S.G_dlr, density=density, average_sign=sign,
+                    average_order=S.average_order, auto_corr_time=S.auto_corr_time, solve_seconds=wall, **cost)
+        if final:  # the equal-time <n_a n_b> twice: from the density matrix, and as chiAB at tau = 0
+            nn_dm, nn_chi = equal_time_nn(), S.chiAB_dlr(0.0).real
+            mpi.report(f"equal-time <n_a n_b>: max |chiAB(0) - density matrix| = {np.abs(nn_chi - nn_dm).max():.2e}")
+            data.update(nn_dlr_sites=S.chiAB_dlr, nn_sites=nn_dm, nn_sites_chiAB=nn_chi, szsz_Q_dlr=CL.szsz_Q(S.chiAB_dlr),
                         density_matrix=S.density_matrix, h_loc_diagonalization=S.h_loc_diagonalization)
         with HDFArchive(out, "a") as A:
             A["final" if final else f"it{it}"] = data

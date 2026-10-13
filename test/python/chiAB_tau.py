@@ -1,6 +1,6 @@
 """
-The density-density correlator <n_up(tau) n_do(0)>, by measure_O_tau and measure_nn_tau, and with lists of operators
-in measure_O_tau, against exact diagonalization of the impurity and its discrete bath.
+The density-density correlator <n_up(tau) n_do(0)>, by measure_chiAB_tau and measure_nn_tau, and with lists of
+operators in chi_A_vec and chi_B_vec, against exact diagonalization of the impurity and its discrete bath.
 
 Author: Hugo U.R. Strand (2018) hugo.strand@gmail.com
 """
@@ -41,7 +41,7 @@ def exact(A, B, taus):
     return np.array([np.exp(-(beta - t) * E) @ (A * B.T) @ np.exp(-t * E) for t in taus]) / Z
 
 
-def exact_O_tau(taus):
+def exact_nn(taus):
     return exact(N_UP, N_DO, taus)
 
 
@@ -51,23 +51,23 @@ for _, g0 in S.G0_iw:
 
 solve_params = dict(h_int=U * n('up', 0) * n('do', 0), measure_G_tau=True, move_double=True,
                     length_cycle=20, n_warmup_cycles=int(1e4), n_cycles=int(1e5))
-S.solve(**solve_params, measure_O_tau=(n('up', 0), n('do', 0)), measure_nn_tau=True)
+S.solve(**solve_params, measure_chiAB_tau=True, chi_A_vec=n('do', 0), chi_B_vec=n('up', 0), measure_nn_tau=True)
 
 # The QMC noise is a few 1e-3 here (at most 0.012 over many seeds); the correlator is ~0.3
-taus = np.array([float(t) for t in S.O_tau.mesh])
-np.testing.assert_allclose(S.O_tau.data.real, exact_O_tau(taus), atol=0.03)
+taus = np.array([float(t) for t in S.chiAB_tau.mesh])
+np.testing.assert_allclose(S.chiAB_tau.data.real, exact_nn(taus), atol=0.03)
 
 taus = np.array([float(t) for t in S.nn_tau['up', 'do'].mesh])
-np.testing.assert_allclose(S.nn_tau['up', 'do'].data[:, 0, 0].real, exact_O_tau(taus), atol=0.03)
+np.testing.assert_allclose(S.nn_tau['up', 'do'].data[:, 0, 0].real, exact_nn(taus), atol=0.03)
 
 # The DLR coefficients give the correlator at any tau, not only on the mesh
 taus = np.random.default_rng(1).uniform(0, beta, 50)
-np.testing.assert_allclose([S.O_dlr(t).real for t in taus], exact_O_tau(taus), atol=0.03)
-np.testing.assert_allclose([S.nn_dlr['up', 'do'](t)[0, 0].real for t in taus], exact_O_tau(taus), atol=0.03)
+np.testing.assert_allclose([S.chiAB_dlr(t).real for t in taus], exact_nn(taus), atol=0.03)
+np.testing.assert_allclose([S.nn_dlr['up', 'do'](t)[0, 0].real for t in taus], exact_nn(taus), atol=0.03)
 
-# Lists: O_tau[i, j] = <O_2[i](tau) O_1[j](0)>, here with O_1 = [n_up] and O_2 = [n_up, n_up n_do]
-S.solve(**solve_params, measure_O_tau=([n('up', 0)], [n('up', 0), n('up', 0) * n('do', 0)]))
-assert S.O_tau.target_shape == (2, 1) and S.O_dlr.target_shape == (2, 1)
-taus = np.array([float(t) for t in S.O_tau.mesh])
+# Lists: chiAB_tau[i, j] = <A_i(tau) B_j(0)>, here with A = [n_up, n_up n_do] and B = [n_up]
+S.solve(**solve_params, measure_chiAB_tau=True, chi_A_vec=[n('up', 0), n('up', 0) * n('do', 0)], chi_B_vec=[n('up', 0)])
+assert S.chiAB_tau.target_shape == (2, 1) and S.chiAB_dlr.target_shape == (2, 1)
+taus = np.array([float(t) for t in S.chiAB_tau.mesh])
 for i, A in enumerate([N_UP, N_UP @ N_DO]):
-    np.testing.assert_allclose(S.O_tau.data[:, i, 0].real, exact(A, N_UP, taus), atol=0.03)
+    np.testing.assert_allclose(S.chiAB_tau.data[:, i, 0].real, exact(A, N_UP, taus), atol=0.03)

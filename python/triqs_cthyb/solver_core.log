@@ -18,6 +18,7 @@
 -- [1;32m  Property: [0mDelta_tau
 -- [1;32m  Property: [0mG0_iw
 -- [1;32m  Property: [0mJperp_tau
+-- [1;32m  Property: [0maccumulation_time
 -- [1;32m  Property: [0mauto_corr_time
 -- [1;32m  Property: [0mauto_corr_time_converged
 -- [1;32m  Property: [0maverage_order
@@ -31,12 +32,14 @@
 -- [1;32m  Property: [0mlast_constr_parameters
 -- [1;32m  Property: [0mlast_solve_parameters
 -- [1;32m  Property: [0mlocal_hamiltonian_is_complex
+-- [1;32m  Property: [0mn_measures
 -- [1;32m  Property: [0mperformance_analysis
 -- [1;32m  Property: [0msolve_status
+-- [1;32m  Property: [0mwarmup_time
 -- [1;34m[Success] [0m
---    Generated Python bindings: /home/andrewhardy/Documents/CCQ/cthyb_dyn/python/triqs_cthyb/solver_core.wrap.cxx [included in /home/andrewhardy/Documents/CCQ/cthyb_dyn/python/triqs_cthyb/solver_core.cpp]
---              headers        : /home/andrewhardy/Documents/CCQ/cthyb_dyn/python/triqs_cthyb/solver_core.wrap.hxx [to be used with other modules, cf doc]
+--    Generated Python bindings: /Users/aklekovkinhardy/Documents/Code/cthyb/python/triqs_cthyb/solver_core.wrap.cxx [included in /Users/aklekovkinhardy/Documents/Code/cthyb/python/triqs_cthyb/solver_core.cpp]
+--              headers        : /Users/aklekovkinhardy/Documents/Code/cthyb/python/triqs_cthyb/solver_core.wrap.hxx [to be used with other modules, cf doc]
 -- Running clang-format ...
 -- Done.
---    Generated the depfile /home/andrewhardy/Documents/CCQ/cthyb_dyn/build/python/triqs_cthyb/solver_core.cpp.d
+--    Generated the depfile /Users/aklekovkinhardy/Documents/Code/cthyb/build/python/triqs_cthyb/solver_core.cpp.d
    

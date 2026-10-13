@@ -32,22 +32,23 @@ namespace triqs_cthyb {
   using namespace triqs::gfs;
   using namespace triqs::mesh;
 
-  // <O2[i](tau) O1[j](0)> for measure_O_tau = (O1, O2), lists of bosonic operators: measured at the DLR nodes, kept as DLR
-  // coefficients (O_dlr) and evaluated on the regular mesh of n_tau points (O_tau)
-  class measure_O_tau_ins {
+  // chi_AB(tau)[i, j] = <A_i(tau) B_j(0)> for the lists chi_A_vec and chi_B_vec of bosonic operators, as CTINT's chiAB_tau:
+  // measured at the DLR nodes, kept as DLR coefficients (chiAB_dlr) and evaluated on the regular mesh of n_tau points (chiAB_tau)
+  class measure_chiAB_tau {
 
     public:
-    measure_O_tau_ins(std::optional<gf<imtime, matrix_valued>> &O_tau_opt, std::optional<gf<dlr, matrix_valued>> &O_dlr_opt, qmc_data const &data,
-                      dlr_imtime const &nodes, int n_tau, std::vector<many_body_op_t> const &ops1, std::vector<many_body_op_t> const &ops2);
+    measure_chiAB_tau(std::optional<gf<imtime, matrix_valued>> &chiAB_tau_opt, std::optional<gf<dlr, matrix_valued>> &chiAB_dlr_opt,
+                      qmc_data const &data, dlr_imtime const &nodes, int n_tau, std::vector<many_body_op_t> const &A_vec,
+                      std::vector<many_body_op_t> const &B_vec);
     void accumulate(mc_weight_t s) { sweep.accumulate(s); }
     void collect_results(mpi::communicator const &c);
 
     private:
     occupation_sweep sweep;
     dlr_imtime nodes;
-    bool symmetric; // O1 = O2, so that O[i, j](tau) = O[j, i](beta - tau)
-    gf<imtime, matrix_valued>::view_type O_tau;
-    gf<dlr, matrix_valued>::view_type O_dlr;
+    bool symmetric; // A = B, so that chi[i, j](tau) = chi[j, i](beta - tau)
+    gf<imtime, matrix_valued>::view_type chiAB_tau;
+    gf<dlr, matrix_valued>::view_type chiAB_dlr;
   };
 
 } // namespace triqs_cthyb

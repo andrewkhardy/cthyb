@@ -44,7 +44,7 @@
 #include "./moves/swap_dyn.hpp"
 #include "./measures/G_tau.hpp"
 #include "./measures/G_l.hpp"
-#include "./measures/O_tau_ins.hpp"
+#include "./measures/chiAB_tau.hpp"
 #include "./measures/nn_tau.hpp"
 #include "./measures/D0_corr.hpp"
 #include "./measures/dyn_vertex_corr.hpp"
@@ -475,13 +475,12 @@ namespace triqs_cthyb {
     // --------------------------------------------------------------------------
     // Single-particle correlators
 
-    // O_tau and nn_tau are evaluated at the nodes of a DLR grid
+    // chiAB_tau and nn_tau are evaluated at the nodes of a DLR grid
     auto dlr_nodes = [&] { return dlr_imtime{beta, Boson, params.dlr_w_max, params.dlr_eps}; };
 
-    if (params.measure_O_tau) {
-      auto const &[O1, O2] = *params.measure_O_tau;
-      qmc.add_measure(measure_O_tau_ins{O_tau, O_dlr, data, dlr_nodes(), n_tau, O1, O2}, "O_tau measure");
-    }
+    if (params.measure_chiAB_tau)
+      qmc.add_measure(measure_chiAB_tau{chiAB_tau, chiAB_dlr, data, dlr_nodes(), n_tau, params.chi_A_vec, params.chi_B_vec},
+                      "chiAB_tau measure");
 
     // With every n_a commuting with h_loc, the occupation kinks give <n_a(tau) n_b(0)> as Q_tau, which the Python Solver
     // completes with the equal-time part from the density matrix and copies to nn_tau. The sweep is measured otherwise.

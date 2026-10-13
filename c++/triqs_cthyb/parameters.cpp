@@ -108,7 +108,9 @@ namespace triqs_cthyb {
     h5_write(grp, "measure_G_tau", sp.measure_G_tau);
     h5_write(grp, "measure_D0_corr", sp.measure_D0_corr);
     h5_write(grp, "measure_G_l", sp.measure_G_l);
-    h5_write(grp, "measure_O_tau", sp.measure_O_tau);
+    h5_write(grp, "measure_chiAB_tau", sp.measure_chiAB_tau);
+    h5_write(grp, "chi_A_vec", sp.chi_A_vec);
+    h5_write(grp, "chi_B_vec", sp.chi_B_vec);
     h5_write(grp, "measure_nn_tau", sp.measure_nn_tau);
     h5_write(grp, "dlr_w_max", sp.dlr_w_max);
     h5_write(grp, "dlr_eps", sp.dlr_eps);
@@ -181,7 +183,9 @@ namespace triqs_cthyb {
     h5_read(grp, "measure_G_tau", sp.measure_G_tau);
     h5::try_read(grp, "measure_D0_corr", sp.measure_D0_corr);
     h5_read(grp, "measure_G_l", sp.measure_G_l);
-    if( grp.has_key("measure_O_tau") ) h5_read(grp, "measure_O_tau", sp.measure_O_tau);
+    h5::try_read(grp, "measure_chiAB_tau", sp.measure_chiAB_tau);
+    h5::try_read(grp, "chi_A_vec", sp.chi_A_vec);
+    h5::try_read(grp, "chi_B_vec", sp.chi_B_vec);
     h5::try_read(grp, "measure_nn_tau", sp.measure_nn_tau);
     h5::try_read(grp, "dlr_w_max", sp.dlr_w_max);
     h5::try_read(grp, "dlr_eps", sp.dlr_eps);

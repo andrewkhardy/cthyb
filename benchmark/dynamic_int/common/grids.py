@@ -5,7 +5,7 @@
 r"""The one tau grid and one Matsubara grid of every solver and ED script here, so curves
 compare point by point. Each solver's correlator mesh is set from N_TAU:
 
-  CTHYB  O_tau on `n_tau`, Q_tau / D0_corr on `n_tau_bosonic`
+  CTHYB  chiAB_tau on `n_tau`, Q_tau / D0_corr on `n_tau_bosonic`
   CTSEG  nn_tau on `n_tau_bosonic`
   CTINT  chiAB_tau on `n_tau_chi2` (library default 201)
   ED     `--n_tau`

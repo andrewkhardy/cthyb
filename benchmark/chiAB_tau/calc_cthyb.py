@@ -67,7 +67,9 @@ def make_calc():
         length_cycle = 200,
         n_warmup_cycles = int(1e3),
         n_cycles = int(p.n_cycles / mpi.size),
-        measure_O_tau = ops,
+        measure_chiAB_tau = True,
+        chi_A_vec = ops[1],  # <n_do(tau) n_up(0)>
+        chi_B_vec = ops[0],
         # --
         measure_density_matrix = True,
         use_norm_as_weight = True,
@@ -112,7 +114,7 @@ def make_calc():
         'G0_iw',
         'G_tau',
         #'G_l', 'G_iw',
-        'O_tau',
+        'chiAB_tau',
         'density_matrix',
         'h_loc_diagonalization',
         ]

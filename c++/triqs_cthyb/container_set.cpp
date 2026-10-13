@@ -32,8 +32,8 @@ namespace triqs_cthyb {
     h5_write(grp, "G_tau_accum", c.G_tau_accum);
     h5_write(grp, "asymmetry_G_tau", c.asymmetry_G_tau);
     h5_write(grp, "G_l", c.G_l);
-    h5_write(grp, "O_tau", c.O_tau);
-    h5_write(grp, "O_dlr", c.O_dlr);
+    h5_write(grp, "chiAB_tau", c.chiAB_tau);
+    h5_write(grp, "chiAB_dlr", c.chiAB_dlr);
     h5_write(grp, "nn_tau", c.nn_tau);
     h5_write(grp, "nn_dlr", c.nn_dlr);
     h5_write(grp, "Q_tau", c.Q_tau);
@@ -66,8 +66,8 @@ namespace triqs_cthyb {
     h5_read(grp, "G_tau_accum", c.G_tau_accum);
     h5_read(grp, "asymmetry_G_tau", c.asymmetry_G_tau);
     h5_read(grp, "G_l", c.G_l);
-    h5::try_read(grp, "O_tau", c.O_tau);
-    h5::try_read(grp, "O_dlr", c.O_dlr);
+    h5::try_read(grp, "chiAB_tau", c.chiAB_tau);
+    h5::try_read(grp, "chiAB_dlr", c.chiAB_dlr);
     h5::try_read(grp, "nn_tau", c.nn_tau);
     h5::try_read(grp, "nn_dlr", c.nn_dlr);
     h5::try_read(grp, "Q_tau", c.Q_tau);

@@ -52,9 +52,10 @@ S.add_dyn_int(g**2 * Q(np.linspace(0, beta, n_tau)), n('up', 0), n('up', 0))
 
 S_plus, S_minus = c_dag('up', 0) * c('do', 0), c_dag('do', 0) * c('up', 0)
 S.solve(h_int=U * n('up', 0) * n('do', 0), h_loc0=-mu * (n('up', 0) + n('do', 0)), n_cycles=100000, n_warmup_cycles=5000,
-        length_cycle=20, random_seed=7121, measure_G_tau=False, measure_O_tau=(S_minus, S_plus), verbosity=0)
+        length_cycle=20, random_seed=7121, measure_G_tau=False, measure_chiAB_tau=True, chi_A_vec=S_plus,
+        chi_B_vec=S_minus, verbosity=0)
 
 taus = np.linspace(0, beta, 51)
-qmc, ref = np.array([S.O_dlr(t).real for t in taus]), exact(taus)
+qmc, ref = np.array([S.chiAB_dlr(t).real for t in taus]), exact(taus)
 print(f"max |QMC - ED| of <S+(tau) S-(0)>: {np.abs(qmc - ref).max():.4f}  (correlator up to {ref.max():.3f})")
 np.testing.assert_allclose(qmc, ref, atol=0.02)
