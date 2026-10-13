@@ -9,22 +9,23 @@ r"""CTINT counterpart of cluster_cthyb.py: the same cluster DCA / CDMFT (cluster
 with the same coarse graining, starting point and per-iteration report, to compare the solvers.
 
 CTINT expands in density-density vertices (n_a - alpha)(n_b - alpha), so it works in the site basis, where U is one
-such term per site: gf_struct is one block of N sites per spin, in DCA as in CDMFT. In DCA the coarse graining is
-done per cluster momentum in the real cos/sin basis of clusters.py and rotated back to the sites. The alpha shifts
-are the signed ones of ../dynamic_int/common/ctint.py, and CTINT takes G0 on its DLR mesh: G0 is built on a regular
-Matsubara mesh, Fourier transformed and DLR-fitted, as in the dynamic_int CTINT runs.
+such term per site: gf_struct is one block of N sites per spin, in DCA as in CDMFT. The alpha shifts are the signed
+ones of ../dynamic_int/common/ctint.py. The loop runs on the frequencies of CTINT's DLR Matsubara mesh (--dlr_wmax,
+--dlr_eps), as cluster_cthyb.py's runs on its own: G0 is coarse-grained at those frequencies and handed to CTINT as it
+is, with no Fourier transform or fit, and Sigma is evaluated there.
 
 Sigma comes from CTINT's M(tau), binned on n_tau points, rather than from its G:
   - M is made real and symmetric, as it is here (real hopping, no field), and DLR-fitted (fit_M) by least squares
     weighted by its noise, at the largest eps that resolves it, so that no DLR coefficient fits noise, and with its
     1/iw moment fixed to the exact M_1 = Sigma_1 + M_hartree^2, Sigma_1 = U^2 n_i (1 - n_i) on the diagonal, with
-    the density n_i per spin averaged over the spins and, in DCA, over the sites;
+    the density n_i per spin averaged over the spins and the symmetries of the cluster;
   - Sigma = Sigma_alpha + (1 + M G0_shift)^-1 M, with M = M_hartree + M_dyn(iw) and G0_shift^-1 = G0^-1 - Sigma_alpha.
     M_dyn decays as 1/iw, so Sigma tends to Sigma_hartree + Sigma_1 / iw with no tail fit, whereas Dyson from G,
     G0^-1 - G^-1, grows as iw times the error of the 1/iw moment of G, and is not symmetric to the 1e-12 that CTINT
     asks of G0.
-In DCA, Sigma is then reduced to its DCA form, diagonal in the waves and shared by the cos and sin waves of a K. The
-report gives the eps of each spin and Sigma_1 as the data alone give it, against the exact value imposed.
+Sigma is then averaged over the spins and the symmetries of the cluster (clusters.py), as in cluster_cthyb.py, which in
+DCA leaves its DCA form, diagonal in K with one Sigma(K) per star of K. The report gives the eps of each spin and
+Sigma_1 as the data alone give it, against the exact value imposed.
 
     mpirun -n 8 python cluster_ctint.py --cluster 4x4 --scheme DCA
 """
@@ -36,8 +37,7 @@ import time
 import numpy as np
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
-from triqs.gfs import (Gf, MeshDLR, MeshImFreq, fit_gf_dlr, make_gf_dlr_imfreq, make_gf_from_fourier, make_gf_imfreq,
-                       make_gf_imtime)
+from triqs.gfs import Gf, MeshDLR, MeshDLRImFreq, make_gf_imfreq, make_gf_imtime
 from triqs.operators import n
 from triqs_ctint import Solver
 
@@ -59,10 +59,9 @@ parser.add_argument("--beta", type=float, default=10.0)
 parser.add_argument("--mu", type=float, default=None, help="Chemical potential (default U/2, half filling)")
 parser.add_argument("--n_loops", type=int, default=10)
 parser.add_argument("--n_k", type=int, default=16, help="k~ points per direction of the reduced zone")
-parser.add_argument("--n_iw", type=int, default=1025, help="Matsubara frequencies of the self-consistency")
-parser.add_argument("--n_tau", type=int, default=10001, help="tau points of the G0 Fourier transform and of the M(tau) bins")
+parser.add_argument("--n_tau", type=int, default=10001, help="tau points of the M(tau) bins")
 parser.add_argument("--dlr_wmax", type=float, default=20.0, help="DLR frequency cutoff")
-parser.add_argument("--dlr_eps", type=float, default=1e-10, help="DLR accuracy of CTINT's mesh and of the G0 fit")
+parser.add_argument("--dlr_eps", type=float, default=1e-10, help="DLR accuracy of CTINT's mesh, on which the loop runs")
 parser.add_argument("--n_cycles", type=int, default=100000, help="QMC cycles per rank")
 parser.add_argument("--n_warmup_cycles", type=int, default=5000)
 parser.add_argument("--length_cycle", type=int, default=100)
@@ -75,7 +74,7 @@ mu = args.U / 2 if args.mu is None else args.mu
 # ---- Cluster and lattice, as in cluster_cthyb.py ----
 
 CL = Cluster(args.cluster, args.n_k)
-P, K_OF, N = CL.P, CL.K_of, CL.N
+N = CL.N
 
 
 def eps(k):
@@ -83,49 +82,41 @@ def eps(k):
 
 
 GF_STRUCT = [(s, N) for s in SPINS]
-mesh = MeshImFreq(beta=args.beta, S="Fermion", n_iw=args.n_iw)
-iw = np.array([complex(w) for w in mesh.values()])
-iw0 = len(iw) // 2
+MESH = MeshDLRImFreq(beta=args.beta, statistic="Fermion", w_max=args.dlr_wmax, eps=args.dlr_eps, symmetrize=True)
+iw = np.array([complex(w) for w in MESH.values()])
+iw0 = int(np.argmin(np.where(iw.imag > 0, iw.imag, np.inf)))  # the lowest positive frequency
+N_OF_IW = np.rint((iw.imag * args.beta / np.pi - 1) / 2).astype(int)  # the n of iw = (2n + 1) i pi / beta
+N_REG = np.abs(N_OF_IW).max() + 1  # positive frequencies of the regular mesh that holds every node
 
-KT = CL.k_patch
-
-
-def dca_sigma(sigma):
-    """Sigma in the site basis reduced to its DCA form: diagonal in the cos/sin waves, one value per K"""
-    sigma_w = np.einsum("rj,wrs,sj->wj", P, sigma, P)
-    for k in set(K_OF):  # the cos and sin waves of a K share Sigma(K)
-        sigma_w[:, K_OF == k] = sigma_w[:, K_OF == k].mean(axis=1, keepdims=True)
-    return np.einsum("rj,wj,sj->wrs", P, sigma_w, P)
+H = CL.hamiltonians(eps, args.scheme)  # H(k~) in the site basis
+mpi.report(f"{args.scheme}: Sigma averaged over {len(CL.perms[args.scheme])} symmetries of the cluster")
 
 
 def coarse_grain(sigma):
-    """The cluster G in the site basis, (n_w, N, N), from Sigma in the site basis (in DCA, in its DCA form)"""
-    zeta = iw + mu
-    if args.scheme == "DCA":  # per wave of the cos/sin basis, with the dispersion of its K
-        sigma_w = np.einsum("rj,wrs,sj->wj", P, sigma, P)
-        G_w = sum(1 / (zeta[:, None] - eps(kt + CL.K[K_OF])[None, :] - sigma_w) for kt in KT) / len(KT)
-        return np.einsum("rj,wj,sj->wrs", P, G_w, P)
-    G = 0
-    for kt in KT:
-        G = G + np.linalg.inv(zeta[:, None, None] * np.eye(N) - CL.superlattice_hamiltonian(eps, kt) - sigma)
-    return G / len(KT)
+    """The cluster G in the site basis, (n_w, N, N), from Sigma in the site basis: < [iw + mu - H(k~) - Sigma]^-1 >_k~"""
+    zeta = (iw + mu)[:, None, None] * np.eye(N) - sigma
+    return sum(np.linalg.inv(zeta - h) for h in H) / len(H)
 
 
 def solver_for(G0):
-    """A new CTINT solver whose DLR G0_iw, in both spin blocks, is G0 (n_w, N, N) of the regular mesh. One solver per
-    iteration: the runs of 2026-10-09 that reused one all stopped at the start of the second solve."""
+    """A new CTINT solver with G0 (n_w, N, N), on its DLR mesh, in both spin blocks. One solver per iteration: the runs
+    of 2026-10-09 that reused one all stopped at the start of the second solve."""
     S = Solver(beta=args.beta, gf_struct=GF_STRUCT, n_tau=args.n_tau, use_D=False, dlr_wmax=args.dlr_wmax,
                dlr_eps=args.dlr_eps)
-    g0_iw = Gf(mesh=mesh, target_shape=(N, N))
-    g0_iw.data[:] = G0
-    g0_dlr = make_gf_dlr_imfreq(fit_gf_dlr(make_gf_from_fourier(g0_iw, args.n_tau), w_max=args.dlr_wmax, eps=args.dlr_eps,
-                                           symmetrize=True))
-    # CTINT checks G0_ij(iw) = G0_ji(-iw)* to 1e-12 on its node pairs (k, n - 1 - k), which the rounding of the fit
-    # (~1e-12 at eps = 1e-10) can miss; the average of each pair satisfies it exactly
-    g0_dlr.data[:] = (g0_dlr.data + g0_dlr.data[::-1].conj().transpose(0, 2, 1)) / 2
+    assert S.G0_iw[SPINS[0]].mesh == MESH
+    # CTINT checks G0_ij(iw) = G0_ji(-iw)* to 1e-12 on its node pairs (k, n - 1 - k), which holds here up to the
+    # rounding of the k~ sum; the average of each pair satisfies it exactly
+    G0 = (G0 + G0[::-1].conj().transpose(0, 2, 1)) / 2
     for s in SPINS:
-        S.G0_iw[s].data[:] = g0_dlr.data[:]
+        S.G0_iw[s].data[:] = G0
     return S
+
+
+def on_mesh(data):
+    """data (n_w, N, N) as a Gf on the DLR mesh"""
+    g = Gf(mesh=MESH, target_shape=(N, N))
+    g.data[:] = data
+    return g
 
 
 def symmetric(m):
@@ -159,7 +150,7 @@ def lsq(K, y, var, a=None, b=0.0):
 
 
 def fit_M(m_tau, M1):
-    """M_dyn(iw) (n_w, N, N) on the regular mesh, from the binned M_dyn(tau) (n_tau, N, N), real and symmetric, with its
+    """M_dyn(iw) (n_w, N, N) on the DLR frequencies of the loop, from the binned M_dyn(tau) (n_tau, N, N), real and symmetric, with its
     1/iw moment fixed to M1; the eps of the fit; and the 1/iw moment that the data alone give.
 
     Each element is fitted by least squares weighted by the noise of its bins, the residual of the finest fit averaged
@@ -191,11 +182,11 @@ def fit_M(m_tau, M1):
     moment_free[i, j] = moment_free[j, i] = a @ fits[pick][0]
     g = Gf(mesh=dlr, target_shape=(N, N))
     g.data[:, i, j] = g.data[:, j, i] = fit(K, a)[0]
-    return make_gf_imfreq(g, args.n_iw).data, EPS_SCAN[pick], moment_free
+    return make_gf_imfreq(g, N_REG).data[N_OF_IW + N_REG], EPS_SCAN[pick], moment_free
 
 
 def sigma_from_M(S, b, G0, n_site):
-    """Sigma (n_w, N, N) of spin block b on the regular mesh, from the M of solver S, the G0 of the solve and the
+    """Sigma (n_w, N, N) of spin block b on the DLR frequencies, from the M of solver S, the G0 of the solve and the
     density per site and spin; the eps of the fit of M; and the diagonal Sigma_1 that the data alone give and its exact
     value, averaged over the sites"""
     sigma_1 = args.U**2 * n_site * (1 - n_site)
@@ -210,7 +201,6 @@ def sigma_from_M(S, b, G0, n_site):
 
 # Start from the Hartree self-energy of the paramagnetic half-filled solution
 sigma = args.U / 2 * np.eye(N) * np.ones((len(iw), 1, 1), dtype=complex)
-G0 = np.linalg.inv(np.linalg.inv(coarse_grain(sigma)) + sigma)
 
 h_int = args.U * sum(n("up", r) * n("dn", r) for r in range(N))
 # The density per site and spin is 1/2 only at mu = U/2; elsewhere 'centred' needs --alpha_center.
@@ -228,21 +218,18 @@ if mpi.is_master_node():
         A["alpha"] = alpha_record
 
 for it in range(args.n_loops):
+    G0 = np.linalg.inv(np.linalg.inv(coarse_grain(sigma)) + sigma)
     S = solver_for(G0)
     t0 = time.time()
     S.solve(h_int=h_int, **alpha_kwargs, length_cycle=args.length_cycle, n_warmup_cycles=args.n_warmup_cycles,
             n_cycles=args.n_cycles, max_time=args.max_time, measure_M_tau=True, post_process=True)
     wall = time.time() - t0
 
-    # Paramagnetic Sigma from M, in DCA in its DCA form
+    # Paramagnetic Sigma from M, averaged over the symmetries of the cluster, as the densities
     n_site = np.mean([np.diagonal(d).real for d in S.density], axis=0)
-    if args.scheme == "DCA":  # whose cluster is translation invariant
-        n_site[:] = n_site.mean()
+    n_site = n_site[CL.perms[args.scheme]].mean(axis=0)
     sigmas, eps_M, sigma_1 = zip(*(sigma_from_M(S, b, G0, n_site) for b in range(len(SPINS))))
-    sigma = np.mean(sigmas, axis=0)
-    if args.scheme == "DCA":
-        sigma = dca_sigma(sigma)
-    G0 = np.linalg.inv(np.linalg.inv(coarse_grain(sigma)) + sigma)
+    sigma = CL.symmetrize(np.mean(sigmas, axis=0), args.scheme)
 
     density = 2 * n_site.mean()
     sign = float(np.real(S.average_sign))
@@ -254,7 +241,7 @@ for it in range(args.n_loops):
 
     if mpi.is_master_node():
         with HDFArchive(out, "a") as A:
-            A[f"it{it}"] = dict(Sigma=sigma, G0=G0, G_iw=S.G_iw, density=density, average_sign=sign,
+            A[f"it{it}"] = dict(Sigma_iw=on_mesh(sigma), G0_iw=on_mesh(G0), G_iw=S.G_iw, density=density, average_sign=sign,
                                 average_order=float(np.real(S.average_k)), solve_seconds=wall, M_eps=list(eps_M),
                                 sigma_1=np.array(sigma_1))
             A["n_iter"] = it + 1

@@ -12,7 +12,8 @@ r"""Plots of the cluster_cthyb.py (CTHYB) and cluster_ctint.py (CTINT) runs in a
 
 Sigma(K) is the diagonal of the cluster Fourier transform: from the cos/sin K blocks of CTHYB (the Sigma_iw the loop
 went on with: by CRM on the DLR frequencies, tail-fitted on the regular mesh in earlier runs), from the site-basis
-matrix of CTINT and of CTHYB --basis sites (labelled "sites"). Each run is drawn on the frequencies of its own mesh. It
+matrix of CTINT (on its DLR frequencies, on the regular mesh in earlier runs) and of CTHYB --basis sites (labelled
+"sites"); from Sigma_sites, the site-basis Sigma of CTHYB, in every basis of the runs that save it. Each run is drawn on the frequencies of its own mesh. It
 is averaged over the spins and over the K of a star, which assumes the full point group of the square. Both the --L
 files of the earlier drivers and the --cluster files of the current ones are read. A summary table of every run goes to
 stdout, with the cost of the last CTHYB solve where the file has it: measurements per second and rank, independent
@@ -29,7 +30,7 @@ from fractions import Fraction
 
 import matplotlib.pyplot as plt
 import numpy as np
-import triqs.gfs  # noqa: F401  (registers Gf and BlockGf with h5)
+from triqs.gfs import Gf  # also registers Gf and BlockGf with h5
 from h5 import HDFArchive
 
 from clusters import Cluster
@@ -43,7 +44,7 @@ parser.add_argument("--save", default=None, help='Format for the files, e.g. "cl
 args, _ = parser.parse_known_args()  # known only: a Jupyter kernel passes its own --f=...
 
 FILE = re.compile(r"cluster_(?P<cluster>[^_]+)_(?P<scheme>DCA|CDMFT)_U(?P<U>[\d.]+)_beta(?P<beta>[\d.]+)_mu(?P<mu>[-\d.]+)"
-                  r"_(?P<tag>ctint|pauli[\d.]+(?:_(?:crm|dyson)_eps[\de.+-]+)?(?:_(?:waves|sites))?)\.h5$")
+                  r"_(?P<tag>ctint|pauli[\d.]+(?:_(?:crm|dyson)_eps[\de.+-]+)?(?:_(?:waves|irreps|sites))?)\.h5$")
 SCHEMES = ("DCA", "CDMFT")
 SPINS = ("up", "dn")
 
@@ -56,14 +57,14 @@ MIN_SPAN = 0.05  # smallest y range of a Sigma panel
 
 def label_of(tag):
     """CTINT; CTHYB p=0.5 for the regular-mesh runs; CTHYB p=0.5 CRM ε=1e-07 for the DLR ones (Sigma fed back, DLR eps),
-    with " sites" for the site basis"""
+    with " sites" or " irreps" for those bases"""
     if tag == "ctint":
         return "CTINT"
-    m = re.fullmatch(r"pauli([\d.]+)(?:_(crm|dyson)_eps([^_]+))?(?:_(waves|sites))?", tag)
+    m = re.fullmatch(r"pauli([\d.]+)(?:_(crm|dyson)_eps([^_]+))?(?:_(waves|irreps|sites))?", tag)
     label = f"CTHYB p={float(m[1]):g}"
     if m[2] is not None:
         label += f" {'CRM' if m[2] == 'crm' else 'Dyson'} ε={float(m[3]):.0e}"
-    return label + (" sites" if m[4] == "sites" else "")
+    return label + (f" {m[4]}" if m[4] in ("irreps", "sites") else "")
 
 
 # ---- Cluster momenta of a run, in either file format ----
@@ -116,17 +117,24 @@ def sigma_by_star(it_group, params):
     """`(w_n, {star: Sigma(K, iw_n)})` on the positive frequencies of the run's Matsubara mesh (regular, or DLR), averaged
     over spins and the K of each star"""
     acc = {}
-    if "Sigma" in it_group:  # CTINT, (n_w, N, N) in the site basis, on the regular mesh
+    sigma = it_group["Sigma_iw"] if "Sigma_iw" in it_group else None
+    if "Sigma_sites" in it_group:  # CTHYB, in any basis, from its Sigma in the site basis
+        sigma = it_group["Sigma_sites"]
+        w = np.array([complex(x).imag for x in sigma.mesh.values()])
+        add_by_star(acc, sigma.data, params)
+    elif "Sigma" in it_group:  # CTINT before the DLR loop, (n_w, N, N) in the site basis, on the regular mesh
         add_by_star(acc, it_group["Sigma"], params)
         n_w = len(it_group["Sigma"])
         w = (2 * np.arange(-(n_w // 2), n_w - n_w // 2) + 1) * np.pi / float(params["beta"])
+    elif isinstance(sigma, Gf):  # CTINT, N x N in the site basis, on its DLR mesh
+        w = np.array([complex(x).imag for x in sigma.mesh.values()])
+        add_by_star(acc, sigma.data, params)
     elif params.get("basis") == "sites":  # CTHYB in the site basis, one N x N block per spin
-        for name, g in it_group["Sigma_iw"]:
+        for name, g in sigma:
             w = np.array([complex(x).imag for x in g.mesh.values()])
             add_by_star(acc, g.data, params)
     else:  # CTHYB, blocks of the cos/sin waves joined by "|" (one wave per block in DCA), per spin
         L = int(params.get("L", 0))
-        sigma = it_group["Sigma_iw"]
         for name, g in sigma:
             w = np.array([complex(x).imag for x in g.mesh.values()])
             for i, wave in enumerate(name.split("_", 1)[1].split("|")):
