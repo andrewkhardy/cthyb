@@ -26,14 +26,15 @@ from .solver_core import SolverCore, ConstrParametersT, SolveParametersT
 from triqs.gfs import *
 import triqs.utility.mpi as mpi
 import numpy as np
-from triqs.operators.util.extractors import block_matrix_from_op
+from triqs.operators.util.extractors import block_matrix_from_op, op_from_block_matrix
 from .tail_fit import tail_fit as cthyb_tail_fit
 from .tail_fit import sigma_high_frequency_moments, green_high_frequency_moments
 from .util import orbital_occupations
 
 class Solver(SolverCore):
 
-    def __init__(self, beta, gf_struct, n_iw=1025, n_tau=10001, n_l=30, delta_interface = False, n_tau_bosonic=10001):
+    def __init__(self, beta, gf_struct, n_iw=1025, n_tau=10001, n_l=30, delta_interface = False, n_tau_bosonic=10001,
+                 dlr_wmax=None, dlr_eps=1e-10):
         """
         Initialise the solver.
 
@@ -54,23 +55,44 @@ class Solver(SolverCore):
              Number of legendre polynomials to use in accumulations of the Green's functions.
         delta_interface: bool, optional
             Are Delta_tau and Delta_infty provided as input instead of G0_iw?
+            In DLR mode: are Delta_iw and h_loc0 provided instead of G0_iw?
         n_tau_bosonic : integer, optional
             Number of imaginary time points for bosonic Green's functions (D0_tau, Jperp_tau).
+        dlr_wmax : float, optional
+            Setting it switches on the DLR mode: the input G0_iw (or Delta_iw with
+            delta_interface) and the output G_iw and Sigma_iw are on the symmetrized
+            DLR Matsubara mesh (beta, dlr_wmax, dlr_eps), ``dlr_mesh``. The Monte Carlo
+            still works on n_tau points: the input is sampled there, and the measured
+            G_tau is fitted back onto the DLR basis (``G_dlr``, ``G_tau_dlr``).
+            G, not only Delta, must have no spectral weight above dlr_wmax.
+        dlr_eps : float, optional
+            Accuracy of the DLR mesh.
         """
 
         gf_struct = fix_gf_struct_type(gf_struct)
+        self.dlr = dlr_wmax is not None
 
-        # Initialise the core solver
+        # Initialise the core solver. In DLR mode the core always uses the Delta interface:
+        # solve() sets its Delta_tau (and h_loc0 when the input is G0_iw) from the DLR input.
         SolverCore.__init__(self, ConstrParametersT(beta=beta, gf_struct=gf_struct,
-                            n_iw=n_iw, n_tau=n_tau, n_l=n_l, delta_interface=delta_interface,
+                            n_iw=n_iw, n_tau=n_tau, n_l=n_l, delta_interface=delta_interface or self.dlr,
                             n_tau_bosonic=n_tau_bosonic))
 
-        mesh = MeshImFreq(beta = beta, statistic="Fermion", n_iw = n_iw)
+        if self.dlr:
+            mesh = MeshDLRImFreq(beta=beta, statistic='Fermion', w_max=dlr_wmax, eps=dlr_eps, symmetrize=True)
+            self.dlr_mesh = mesh
+            # The input with delta_interface, otherwise computed from G0_iw in solve()
+            self.Delta_iw = BlockGf(mesh = mesh, gf_struct = gf_struct)
+            self._G0_iw_dlr = None if delta_interface else self.Delta_iw.copy()
+        else:
+            mesh = MeshImFreq(beta = beta, statistic="Fermion", n_iw = n_iw)
         self.Sigma_iw = BlockGf(mesh = mesh, gf_struct = gf_struct)
         self.Sigma_iw.zero()
         self.Sigma_iw_raw = None
         self.G_iw = self.Sigma_iw.copy()
         self.G_iw_raw = None
+        self.G_dlr = None
+        self.G_tau_dlr = None
         self.gf_struct = gf_struct
         self.n_iw = n_iw
         self.n_tau = n_tau
@@ -78,6 +100,13 @@ class Solver(SolverCore):
         self.G_moments = None
         self.Sigma_moments = None
         self.Sigma_Hartree = None
+
+    @property
+    def G0_iw(self):
+        """The non-interacting Green's function, on the DLR mesh in DLR mode."""
+        if self.dlr and not self.delta_interface:
+            return self._G0_iw_dlr
+        return SolverCore.G0_iw.__get__(self)
 
     def add_dyn_int(self, D_tau, op1, op2):
         r"""
@@ -103,12 +132,15 @@ class Solver(SolverCore):
         ----------
         D_tau : Gf or array
             The real coupling :math:`D(\tau)` on :math:`[0, \beta]`: a scalar_valued or (1, 1) Gf
-            on a bosonic imaginary-time mesh, or an array of ``n_tau_bosonic`` values.
+            on a bosonic imaginary-time or DLR (MeshDLR, MeshDLRImTime, MeshDLRImFreq) mesh, or an
+            array of ``n_tau_bosonic`` values. A DLR coupling is sampled on ``n_tau_bosonic`` points.
         op1, op2 : Operator
             Quadratic operators, i.e. any linear combination of ``c_dag(a) * c(b)``.
         """
         from .dynamical_interactions import _as_scalar_gf, bilinear, expand_dyn_int
 
+        if isinstance(D_tau, Gf) and isinstance(D_tau.mesh, (MeshDLR, MeshDLRImTime, MeshDLRImFreq)):
+            D_tau = make_gf_imtime(D_tau, len(self.Jperp_tau.mesh))
         if isinstance(D_tau, Gf):
             D = _as_scalar_gf(D_tau)
         else:
@@ -162,6 +194,12 @@ class Solver(SolverCore):
                     Index of ``iw`` from which to start fitting.
         fit_max_n : integer, optional, default = ``n_iw``
                     Index of ``iw`` to fit until.
+        dlr_sigma : string, optional, default = ``'dyson'``
+                    DLR mode only: how ``Sigma_iw`` is obtained on the DLR mesh from the DLR fit of
+                    ``G_tau``. ``'dyson'``: :math:`G_0^{-1} - G^{-1}` at each DLR frequency.
+                    ``'crm'``: constrained residual minimization of the Dyson equation
+                    (``triqs.gfs.dlr_crm_dyson_solver.minimize_dyson``) with the high-frequency
+                    moments of Sigma, which needs ``measure_density_matrix``.
         """
 
         # -- Deprecation checks for measure parameters
@@ -182,6 +220,17 @@ class Solver(SolverCore):
 
         perform_post_proc = params_kw.pop("perform_post_proc", True)
         perform_tail_fit = params_kw.pop("perform_tail_fit", False)
+        dlr_sigma = params_kw.pop("dlr_sigma", None)
+
+        if self.dlr:
+            if perform_tail_fit:
+                raise ValueError("perform_tail_fit does not apply in DLR mode: Sigma_iw is on the DLR mesh")
+            dlr_sigma = dlr_sigma or 'dyson'
+            if dlr_sigma not in ('dyson', 'crm'):
+                raise ValueError(f"dlr_sigma must be 'dyson' or 'crm', got {dlr_sigma!r}")
+            self._set_Delta_tau_from_dlr(params_kw)
+        elif dlr_sigma is not None:
+            raise ValueError("dlr_sigma needs the DLR mode (Solver(..., dlr_wmax=...))")
 
         if perform_post_proc and perform_tail_fit:
             # If tail parameters provided for Sigma_iw fitting, use them, otherwise use defaults
@@ -233,61 +282,64 @@ class Solver(SolverCore):
                                                          self.h_loc
                                                          )
 
-            # Fourier transform G_tau to obtain G_iw
-            for bl, g in self.G_tau:
-                bl_size = g.target_shape[0]
-                if self.G_moments is None:
-                    known_moments = make_zero_tail(g, 4)
-                    known_moments[1] = np.eye(bl_size)
-                else:
-                    known_moments = self.G_moments[bl]
-                self.G_iw[bl].set_from_fourier(g, known_moments)
-
-            assert is_gf_hermitian(self.G_iw)
-            self.G_iw_raw = self.G_iw.copy()
-
-            if self.delta_interface:
-                G0_iw = self.G_iw.copy()
-                Delta_iw = make_gf_from_fourier(self.Delta_tau, self.n_iw)
-                h_loc0_mat = block_matrix_from_op(self.h_loc0, self.gf_struct)
-                for bl, bl_name in enumerate(self.Delta_tau.indices):
-                    G0_iw[bl_name] << inverse(iOmega_n - Delta_iw[bl_name] - h_loc0_mat[bl])
+            if self.dlr:
+                self._post_proc_dlr(dlr_sigma)
             else:
-                G0_iw = self.G0_iw
-
-            # Solve Dyson's eq to obtain Sigma_iw and G_iw and fit the tail
-            self.Sigma_iw = dyson(G0_iw=G0_iw, G_iw=self.G_iw)
-            self.Sigma_iw_raw = self.Sigma_iw.copy()
-
-            if perform_tail_fit:
-
-                if fit_known_moments is None and self.Sigma_moments is not None:
-                    fit_known_moments = self.Sigma_moments
-
-                cthyb_tail_fit(
-                    Sigma_iw=self.Sigma_iw,
-                    fit_min_n = fit_min_n, fit_max_n = fit_max_n,
-                    fit_min_w = fit_min_w, fit_max_w = fit_max_w,
-                    fit_max_moment = fit_max_moment,
-                    fit_known_moments = fit_known_moments,
-                    )
-
-                # Recompute G_iw with the fitted Sigma_iw
-                self.G_iw = dyson(G0_iw=G0_iw, Sigma_iw=self.Sigma_iw)
-            else:
-
-                # Enforce 1/w behavior of G_iw in the tail fit window
-                # and recompute Sigma_iw
-                for bl, g in self.G_iw:
+                # Fourier transform G_tau to obtain G_iw
+                for bl, g in self.G_tau:
+                    bl_size = g.target_shape[0]
                     if self.G_moments is None:
-                        tail = make_zero_tail(g, 2)
-                        tail[1] = np.eye(g.target_shape[0])
+                        known_moments = make_zero_tail(g, 4)
+                        known_moments[1] = np.eye(bl_size)
                     else:
-                        tail = self.G_moments[bl]
+                        known_moments = self.G_moments[bl]
+                    self.G_iw[bl].set_from_fourier(g, known_moments)
 
-                    g.replace_by_tail_in_fit_window(tail)
+                assert is_gf_hermitian(self.G_iw)
+                self.G_iw_raw = self.G_iw.copy()
 
+                if self.delta_interface:
+                    G0_iw = self.G_iw.copy()
+                    Delta_iw = make_gf_from_fourier(self.Delta_tau, self.n_iw)
+                    h_loc0_mat = block_matrix_from_op(self.h_loc0, self.gf_struct)
+                    for bl, bl_name in enumerate(self.Delta_tau.indices):
+                        G0_iw[bl_name] << inverse(iOmega_n - Delta_iw[bl_name] - h_loc0_mat[bl])
+                else:
+                    G0_iw = self.G0_iw
+
+                # Solve Dyson's eq to obtain Sigma_iw and G_iw and fit the tail
                 self.Sigma_iw = dyson(G0_iw=G0_iw, G_iw=self.G_iw)
+                self.Sigma_iw_raw = self.Sigma_iw.copy()
+
+                if perform_tail_fit:
+
+                    if fit_known_moments is None and self.Sigma_moments is not None:
+                        fit_known_moments = self.Sigma_moments
+
+                    cthyb_tail_fit(
+                        Sigma_iw=self.Sigma_iw,
+                        fit_min_n = fit_min_n, fit_max_n = fit_max_n,
+                        fit_min_w = fit_min_w, fit_max_w = fit_max_w,
+                        fit_max_moment = fit_max_moment,
+                        fit_known_moments = fit_known_moments,
+                        )
+
+                    # Recompute G_iw with the fitted Sigma_iw
+                    self.G_iw = dyson(G0_iw=G0_iw, Sigma_iw=self.Sigma_iw)
+                else:
+
+                    # Enforce 1/w behavior of G_iw in the tail fit window
+                    # and recompute Sigma_iw
+                    for bl, g in self.G_iw:
+                        if self.G_moments is None:
+                            tail = make_zero_tail(g, 2)
+                            tail[1] = np.eye(g.target_shape[0])
+                        else:
+                            tail = self.G_moments[bl]
+
+                        g.replace_by_tail_in_fit_window(tail)
+
+                    self.Sigma_iw = dyson(G0_iw=G0_iw, G_iw=self.G_iw)
 
         if self.last_solve_parameters.measure_D0_corr and self.last_solve_parameters.measure_density_matrix:
             from triqs.operators import n
@@ -312,3 +364,59 @@ class Solver(SolverCore):
                     self.nn_tau = self.Q_tau.copy()
 
         return solve_status
+
+    def _set_Delta_tau_from_dlr(self, params_kw):
+        """DLR mode: sample Delta_iw on the n_tau points of the core's Delta_tau. With the G0_iw input, Delta_iw and
+        h_loc0 (added to params_kw) are first computed from G0_iw: h_loc0 is the constant part of iw - G0^-1(iw),
+        fitted on n_iw regular frequencies as the C++ G0_iw interface does, and Delta = iw - h_loc0 - G0^-1."""
+        if not self.delta_interface:
+            if 'h_loc0' in params_kw:
+                raise ValueError("h_loc0 is computed from G0_iw: pass it only with delta_interface=True")
+            p = SolveParametersT(**params_kw)
+            h_loc0_mat = np.empty(len(self.gf_struct), dtype=object)
+            for i, (bl, g0) in enumerate(self.G0_iw):
+                g0_reg = make_gf_imfreq(make_gf_dlr(g0), n_iw=self.n_iw)
+                x = g0_reg.copy()
+                x << iOmega_n - inverse(g0_reg)
+                tail, err = fit_hermitian_tail(x)
+                if err > 1e-5 and mpi.is_master_node():
+                    print(f"WARNING: Tail fit in extraction of h_loc0 from G0_iw[{bl}] has large error of: {err}")
+                # An imaginary part within the fit's residual is roundoff
+                h = tail[0].real.copy() if np.abs(tail[0].imag).max() <= max(p.imag_threshold, err) else tail[0].copy()
+                h[(np.abs(h) < p.off_diag_threshold) & ~np.eye(len(h), dtype=bool)] = 0.0
+                self.Delta_iw[bl] << iOmega_n - h - inverse(g0)
+                h_loc0_mat[i] = h
+            params_kw['h_loc0'] = op_from_block_matrix(h_loc0_mat, self.gf_struct)
+        self.Delta_tau << make_gf_imtime(self.Delta_iw, self.n_tau)
+
+    def _post_proc_dlr(self, dlr_sigma):
+        """DLR mode: G_iw from the DLR fit of G_tau, and Sigma_iw by Dyson on the DLR mesh."""
+        self.G_dlr = fit_gf_dlr(self.G_tau, MeshDLR(self.dlr_mesh))
+        self.G_iw = make_gf_dlr_imfreq(self.G_dlr)
+        self.G_tau_dlr = make_gf_dlr_imtime(self.G_dlr)
+
+        if self.delta_interface:
+            G0_iw = self.Delta_iw.copy()
+            h_loc0_mat = block_matrix_from_op(self.h_loc0, self.gf_struct)
+            for i, (bl, g0) in enumerate(G0_iw):
+                g0 << inverse(iOmega_n - h_loc0_mat[i] - self.Delta_iw[bl])
+        else:
+            G0_iw = self.G0_iw
+
+        if dlr_sigma == 'dyson':
+            self.Sigma_iw = G0_iw.copy()
+            self.Sigma_iw << inverse(G0_iw) - inverse(self.G_iw)
+            return
+
+        if self.Sigma_moments is None:
+            raise ValueError("dlr_sigma='crm' needs the high-frequency moments of Sigma: set measure_density_matrix=True")
+        from triqs.gfs.dlr_crm_dyson_solver import minimize_dyson
+        Sigma_iw = None
+        if mpi.is_master_node():
+            Sigma_iw = G0_iw.copy()
+            np.random.seed(85281)
+            for bl, sigma in Sigma_iw:
+                sigma_dyn, _, _ = minimize_dyson(G0_dlr=G0_iw[bl], G_dlr=self.G_iw[bl], Sigma_moments=self.Sigma_moments[bl])
+                sigma << sigma_dyn
+                sigma += self.Sigma_moments[bl][0]
+        self.Sigma_iw = mpi.bcast(Sigma_iw)

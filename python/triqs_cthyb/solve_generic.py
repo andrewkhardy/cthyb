@@ -226,7 +226,7 @@ def _postprocess_crm(solver, G0_iw, params):
                 Sigma_moments=solver.Sigma_moments[bl]
             )
 
-        n_iw = len(G0_iw.mesh) // 2 if hasattr(G0_iw.mesh, '__len__') else solver.n_iw
+        n_iw = len(G0_iw.mesh) // 2 if isinstance(G0_iw.mesh, MeshImFreq) else solver.n_iw
         Sigma_iw = make_gf_imfreq(Sigma_dlr, n_iw=n_iw)
 
         for bl, gf in Sigma_iw:

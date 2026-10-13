@@ -8,12 +8,13 @@ curves is solver physics, not bookkeeping:
     Sigma(iw) = G0(iw)^-1 - G(iw)^-1,    G0(iw)^-1 = iw + mu - eps - Delta(iw).
 
 Build G0 from the model's inputs, never from the solver: solve() shifts h_loc in place by the
-Lang-Firsov K'(0), so a mu read back afterwards depends on the routing. Do not tail-fit:
-S.Sigma_moments sees only the static h_int, not the retarded interaction. At large beta prefer
-the Legendre route (sigma_from_G_l) to a Dyson inversion of a noisy G(tau).
+Lang-Firsov K'(0), so a mu read back afterwards depends on the routing. Do not tail-fit, and do
+not use CTHYB's dlr_sigma='crm': S.Sigma_moments sees only the static h_int, not the retarded
+interaction. CTHYB's G is its DLR-mode G_iw, the DLR fit of G(tau) on the DLR Matsubara mesh, so
+its Sigma is on the DLR frequencies, a subset of the regular grid of the other solvers.
 """
 import numpy as np
-from triqs.gfs import BlockGf, Gf, MeshImFreq, Fourier, LegendreToMatsubara, inverse, iOmega_n
+from triqs.gfs import BlockGf, Gf, MeshImFreq, Fourier, inverse, iOmega_n, make_gf_imtime
 
 
 def g0_inverse_iw(mesh, mu, delta_iw, eps=None):
@@ -61,27 +62,6 @@ def G_iw_from_G_tau(G_tau, n_iw):
     return BlockGf(name_list=[n for n, _ in G_tau], block_list=blocks)
 
 
-def G_iw_from_G_l(G_l, n_iw):
-    """`G_l -> G(iw)` via `LegendreToMatsubara` (needs `measure_G_l=True`)."""
-    beta = G_l.mesh.beta
-    blocks = []
-    for _, g in G_l:
-        g_iw = Gf(mesh=MeshImFreq(beta=beta, statistic="Fermion", n_iw=n_iw), target_shape=g.target_shape)
-        g_iw << LegendreToMatsubara(g)
-        blocks.append(g_iw)
-    return BlockGf(name_list=[n for n, _ in G_l], block_list=blocks)
-
-
-def sigma_from_G_tau(G_tau, n_iw, mu, delta_iw, eps=None):
-    """Dyson self-energy from `G(tau)`, the cross-check route."""
-    return sigma_from_G_iw(G_iw_from_G_tau(G_tau, n_iw), mu, delta_iw, eps)
-
-
-def sigma_from_G_l(G_l, n_iw, mu, delta_iw, eps=None):
-    """Dyson self-energy from the Legendre `G_l`, the preferred route."""
-    return sigma_from_G_iw(G_iw_from_G_l(G_l, n_iw), mu, delta_iw, eps)
-
-
 def sigma_from_F_tau(F_tau, G_iw):
     r"""CTSEG's improved estimator `Sigma(iw) = F(iw) / G(iw)` (`measure_F_tau=True`), which uses no
     G0, mu or Delta; triqs_ctseg's postprocess_sigma without the tail fit."""
@@ -104,6 +84,17 @@ def density_from_G_iw(G_iw):
     out = []
     for _, g in G_iw:
         out.extend(np.diag(g.density()).real)
+    return np.array(out)
+
+
+def density_from_G_dlr(G_dlr):
+    r"""Diagonal densities per spin-orbital, flat in block order, from CTHYB's DLR fit `S.G_dlr`:
+    n = (1 + G(0) - G(beta)) / 2, which leaves out the miss of the sum rule G(0) + G(beta) = -1 that
+    the fit of a noisy G(tau) makes, shared between the two ends."""
+    out = []
+    for _, g in G_dlr:
+        ends = make_gf_imtime(g, 2).data  # tau = 0 and beta
+        out.extend((1 + np.diag(ends[0]).real - np.diag(ends[-1]).real) / 2)
     return np.array(out)
 
 
@@ -132,13 +123,19 @@ def diagnose(sigma_values, w_n, mu=None, w_lo=1.0, w_hi=8.0, w_max=20.0):
     return dict(n_noncausal=n_bad, first_noncausal=first_bad, re_mean=re_mean, re_std=re_std, text=text)
 
 
+def _frequencies(mesh):
+    """w_n of every point of a regular or DLR Matsubara `mesh`, in mesh order."""
+    return np.array([complex(w).imag for w in mesh.values()])
+
+
 def matsubara_frequencies(mesh):
-    """Positive Matsubara frequencies of `mesh` as a plain array."""
-    return np.array([complex(w).imag for w in mesh if complex(w).imag > 0])
+    """Positive Matsubara frequencies of a regular or DLR `mesh` as a plain array."""
+    w = _frequencies(mesh)
+    return w[w > 0]
 
 
 def positive_frequency_part(g_iw, orb=(0, 0)):
-    """`(w_n, values)` of one orbital component on the positive Matsubara frequencies."""
-    n = len(g_iw.mesh) // 2
-    values = g_iw.data[n:, orb[0], orb[1]]
-    return matsubara_frequencies(g_iw.mesh), values
+    """`(w_n, values)` of one orbital component on the positive Matsubara frequencies of a regular
+    or DLR mesh."""
+    w = _frequencies(g_iw.mesh)
+    return w[w > 0], g_iw.data[w > 0, orb[0], orb[1]]

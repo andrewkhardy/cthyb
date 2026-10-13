@@ -13,7 +13,8 @@
 # 8A is the 8-site Betts cluster (clusters.py), the largest for which CTHYB is practical.
 # Every solve runs for MAX_TIME seconds (n_cycles is only a cap), so the two solvers get the same time per iteration:
 # compare the noise of Sigma, the sign and the order across iterations.
-# cthyb: DCA and CDMFT at pauli_prob = 0 and 0.5. For 4x4 it bounds the memory of the local problem first and stops
+# cthyb: DCA and CDMFT at the driver's pauli_prob = 0.5. On 2x2 it sampled the same sign, order and Sigma as 0, with
+#        the same or (CDMFT) half the autocorrelation time. For 4x4 it bounds the memory of the local problem first and stops
 #        with the numbers if the node cannot hold it; pass --force to attempt it anyway. CDMFT beyond 2x2 takes blocks
 #        of several cluster-momentum waves. On 8A a move took ~0.3 s on 8 threads locally, so its warmup is cut to 200 moves
 #        (5000 x 100 would never end) and it measures every 10 moves.
@@ -56,9 +57,7 @@ fi
 
 for scheme in ${SCHEMES:-DCA CDMFT}; do
   if [ "$SOLVER" = cthyb ]; then
-    for pp in 0.0 0.5; do
-      run cluster_4x4.py "$scheme" --pauli_prob "$pp" $WARMUP "$@"
-    done
+    run cluster_4x4.py "$scheme" $WARMUP "$@"
   else
     run cluster_ctint.py "$scheme" "$@"
   fi

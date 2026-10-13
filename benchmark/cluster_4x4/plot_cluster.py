@@ -108,7 +108,10 @@ def sigma_by_star(it_group, params):
 
 
 def load(path):
+    """The run in `path`, or None while it has no finished iteration"""
     with HDFArchive(path, "r") as A:
+        if "n_iter" not in A:
+            return None
         params = A["params"]
         its = []
         for i in range(A["n_iter"]):
@@ -128,9 +131,18 @@ def load(path):
 runs = {}  # (cluster, U, beta, mu) -> scheme -> label -> run
 for path in sorted(glob.glob(os.path.join(os.path.expanduser(args.data_dir), "cluster_*.h5"))):
     m = FILE.search(os.path.basename(path))
-    if m:
-        key = (m["cluster"], m["U"], m["beta"], m["mu"])
-        runs.setdefault(key, {}).setdefault(m["scheme"], {})[label_of(m["tag"])] = load(path)
+    if not m:
+        continue
+    try:
+        run = load(path)
+    except (OSError, KeyError, RuntimeError) as e:  # synced while the run was writing it
+        print(f"Skipping {os.path.basename(path)}: unreadable ({e})")
+        continue
+    if run is None:
+        print(f"Skipping {os.path.basename(path)}: no finished iteration yet")
+        continue
+    key = (m["cluster"], m["U"], m["beta"], m["mu"])
+    runs.setdefault(key, {}).setdefault(m["scheme"], {})[label_of(m["tag"])] = run
 if not runs:
     print(f"No cluster_*.h5 runs in {args.data_dir}")
 

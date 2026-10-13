@@ -11,8 +11,19 @@ compare point by point. Each solver's correlator mesh is set from N_TAU:
   ED     `--n_tau`
 
 N_TAU must be >= 2 N_IW + 1 for TRIQS' Fourier, and is odd so beta/2 is a mesh point. It is
-well above that minimum because CTHYB and CTSEG interpolate Delta(tau) linearly on this mesh,
-which at beta = 100 needs the finer grid.
+well above that minimum because CTSEG interpolates Delta(tau) linearly on this mesh and CTHYB
+takes its nearest point, which at beta = 100 needs the finer grid.
+
+CTHYB runs in its DLR mode: Delta goes in, and G and Sigma come out, on the DLR Matsubara mesh
+(beta, DLR_WMAX, DLR_EPS), whose frequencies are a subset of the regular grid's. DLR_WMAX is
+CTINT's cutoff here, and G, not only Delta, must have no spectral weight above it.
 """
 N_TAU = 4001
 N_IW = 1025
+DLR_WMAX = 10.0
+DLR_EPS = 1e-10
+
+
+def add_dlr_args(parser):
+    parser.add_argument("--dlr_wmax", type=float, default=DLR_WMAX, help="DLR frequency cutoff of Delta, G and Sigma")
+    parser.add_argument("--dlr_eps", type=float, default=DLR_EPS, help="DLR accuracy")
