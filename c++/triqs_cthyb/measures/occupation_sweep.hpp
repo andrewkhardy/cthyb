@@ -67,6 +67,8 @@ namespace triqs_cthyb {
     std::vector<long> reflection;                        // by index in the mesh
     nda::array<mc_weight_t, 2> values;                   // (node in increasing tau, i * n_B + j)
     mc_weight_t average_sign = 0;
+    long n_measures = 0, n_trace_mismatch = 0; // configurations whose full trace differs from the Monte Carlo one by > 1e-8
+    double max_trace_mismatch = 0;             // the largest such difference, relative to the sum of |block traces|
 
     // Work space, kept between measurements
     timed_ops_t ops; // the trace operators in increasing time

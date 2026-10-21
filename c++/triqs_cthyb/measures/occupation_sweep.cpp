@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 #include <numeric>
 
 #include "./occupation_sweep.hpp"
@@ -155,12 +156,23 @@ namespace triqs_cthyb {
       first_node[k + 1] = std::lower_bound(node_tau.begin(), node_tau.end(), t[k + 1]) - node_tau.begin();
     }
 
-    // Divided by the trace the Monte Carlo weight holds, checked against the full trace
+    // Divided by the trace the Monte Carlo weight holds, checked against the full trace. impurity_trace::compute drops
+    // the blocks whose bound is below 1e-15 of the largest bound, so the Monte Carlo trace is accurate to ~1e-15 of that
+    // bound, not of itself: on a configuration whose trace nearly cancels (|trace| << bound) the two differ by far more
+    // than 1e-8 |trace| without anything being wrong (a run stopped on 'the trace -9.94471e-15 differs from the Monte
+    // Carlo trace -9.94471e-15'). Those are counted and reported by collect; only a gross difference on a configuration
+    // whose trace is not negligible against its weight (|trace / norm| with use_norm_as_weight) is an error.
     h_scalar_t const mc_trace       = data.atomic_weight * data.atomic_reweighting;
     auto const [bare_trace, trace_abs] = within_blocks ? accumulate_within_blocks(s / mc_trace) : accumulate_across_blocks(s / mc_trace);
-    if (std::abs(bare_trace - mc_trace) > 1.e-8 * trace_abs)
-      TRIQS_RUNTIME_ERROR << "Imaginary-time correlators: the trace " << bare_trace << " of configuration " << data.config.get_id()
-                          << " differs from the Monte Carlo trace " << mc_trace;
+    ++n_measures;
+    double const mismatch = std::abs(bare_trace - mc_trace) / trace_abs;
+    if (mismatch > 1.e-8) {
+      ++n_trace_mismatch;
+      max_trace_mismatch = std::max(max_trace_mismatch, mismatch);
+      if (mismatch > 1.e-3 && std::abs(data.atomic_reweighting) > 1.e-6)
+        TRIQS_RUNTIME_ERROR << "Imaginary-time correlators: the trace " << bare_trace << " of configuration " << data.config.get_id()
+                            << " differs from the Monte Carlo trace " << mc_trace;
+    }
   }
 
   std::pair<h_scalar_t, double> occupation_sweep::accumulate_within_blocks(mc_weight_t weight) {
@@ -392,6 +404,12 @@ namespace triqs_cthyb {
   nda::array<mc_weight_t, 3> occupation_sweep::collect(mpi::communicator const &c) {
     average_sign = mpi::all_reduce(average_sign, c);
     values       = mpi::all_reduce(values, c);
+
+    long const n_total = mpi::all_reduce(n_measures, c), n_off = mpi::all_reduce(n_trace_mismatch, c);
+    double const worst = mpi::all_reduce(max_trace_mismatch, c, MPI_MAX);
+    if (c.rank() == 0 && n_off > 0)
+      std::cerr << "occupation_sweep: " << n_off << " of " << n_total << " configurations had a full trace that differs from the Monte Carlo trace by more"
+                << " than 1e-8 of the sum of |block traces| (largest: " << worst << "); expected for traces that nearly cancel\n";
 
     double const norm = std::real(average_sign);
     nda::array<mc_weight_t, 3> result(long(node_tau.size()), n_A, n_B);
