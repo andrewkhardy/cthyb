@@ -1,7 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=plaquette_2x2
 #SBATCH --ntasks=128
+#SBATCH --time=12:00:00
 # Load the TRIQS environment before submitting; sbatch exports it to the job.
+# Each run: 12 iterations of 900 s and a final solve of 3600 s (correlators), about 4 h.
+# Away from half filling, e.g.: mpirun python plaquette_2x2.py --scheme DCA --tp -0.3 --density 0.9
 
 mpirun python plaquette_2x2.py --scheme DCA
 mpirun python plaquette_2x2.py --scheme CDMFT

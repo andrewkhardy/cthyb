@@ -94,6 +94,7 @@ class Solver(SolverCore):
         self.G_iw_raw = None
         self.G_dlr = None
         self.G_tau_dlr = None
+        self.crm_failure = None  # why the CRM of the last solve failed, if it did (dlr_sigma='crm')
         self._retarded = False  # set by add_dyn_int
         self._chiAB_scalar = False  # chi_A_vec and chi_B_vec of the last solve were single operators
         self.gf_struct = gf_struct
@@ -217,7 +218,9 @@ class Solver(SolverCore):
                     ``G_tau``. ``'dyson'``: :math:`G_0^{-1} - G^{-1}` at each DLR frequency.
                     ``'crm'``: constrained residual minimization of the Dyson equation
                     (``triqs.gfs.dlr_crm_dyson_solver.minimize_dyson``) with the high-frequency
-                    moments of Sigma, which needs ``measure_density_matrix``.
+                    moments of Sigma, which needs ``measure_density_matrix``. Where the minimization fails
+                    (LinAlgError, ValueError, or a non-finite Sigma), ``Sigma_iw`` is the ``'dyson'`` one, with a
+                    warning, and ``crm_failure`` holds the error (None otherwise).
         """
 
         # -- Deprecation checks for measure parameters
@@ -435,7 +438,9 @@ class Solver(SolverCore):
             unit.data[:] = 0
             unit.data[l] = 1
             K[:, l] = make_gf_imtime(unit, self.n_tau).data.real
-        rate = -np.log(K[1] / K[0]) * (self.n_tau - 1) / self.dlr_mesh.beta
+        # G'(tau) = -w G(tau) for the coefficient at the DLR frequency w (MeshDLR holds beta w). Not -log(G(dtau) / G(0))
+        # / dtau: for the nodes beyond beta w ~ -745 (beta w_max = 800 at beta 40, w_max 20) both underflow to 0
+        rate = np.real(mesh.values()) / self.dlr_mesh.beta
         A = -(K[0] + K[-1])[None, :]  # -(G(0) + G(beta)), the 1/iw moment
         with_M2 = self.G_moments is not None and not self._has_retarded_interaction()
         if with_M2:
@@ -453,7 +458,8 @@ class Solver(SolverCore):
         return G_dlr
 
     def _post_proc_dlr(self, dlr_sigma):
-        """DLR mode: G_iw from the DLR fit of G_tau, and Sigma_iw by Dyson on the DLR mesh."""
+        """DLR mode: G_iw from the DLR fit of G_tau, and Sigma_iw by Dyson on the DLR mesh (CRM or plain, which the CRM
+        falls back to where it fails)."""
         self.G_dlr = self._fit_G_dlr()
         self.G_iw = make_gf_dlr_imfreq(self.G_dlr)
         self.G_tau_dlr = make_gf_dlr_imtime(self.G_dlr)
@@ -466,20 +472,30 @@ class Solver(SolverCore):
         else:
             G0_iw = self.G0_iw
 
-        if dlr_sigma == 'dyson':
-            self.Sigma_iw = G0_iw.copy()
-            self.Sigma_iw << inverse(G0_iw) - inverse(self.G_iw)
-            return
+        self.crm_failure = None
+        if dlr_sigma == 'crm':
+            if self.Sigma_moments is None:
+                raise ValueError("dlr_sigma='crm' needs the high-frequency moments of Sigma: set measure_density_matrix=True")
+            from triqs.gfs.dlr_crm_dyson_solver import minimize_dyson
+            Sigma_iw, failure = None, None
+            if mpi.is_master_node():
+                try:
+                    Sigma_iw = G0_iw.copy()
+                    np.random.seed(85281)
+                    for bl, sigma in Sigma_iw:
+                        sigma_dyn, _, _ = minimize_dyson(G0_dlr=G0_iw[bl], G_dlr=self.G_iw[bl], Sigma_moments=self.Sigma_moments[bl])
+                        sigma << sigma_dyn
+                        sigma += self.Sigma_moments[bl][0]
+                    if not all(np.isfinite(sigma.data).all() for _, sigma in Sigma_iw):
+                        raise FloatingPointError("non-finite Sigma")
+                except (np.linalg.LinAlgError, ValueError, FloatingPointError) as e:
+                    Sigma_iw, failure = None, f"{type(e).__name__}: {e}"
+                    print(f"WARNING: the CRM failed ({failure}); Sigma_iw is the plain Dyson G0^-1 - G^-1", flush=True)
+            # The master decides: every rank takes the same branch
+            Sigma_iw, self.crm_failure = mpi.bcast((Sigma_iw, failure))
+            if self.crm_failure is None:
+                self.Sigma_iw = Sigma_iw
+                return
 
-        if self.Sigma_moments is None:
-            raise ValueError("dlr_sigma='crm' needs the high-frequency moments of Sigma: set measure_density_matrix=True")
-        from triqs.gfs.dlr_crm_dyson_solver import minimize_dyson
-        Sigma_iw = None
-        if mpi.is_master_node():
-            Sigma_iw = G0_iw.copy()
-            np.random.seed(85281)
-            for bl, sigma in Sigma_iw:
-                sigma_dyn, _, _ = minimize_dyson(G0_dlr=G0_iw[bl], G_dlr=self.G_iw[bl], Sigma_moments=self.Sigma_moments[bl])
-                sigma << sigma_dyn
-                sigma += self.Sigma_moments[bl][0]
-        self.Sigma_iw = mpi.bcast(Sigma_iw)
+        self.Sigma_iw = G0_iw.copy()
+        self.Sigma_iw << inverse(G0_iw) - inverse(self.G_iw)

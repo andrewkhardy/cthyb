@@ -1,0 +1,75 @@
+##### MATPLOTLIBRC #####
+
+# written for matplotlib v. 3.3.0
+# on Unix systems, put this at .config/matplotlib/matplotlibrc 
+# see https://github.com/matplotlib/matplotlib/blob/v3.3.0/matplotlibrc.template for documentation
+
+# Increase the default DPI, and change the file type from png to pdf 
+savefig.dpi             :   300
+savefig.format          :   pdf
+savefig.bbox            :   tight
+
+# Reduces filesize for large collections of data
+path.simplify           :   True
+
+# This figuresize gives nice relative font sizes without having to fiddle too much directly with fonts 
+figure.figsize          :   8,8
+
+# deal with fonts; setting mathtext.fontset to cm is better than using usetex:true, since the latter increases runtime (but is needed if you want to use more serious tex)
+# setting font family through the rc file can be buggy for some reason; one solution is to call the rc parameters directly in the .py file 
+# font.family             :   serif 
+# font.serif              :   Computer Modern Roman
+# font.sans-serif         :   Computer Modern Sans Serif
+# font.monospace          :   Computer Modern
+mathtext.fontset          :   cm #use computer modern math to avoid awful dejavusans
+axes.formatter.use_mathtext : True
+#text.usetex		:   True
+
+# make nicer-looking ticks to avoid to avoid the awful default settings 
+xtick.top               :   True 
+ytick.right             :   True
+
+xtick.direction         :   in
+ytick.direction         :   in 
+
+xtick.minor.visible     :   True 
+ytick.minor.visible     :   True
+
+xtick.major.size        :   8
+ytick.major.size        :   8 
+xtick.minor.size        :   4	
+ytick.minor.size        :   4
+
+#make everything a bit thicker 
+axes.linewidth          :   .75
+xtick.major.width       :   .75
+ytick.major.width       :   .75
+xtick.minor.width       :   .75
+ytick.minor.width       :   .75
+lines.markeredgewidth   :   .75
+xtick.labelsize          :   18.0
+ytick.labelsize          :   18.0
+
+#want to make the labels nice and easy to read 
+axes.labelsize          :   20.0 
+axes.titlesize          :   20.0
+figure.titlesize        :   18.0 
+
+#if you want a grid 
+# axes.grid             :   True 
+# axes.grid.which       :   major
+# grid.linestyle        :   --
+# grid.linewidth        :   .5
+# grid.alpha            :   .5
+
+# Make nicer legends  
+legend.numpoints        :   1
+legend.frameon          :   True
+legend.handletextpad    :   0.3
+legend.framealpha       :   0.8
+
+# functions like fig.tight_layout(), but can create awkward paddings if you have large math axes labels 
+# figure.autolayout     : True 
+
+#make the lines slightly thicker than default (1.5; in points)
+lines.linewidth         :   2.25      
