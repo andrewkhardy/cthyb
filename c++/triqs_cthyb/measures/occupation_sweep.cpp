@@ -137,6 +137,10 @@ namespace triqs_cthyb {
   }
 
   void occupation_sweep::accumulate(mc_weight_t s) {
+    // The sign over the Monte Carlo weight, taken before the reweighting: with use_norm_as_weight a configuration whose
+    // trace vanishes (reweighting 0, e.g. a traceless product, or one whose only nonzero blocks impurity_trace drops) has
+    // a nonzero norm, and s * 0 / (norm * 0) = NaN would make every node NaN
+    mc_weight_t const weight = s / data.atomic_weight;
     s *= data.atomic_reweighting;
     average_sign += s;
 
@@ -156,14 +160,14 @@ namespace triqs_cthyb {
       first_node[k + 1] = std::lower_bound(node_tau.begin(), node_tau.end(), t[k + 1]) - node_tau.begin();
     }
 
-    // Divided by the trace the Monte Carlo weight holds, checked against the full trace. impurity_trace::compute drops
+    // The trace the Monte Carlo weight holds, checked against the full trace. impurity_trace::compute drops
     // the blocks whose bound is below 1e-15 of the largest bound, so the Monte Carlo trace is accurate to ~1e-15 of that
     // bound, not of itself: on a configuration whose trace nearly cancels (|trace| << bound) the two differ by far more
     // than 1e-8 |trace| without anything being wrong (a run stopped on 'the trace -9.94471e-15 differs from the Monte
     // Carlo trace -9.94471e-15'). Those are counted and reported by collect; only a gross difference on a configuration
     // whose trace is not negligible against its weight (|trace / norm| with use_norm_as_weight) is an error.
     h_scalar_t const mc_trace       = data.atomic_weight * data.atomic_reweighting;
-    auto const [bare_trace, trace_abs] = within_blocks ? accumulate_within_blocks(s / mc_trace) : accumulate_across_blocks(s / mc_trace);
+    auto const [bare_trace, trace_abs] = within_blocks ? accumulate_within_blocks(weight) : accumulate_across_blocks(weight);
     ++n_measures;
     double const mismatch = std::abs(bare_trace - mc_trace) / trace_abs;
     if (mismatch > 1.e-8) {
