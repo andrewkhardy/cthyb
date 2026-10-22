@@ -63,12 +63,15 @@ namespace triqs_cthyb {
         b = make_regular(0.5*(b + dagger(b)));
     }
 
-    if (c.rank() != 0) return;
-
-    // Check: the trace of the density matrix must be 1 by construction
+    // Check: the trace of the density matrix must be 1 by construction. Every rank takes rank 0's verdict, so a bad
+    // trace stops all of them; raising on rank 0 alone left the others waiting in the next collective until the
+    // allocation ran out
     h_scalar_t tr = 0;
     for (auto &b : block_dm) tr += trace(b);
+    mpi::broadcast(tr, c);
     if (std::abs(tr - 1) > 0.0001) TRIQS_RUNTIME_ERROR << "Trace of the density matrix is " << tr << " instead of 1";
+
+    if (c.rank() != 0) return;
     if (std::abs(tr - 1) > 1.e-10)
       std::cerr << "Warning :: Trace of the density matrix is " << std::setprecision(13) << tr << std::setprecision(6) << " instead of 1"
                 << std::endl;

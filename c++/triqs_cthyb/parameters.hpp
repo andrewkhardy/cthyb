@@ -123,6 +123,13 @@ namespace triqs_cthyb {
     /// All other vertices, or all of them if false, are sampled stochastically.
     bool lang_firsov = true;
 
+    /// How a density coupling D_ab(tau) that does not commute with h_loc is split, D = D_LF + R, on each block of
+    /// conserved densities, pointwise in tau; a stochastic vertex has weight -R. "min": D_LF is the entry of smallest
+    /// magnitude when all entries share a sign (zero otherwise), so R keeps the sign of D, and positive entries of D give
+    /// negative weights. "mean": D_LF is the block average (the least-squares choice), so R is as small as it can be but
+    /// has both signs. "max": D_LF is the largest entry, so R <= 0 and every stochastic weight is positive. All are exact.
+    std::string lang_firsov_split = "min";
+
     /// Number of Legendre coefficients of the Lang-Firsov kernel and of the dynamical correlators.
     int dyn_n_l = 50;
 

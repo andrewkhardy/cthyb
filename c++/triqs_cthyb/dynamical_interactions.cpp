@@ -401,7 +401,10 @@ namespace triqs_cthyb {
   // -----------------------------------------------------------------------------------
 
   density_split_counts_t split_density_couplings(classified_dyn_vertices_t &classified, std::vector<nda::vector<double>> const &conserved_combinations,
-                                                 fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex) {
+                                                 fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex,
+                                                 std::string const &mode) {
+    if (mode != "min" && mode != "mean" && mode != "max")
+      TRIQS_RUNTIME_ERROR << "lang_firsov_split = \"" << mode << "\": expected \"min\", \"mean\" or \"max\"";
     if (conserved_combinations.empty()) return {};
 
     // The rejected density-density vertices; the others stay as they are
@@ -445,26 +448,35 @@ namespace triqs_cthyb {
       for (auto const &tau : mesh) D(tau.index(), a, b) += eval_scalar_gf(density_vertices[k].coupling, tau.value());
     }
 
-    // Sign-preserving split, pointwise in tau: on each block the Lang-Firsov part is the entry of smallest
-    // magnitude if all entries share a sign, zero otherwise, so every residual entry keeps the sign of D or vanishes
+    // Pointwise in tau, one Lang-Firsov value per block. A stochastic vertex has weight -R_ab(tau), so it is positive
+    // exactly where R_ab <= 0. "min": the entry of smallest magnitude if all entries share a sign, zero otherwise, so
+    // every residual entry keeps the sign of D or vanishes (positive entries of D stay positive in R). "mean": the
+    // block average, which minimises sum |R_ab|^2 but leaves residual entries of both signs. "max": the largest entry,
+    // so R <= 0 everywhere whatever the signs of D; it equals "min" wherever all entries are negative.
     int const n_blocks = static_cast<int>(members.size());
     nda::array<double, 3> lang_firsov_part = nda::zeros<double>(n_tau, M, M), residual(n_tau, M, M);
     for (int t = 0; t < n_tau; ++t) {
       for (int i = 0; i < n_blocks; ++i) {
         for (int j = 0; j < n_blocks; ++j) {
           bool all_positive = true, all_negative = true;
-          double smallest_magnitude = std::numeric_limits<double>::infinity(), closest_to_zero = 0.0;
+          double smallest_magnitude = std::numeric_limits<double>::infinity(), closest_to_zero = 0.0, sum = 0.0;
+          double largest = -std::numeric_limits<double>::infinity();
           for (int a : members[i])
             for (int b : members[j]) {
               double const d = D(t, a, b);
               all_positive   = all_positive && d > 0.0;
               all_negative   = all_negative && d < 0.0;
+              sum += d;
+              largest = std::max(largest, d);
               if (std::abs(d) < smallest_magnitude) {
                 smallest_magnitude = std::abs(d);
                 closest_to_zero    = d;
               }
             }
-          double const lang_firsov_value = (all_positive || all_negative) ? closest_to_zero : 0.0;
+          double const mean              = sum / double(members[i].size() * members[j].size());
+          double const lang_firsov_value = (mode == "mean") ? mean
+             : (mode == "max")                                 ? largest
+                                                               : ((all_positive || all_negative) ? closest_to_zero : 0.0);
           for (int a : members[i])
             for (int b : members[j]) lang_firsov_part(t, a, b) = lang_firsov_value;
         }
@@ -492,6 +504,7 @@ namespace triqs_cthyb {
     };
 
     density_split_counts_t counts;
+    counts.mode           = mode;
     counts.n_input        = static_cast<int>(density_vertices.size());
     counts.n_lang_firsov  = add_vertices(lang_firsov_part, classified.lang_firsov);
     classified.stochastic = std::move(other_vertices);
@@ -527,7 +540,7 @@ namespace triqs_cthyb {
     std::cout << "\n";
     if (split.n_input > 0 && split.block_structured)
       std::cout << "  " << split.n_input << " density-density vertices with non-conserved densities were split into a Lang-Firsov part "
-                << "and a stochastic residual.\n";
+                << "and a stochastic residual (lang_firsov_split = \"" << split.mode << "\").\n";
     else if (split.n_input > 0)
       std::cout << "  " << split.n_input << " density-density vertices with non-conserved densities stay stochastic: the conserved "
                 << "combinations are not sums over disjoint sets of orbitals.\n";

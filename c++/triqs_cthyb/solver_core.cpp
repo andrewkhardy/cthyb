@@ -231,7 +231,8 @@ namespace triqs_cthyb {
     density_split_counts_t split;
     if (params.lang_firsov) {
       lf_conserved = conserved_densities(_h_loc, fops, linindex);
-      split        = split_density_couplings(classified_dyn_vertices, lf_conserved.vectors, fops, linindex);
+      split        = split_density_couplings(classified_dyn_vertices, lf_conserved.vectors, fops, linindex,
+                                             params.lang_firsov_split);
     }
     if (params.verbosity >= 2)
       print_dyn_routing(dyn_vertices.size(), classified_dyn_vertices, lf_conserved.operators, split, params.lang_firsov, fops, linindex);

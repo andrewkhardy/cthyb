@@ -103,6 +103,7 @@ namespace triqs_cthyb {
     h5_write(grp, "pauli_prob", sp.pauli_prob);
     h5_write(grp, "use_trace_estimator", sp.use_trace_estimator);
     h5_write(grp, "lang_firsov", sp.lang_firsov);
+    h5_write(grp, "lang_firsov_split", sp.lang_firsov_split);
     h5_write(grp, "dyn_n_l", sp.dyn_n_l);
 
     h5_write(grp, "measure_G_tau", sp.measure_G_tau);
@@ -178,6 +179,7 @@ namespace triqs_cthyb {
     h5::try_read(grp, "pauli_prob", sp.pauli_prob);
     h5_read(grp, "use_trace_estimator", sp.use_trace_estimator);
     h5::try_read(grp, "lang_firsov", sp.lang_firsov);
+    h5::try_read(grp, "lang_firsov_split", sp.lang_firsov_split);
     h5::try_read(grp, "dyn_n_l", sp.dyn_n_l);
 
     h5_read(grp, "measure_G_tau", sp.measure_G_tau);

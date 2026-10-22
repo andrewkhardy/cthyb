@@ -22,6 +22,7 @@
 #include "./configuration.hpp"
 #include "./types.hpp"
 #include <triqs/hilbert_space/fundamental_operator_set.hpp>
+#include <string>
 
 // Dynamical (retarded) vertices D(tau) op1(tau) op2(0): collected from the solver inputs, routed either to the
 // analytic Lang-Firsov resummation or to the stochastic expansion, and prepared for each.
@@ -56,13 +57,17 @@ namespace triqs_cthyb {
                                             std::map<std::pair<int, int>, int> const &linindex);
 
   /// Split the stochastic density vertices exactly, D = D_LF + R, into a Lang-Firsov part that couples only the conserved
-  /// combinations (possible when they are indicators of disjoint orbital sets) and a residual R with the sign of D
+  /// combinations (possible when they are indicators of disjoint orbital sets) and a residual R. mode "min" keeps R with
+  /// the sign of D, "mean" makes D_LF the block average, "max" its largest entry so that R <= 0
+  /// (solve_parameters_t::lang_firsov_split)
   struct density_split_counts_t {
     int n_input = 0, n_lang_firsov = 0, n_stochastic = 0;
     bool block_structured = true; // false: the conserved combinations are not disjoint indicators, nothing was split
+    std::string mode;             // lang_firsov_split used
   };
   density_split_counts_t split_density_couplings(classified_dyn_vertices_t &classified, std::vector<nda::vector<double>> const &conserved_combinations,
-                                                 fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex);
+                                                 fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex,
+                                                 std::string const &mode);
 
   /// Print how the vertices are routed: how many are resummed analytically and in terms of which conserved densities,
   /// and how many are sampled stochastically
