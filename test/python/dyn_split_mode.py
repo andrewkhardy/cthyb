@@ -18,6 +18,13 @@
 # All three splits are exact, so they and the all-stochastic run must give the same G_l. A static run
 # (no retarded interaction) gives the sign of the dimer itself (t_perp in h_loc0, off-diagonal Delta),
 # which none of the splits can remove. Runs with a sign below MIN_SIGN are reported, not compared.
+#
+# The comparison is statistical: with that sign, a serial run leaves ~0.1 of noise on every G_l, at
+# every l. Each split is solved twice, with independent seeds and half the cycles, and compared through
+# the lowest L_MAX coefficients of G_l averaged over the spins and the two equivalent sites (one on-site
+# and one inter-site coefficient per l): they must agree with "max" within Z_MAX standard errors, the
+# error of each run being the difference of its two halves, pooled over those coefficients. The same
+# file run under mpirun on many ranks (each rank does the full cycles) is the high-statistics check.
 
 import numpy as np
 import triqs.utility.mpi as mpi
@@ -35,6 +42,9 @@ U = 2.0
 t_perp = -0.5
 epsilon = 2.3
 MIN_SIGN = 0.1
+L_MAX = 8      # G_l compared for l < L_MAX: beyond, this model's coefficients are below the noise
+Z_MAX = 6.0    # agreement within Z_MAX standard errors
+ABS_TOL = 5e-3 # plus this, for the Legendre fit of the Lang-Firsov part once the noise is that small
 
 omega_0 = 1.0
 g = 0.5
@@ -72,23 +82,41 @@ def build_and_solve(split, n_cycles, seed_offset, lang_firsov=True, retarded=Tru
     return S
 
 
+def symmetrized(S):
+    """G_l for l < L_MAX averaged over the spins and the two equivalent sites: (L_MAX, 2), on-site and inter-site"""
+    g = np.mean([S.G_l[s].data[:L_MAX].real for s in spin_names], axis=0)
+    return np.stack([0.5 * (g[:, 0, 0] + g[:, 1, 1]), 0.5 * (g[:, 0, 1] + g[:, 1, 0])], axis=1)
+
+
+def mean_and_error(halves):
+    """The mean of the two halves of a split and its standard error, |a - b| / 2 pooled over the coefficients"""
+    a, b = (symmetrized(S) for S in halves)
+    return 0.5 * (a + b), np.sqrt(np.mean((0.5 * (a - b))**2))
+
+
 S_static = build_and_solve("min", n_cycles=100000, seed_offset=0, retarded=False)
-runs = {split: build_and_solve(split, n_cycles=200000, seed_offset=1000 * (k + 1))
-        for k, split in enumerate(("min", "mean", "max"))}
-runs["all stochastic"] = build_and_solve("min", n_cycles=300000, seed_offset=4000, lang_firsov=False)
+cycles = {"min": 200000, "mean": 200000, "max": 200000, "all stochastic": 300000}
+runs = {name: [build_and_solve("min" if name == "all stochastic" else name, n_cycles // 2, seed_offset=1000 * (2 * k + h + 1),
+                               lang_firsov=name != "all stochastic") for h in range(2)]
+        for k, (name, n_cycles) in enumerate(cycles.items())}
 
 if mpi.is_master_node():
-    mpi.report("average sign: static %.5f, " % S_static.average_sign
-               + ", ".join("%s %.5f" % (k, S.average_sign) for k, S in runs.items()))
-    for k, S in runs.items():
-        assert S.average_sign > 0.0, "%s: non-positive average sign %s" % (k, S.average_sign)
-    reference = runs["max"]
-    assert reference.average_sign >= MIN_SIGN, "max: average sign %s below %s" % (reference.average_sign, MIN_SIGN)
-    for k, S in runs.items():
-        if k == "max":
+    sign = {name: min(S.average_sign for S in halves) for name, halves in runs.items()}
+    mpi.report("average sign (smaller half): static %.5f, " % S_static.average_sign + ", ".join("%s %.5f" % kv for kv in sign.items()))
+    for name, s in sign.items():
+        assert s > 0.0, "%s: non-positive average sign %s" % (name, s)
+    assert sign["max"] >= MIN_SIGN, "max: average sign %s below %s" % (sign["max"], MIN_SIGN)
+    reference, reference_error = mean_and_error(runs["max"])
+    for name, halves in runs.items():
+        if name == "max":
             continue
-        if S.average_sign < MIN_SIGN:
-            mpi.report("%s: average sign %.5f below %s, G_l not compared" % (k, S.average_sign, MIN_SIGN))
+        if sign[name] < MIN_SIGN:
+            mpi.report("%s: average sign %.5f below %s, G_l not compared" % (name, sign[name], MIN_SIGN))
             continue
-        assert_block_gfs_are_close(S.G_l, reference.G_l, precision=0.1)
-        mpi.report("%s and max G_l agree within tolerance" % k)
+        g, error = mean_and_error(halves)
+        difference = np.abs(g - reference)
+        tolerance = Z_MAX * np.hypot(error, reference_error) + ABS_TOL
+        l, kind = np.unravel_index(difference.argmax(), difference.shape)
+        mpi.report("%s - max: largest |dG_l| %.4f (l = %d, %s), standard error %.4f, tolerance %.4f"
+                   % (name, difference.max(), l, ("on-site", "inter-site")[kind], np.hypot(error, reference_error), tolerance))
+        assert difference.max() < tolerance, "%s and max G_l differ by %.4f at l = %d, more than %.4f" % (name, difference.max(), l, tolerance)
