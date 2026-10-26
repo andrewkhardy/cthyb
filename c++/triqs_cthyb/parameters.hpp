@@ -247,6 +247,11 @@ namespace triqs_cthyb {
     /// Substitute every operator mapped by a global move, instead of a random subset?
     bool move_global_full = false;
 
+    /// Debug: at the end of every move's accept() and reject(), recompute the trace on the confirmed tree and compare it
+    /// with the stored atomic_weight * atomic_reweighting, which measure_density_matrix divides by. Counts per move are
+    /// printed before collect_results; the first mismatches per rank also print a trace computed without the tree.
+    bool trace_check = false;
+
     /// Threshold below which imaginary components of \f$ \Delta \f$ and \f$ h_{loc} \f$ are set to zero.
     double imag_threshold = 1.e-13;
 

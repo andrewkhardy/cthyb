@@ -71,9 +71,13 @@ namespace triqs_cthyb {
     config.dyn_oplist[index1] = new_vertex1;
     config.dyn_oplist[index2] = new_vertex2;
     config.finalize();
+    data.check_trace("swap_dyn", true);
     return 1.0;
   }
 
-  void move_swap_dyn::reject() { config.finalize(); }
+  void move_swap_dyn::reject() {
+    config.finalize();
+    data.check_trace("swap_dyn", false);
+  }
 
 } // namespace triqs_cthyb

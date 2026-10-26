@@ -167,6 +167,7 @@ namespace triqs_cthyb {
     check_det_sequence(data.dets[block_index], config.get_id());
 #endif
 
+    data.check_trace("insert", true);
     return data.current_sign / data.old_sign;
   }
 
@@ -181,5 +182,6 @@ namespace triqs_cthyb {
     std::cerr << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
     check_det_sequence(data.dets[block_index], config.get_id());
 #endif
+    data.check_trace("insert", false);
   }
 }

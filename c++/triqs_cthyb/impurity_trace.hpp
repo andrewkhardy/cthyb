@@ -53,6 +53,9 @@ namespace triqs_cthyb {
 
     std::pair<h_scalar_t, h_scalar_t> compute(double p_yee = -1, double u_yee = 0);
 
+    // The full trace by an ordered product over the whole configuration: no tree, no cache, no truncation (debug, slow)
+    h_scalar_t full_trace_linear();
+
     // ------- Configuration and h_loc data ----------------
 
     const atom_diag *h_diag;                   // access to the diagonalization of h_loc

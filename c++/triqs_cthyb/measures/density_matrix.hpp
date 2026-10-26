@@ -27,6 +27,8 @@ namespace triqs_cthyb {
     qmc_data const &data;
     std::vector<matrix_t> &block_dm; // density matrix of each block
     mc_weight_t z = 0;
+    long n_measures = 0, n_trace_off = 0; // measurements, and those whose recomputed trace is off by > 1e-10 of the weight
+    mc_weight_t trace_dev = 0;            // sum of s (recomputed - stored trace) / weight: Tr rho - 1 = trace_dev / z
 
     measure_density_matrix(qmc_data const &data, std::vector<matrix_t> &density_matrix);
     void accumulate(mc_weight_t s);

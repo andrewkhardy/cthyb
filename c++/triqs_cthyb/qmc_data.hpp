@@ -27,8 +27,12 @@
 #include <array>
 #include <cmath>
 #include <initializer_list>
+#include <iomanip>
 #include <iostream>
+#include <map>
+#include <mpi/mpi.hpp>
 #include <span>
+#include <string>
 
 namespace triqs_cthyb {
   using namespace triqs::gfs;
@@ -95,6 +99,7 @@ namespace triqs_cthyb {
          dyn_op_list(dyn_op_list),
          dyn_interactions(dyn_interactions) {
 
+      trace_check = p.trace_check;
       if (!K_n.empty()) build_K_table(K_n, p.verbosity);
       lang_firsov_K_n = K_n;
 
@@ -367,6 +372,67 @@ namespace triqs_cthyb {
       for (auto const &[a, n] : kinks1)
         for (auto const &[b, m] : kinks2) phi += n * m * eval_K(op_desc{0, 0, true, int(a)}, op_desc{0, 0, true, int(b)}, dt);
       return phi;
+    }
+
+    // ------- trace_check (debug) -------
+    // measure_density_matrix adds s * atomic_reweighting to its normalisation and s / atomic_weight times the density
+    // matrix recomputed on the confirmed tree to rho, so Tr rho = 1 needs the recomputed trace to equal the stored
+    // atomic_weight * atomic_reweighting. With trace_check, each move compares the two at the end of accept() and
+    // reject(): d = (recomputed - stored) / atomic_weight is the error this configuration puts in Tr rho per unit sign.
+    struct trace_check_t {
+      long n = 0, n_bad = 0; // checks, and those with |d| > trace_check_tol
+      double max_d = 0;      // largest |d|
+      double sum_d = 0;      // sum of d
+    };
+    static constexpr double trace_check_tol = 1.e-10;
+    static constexpr int trace_check_max_prints = 5; // per rank
+    static constexpr std::array<char const *, 9> trace_check_moves = {"insert", "remove",     "insert4",    "remove4", "shift",
+                                                                      "global", "insert_dyn", "remove_dyn", "swap_dyn"};
+    bool trace_check = false;
+    std::map<std::string, trace_check_t> trace_checks;
+    int trace_check_prints = 0;
+
+    void check_trace(std::string const &move, bool accepted) {
+      if (!trace_check) return;
+      auto const [weight, reweighting] = imp_trace.compute();
+      h_scalar_t const stored          = atomic_weight * atomic_reweighting;
+      h_scalar_t const recomputed      = weight * reweighting;
+      double const d                   = std::real(recomputed - stored) / std::abs(atomic_weight);
+
+      auto &c = trace_checks[move + (accepted ? " accept" : " reject")];
+      ++c.n;
+      c.sum_d += d;
+      c.max_d = std::max(c.max_d, std::abs(d));
+      if (std::abs(d) <= trace_check_tol) return;
+      ++c.n_bad;
+      if (trace_check_prints++ >= trace_check_max_prints) return;
+
+      // A third value, without the tree, tells which of the two is wrong
+      h_scalar_t const linear = imp_trace.full_trace_linear();
+      std::cerr << std::setprecision(15) << "trace_check (rank " << mpi::communicator{}.rank() << ", config " << config.get_id() << "): after "
+                << move << (accepted ? " accept" : " reject") << ", " << config.size() << " operators, " << config.dyn_oplist.size()
+                << " dynamical vertices: stored trace " << stored << " (weight " << atomic_weight << "), recomputed on the tree " << recomputed
+                << " (weight " << weight << "), linear " << linear << ", d = " << d << std::setprecision(6) << std::endl;
+    }
+
+    // Collective: the counts of every rank, printed by rank 0
+    void report_trace_check(mpi::communicator const &c) const {
+      if (!trace_check) return;
+      if (c.rank() == 0)
+        std::cerr << "trace_check: d = (trace recomputed on the tree - stored trace) / stored weight, at the end of each move\n"
+                  << std::setw(22) << std::left << "move" << std::right << std::setw(14) << "checks" << std::setw(14) << "|d| > 1e-10"
+                  << std::setw(14) << "max |d|" << std::setw(14) << "sum d" << "\n";
+      for (auto const *move : trace_check_moves)
+        for (auto const *what : {" accept", " reject"}) {
+          auto it                 = trace_checks.find(std::string(move) + what);
+          trace_check_t const t   = it == trace_checks.end() ? trace_check_t{} : it->second;
+          long const n            = mpi::all_reduce(t.n, c), n_bad = mpi::all_reduce(t.n_bad, c);
+          double const max_d      = mpi::all_reduce(t.max_d, c, MPI_MAX), sum_d = mpi::all_reduce(t.sum_d, c);
+          if (c.rank() == 0 && n > 0)
+            std::cerr << std::setw(22) << std::left << (std::string(move) + what) << std::right << std::setw(14) << n << std::setw(14) << n_bad
+                      << std::setw(14) << std::setprecision(3) << max_d << std::setw(14) << sum_d << std::setprecision(6) << "\n";
+        }
+      if (c.rank() == 0) std::cerr << std::flush;
     }
 
     void update_sign() {

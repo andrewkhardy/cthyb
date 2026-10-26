@@ -226,6 +226,7 @@ namespace triqs_cthyb {
     for (int block_index : affected_blocks) check_det_sequence(data.dets[block_index], config.get_id());
 #endif
 
+    data.check_trace("global", true);
     return data.current_sign / data.old_sign;
   }
 
@@ -240,5 +241,6 @@ namespace triqs_cthyb {
     std::cerr << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
     for (int block_index : affected_blocks) check_det_sequence(data.dets[block_index], config.get_id());
 #endif
+    data.check_trace("global", false);
   }
 }

@@ -66,11 +66,13 @@ namespace triqs_cthyb {
     config.finalize();
     data.atomic_weight      = new_atomic_weight;
     data.atomic_reweighting = new_atomic_reweighting;
+    data.check_trace("insert_dyn", true);
     return 1.0; // the permutation sign only involves hybridization operators
   }
 
   void move_insert_dyn::reject() {
     config.finalize();
     data.imp_trace.cancel_insert();
+    data.check_trace("insert_dyn", false);
   }
 } // namespace triqs_cthyb

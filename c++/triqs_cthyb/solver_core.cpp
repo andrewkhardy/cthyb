@@ -583,6 +583,8 @@ namespace triqs_cthyb {
       _solve_status = qmc.accumulate(run_param_t{.ncycles = params.n_cycles, .cycle_length = params.length_cycle,
                                                  .stop_callback = stop_callback, .comm = _comm,
                                                  .check_exception_interval = 0.01, .check_cycles_interval = 0.01});
+    // before collect_results, whose density matrix check can stop the run
+    data.report_trace_check(_comm);
     qmc.collect_results(_comm);
     _n_measures        = mpi::all_reduce(long(qmc.get_nmeasures()), _comm);
     _warmup_time       = qmc.get_warmup_time();

@@ -100,3 +100,24 @@ void impurity_trace::check_cache_integrity_one_node(node n, bool print) {
     }
   }
 }
+
+//-------------------- Full trace by a linear computation --------------------------------
+
+// Every block that the configuration maps back to itself, with the time evolution outside the first and last operators
+// as in compute(), but no cache, no bound and no truncation
+h_scalar_t impurity_trace::full_trace_linear() {
+  if (tree_size == 0) return atomic_z;
+
+  auto root        = tree.get_root();
+  double dtau_beta = beta - tree.min_key();
+  double dtau_0    = double(tree.max_key());
+  double dtau      = dtau_beta + dtau_0;
+
+  h_scalar_t tr = 0;
+  for (int b = 0; b < n_blocks; ++b) {
+    if (check_one_block_table_linear(root, b, false) != b) continue;
+    auto M = check_one_block_matrix_linear(root, b);
+    for (int u = 0; u < get_block_dim(b); ++u) tr += M(u, u) * std::exp(-dtau * get_block_eigenval(b, u));
+  }
+  return tr;
+}

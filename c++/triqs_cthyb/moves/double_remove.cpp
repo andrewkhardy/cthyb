@@ -179,6 +179,7 @@ namespace triqs_cthyb {
     check_det_sequence(data.dets[block_index2], config.get_id());
 #endif
 
+    data.check_trace("remove4", true);
     return data.current_sign / data.old_sign;
   }
 
@@ -195,5 +196,6 @@ namespace triqs_cthyb {
     check_det_sequence(data.dets[block_index1], config.get_id());
     check_det_sequence(data.dets[block_index2], config.get_id());
 #endif
+    data.check_trace("remove4", false);
   }
 }

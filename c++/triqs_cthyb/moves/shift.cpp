@@ -227,6 +227,7 @@ namespace triqs_cthyb {
     check_det_sequence(data.dets[block_index], config.get_id());
 #endif
 
+    data.check_trace("shift", true);
     return result;
   }
 
@@ -241,5 +242,6 @@ namespace triqs_cthyb {
     std::cerr << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
     if (block_index != -1) check_det_sequence(data.dets[block_index], config.get_id());
 #endif
+    data.check_trace("shift", false);
   }
 }

@@ -22,6 +22,7 @@
 #include <mpi/vector.hpp>
 
 #include <iomanip>
+#include <sstream>
 
 namespace triqs_cthyb {
 
@@ -39,7 +40,12 @@ namespace triqs_cthyb {
 
     // Recompute without any Yee threshold: the density_matrix in the trace changes at each computation,
     // in particular at the last failed attempt.
-    data.imp_trace.compute();
+    auto const [weight, reweighting] = data.imp_trace.compute();
+    // The only source of Tr rho - 1: the trace recomputed here against the stored one, which z gets
+    auto const d = (weight * reweighting - data.atomic_weight * data.atomic_reweighting) / data.atomic_weight;
+    ++n_measures;
+    if (std::abs(d) > 1.e-10) ++n_trace_off;
+    trace_dev += s * d;
     z += s * data.atomic_reweighting;
     s /= data.atomic_weight; // accumulate matrix / norm since weight is norm * det
 
@@ -55,6 +61,8 @@ namespace triqs_cthyb {
 
     z                          = mpi::all_reduce(z, c);
     block_dm                   = mpi::all_reduce(block_dm, c);
+    trace_dev                  = mpi::all_reduce(trace_dev, c);
+    long const n_total = mpi::all_reduce(n_measures, c), n_off = mpi::all_reduce(n_trace_off, c);
     for (auto &b : block_dm){
         // Normalize
         b /= real(z);
@@ -69,12 +77,15 @@ namespace triqs_cthyb {
     h_scalar_t tr = 0;
     for (auto &b : block_dm) tr += trace(b);
     mpi::broadcast(tr, c);
-    if (std::abs(tr - 1) > 0.0001) TRIQS_RUNTIME_ERROR << "Trace of the density matrix is " << tr << " instead of 1";
+    std::ostringstream why;
+    why << " (" << n_off << " of " << n_total << " measurements recomputed a trace that differs from the stored Monte Carlo trace by more "
+        << "than 1e-10 of the weight; together they account for Tr - 1 = " << real(trace_dev / z) << ")";
+    if (std::abs(tr - 1) > 0.0001) TRIQS_RUNTIME_ERROR << "Trace of the density matrix is " << tr << " instead of 1" << why.str();
 
     if (c.rank() != 0) return;
     if (std::abs(tr - 1) > 1.e-10)
       std::cerr << "Warning :: Trace of the density matrix is " << std::setprecision(13) << tr << std::setprecision(6) << " instead of 1"
-                << std::endl;
+                << why.str() << std::endl;
 
   }
 }
