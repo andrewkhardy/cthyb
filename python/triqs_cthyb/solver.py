@@ -146,6 +146,9 @@ class Solver(SolverCore):
         if isinstance(D_tau, Gf) and isinstance(D_tau.mesh, (MeshDLR, MeshDLRImTime, MeshDLRImFreq)):
             D_tau = make_gf_imtime(D_tau, len(self.Jperp_tau.mesh))
         if isinstance(D_tau, Gf):
+            beta = self.Jperp_tau.mesh.beta
+            if abs(D_tau.mesh.beta - beta) > 1e-10 * beta:
+                raise ValueError(f"add_dyn_int: D(tau) is on a mesh with beta = {D_tau.mesh.beta}, the solver has beta = {beta}")
             D = _as_scalar_gf(D_tau)
         else:
             D = Gf(mesh=self.Jperp_tau.mesh, target_shape=[])
