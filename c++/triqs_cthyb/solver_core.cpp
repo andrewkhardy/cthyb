@@ -226,6 +226,7 @@ namespace triqs_cthyb {
     // algebra against h_loc, density couplings are split along the conserved density combinations, and the static part
     // of the Lang-Firsov vertices goes into h_loc before h_diag is built
     auto dyn_vertices            = collect_dyn_vertices(inputs.dyn_vertices, inputs.D0t, inputs.Jperpt, gf_struct);
+    if (params.verbosity >= 1) warn_asymmetric_density_couplings(dyn_vertices, fops, linindex);
     auto classified_dyn_vertices = classify_dyn_vertices(dyn_vertices, _h_loc, fops, linindex, params.lang_firsov);
     conserved_densities_t lf_conserved;
     density_split_counts_t split;
@@ -236,7 +237,7 @@ namespace triqs_cthyb {
     }
     if (params.verbosity >= 2)
       print_dyn_routing(dyn_vertices.size(), classified_dyn_vertices, lf_conserved.operators, split, params.lang_firsov, fops, linindex);
-    apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.dyn_n_l, params.verbosity);
+    apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.verbosity);
 
     // With blocks of size 1, a density-density h_loc and density-density dynamical vertices, the operators of each block
     // alternate between c^dagger and c in every configuration of non-zero weight, which can therefore be emptied pair by
@@ -569,9 +570,19 @@ namespace triqs_cthyb {
     // Run! The empty (starting) configuration has sign = 1.
     // Note: mc_generic continues running after the requested cycles are done until all
     // MPI ranks have finished (continue_after_ncycles_done defaults to true in triqs).
-    _solve_status =
-       qmc.warmup_and_accumulate(params.n_warmup_cycles, params.n_cycles, params.length_cycle,
-                                 triqs::utility::clock_callback(params.max_time), sign);
+    // The ranks learn that all are done through a non-blocking broadcast from rank 0 that only advances when a rank
+    // calls MPI, at its checks: at the default 1 s intervals every level of the broadcast tree can add a second, ~5 s
+    // per phase on 128 ranks, idle on rank 0 (benchmarks, 2026-11-02). Checking every 10 ms costs an MPI_Test per check.
+    // As warmup_and_accumulate, but with these intervals: the initial sign for the warmup only.
+    auto stop_callback = triqs::utility::clock_callback(params.max_time);
+    using run_param_t  = mc_tools::mc_generic<mc_weight_t>::run_param_t;
+    _solve_status      = qmc.warmup(run_param_t{.ncycles = params.n_warmup_cycles, .cycle_length = params.length_cycle,
+                                                .stop_callback = stop_callback, .initial_sign = sign, .comm = _comm,
+                                                .check_exception_interval = 0.01, .check_cycles_interval = 0.01});
+    if (_solve_status == 0)
+      _solve_status = qmc.accumulate(run_param_t{.ncycles = params.n_cycles, .cycle_length = params.length_cycle,
+                                                 .stop_callback = stop_callback, .comm = _comm,
+                                                 .check_exception_interval = 0.01, .check_cycles_interval = 0.01});
     qmc.collect_results(_comm);
     _n_measures        = mpi::all_reduce(long(qmc.get_nmeasures()), _comm);
     _warmup_time       = qmc.get_warmup_time();
