@@ -32,9 +32,9 @@
 -- [1;32mClass: [0mtriqs_cthyb::configuration::dyn_bosonic_pair_t [Python: DynBosonicPairT]
 -- [1;32m         -- [0mSynthesize constructor from pydict
 -- [1;34m[Success] [0m
---    Generated Python bindings: /Users/aklekovkinhardy/Documents/Code/cthyb/python/triqs_cthyb/configuration.wrap.cxx [included in /Users/aklekovkinhardy/Documents/Code/cthyb/python/triqs_cthyb/configuration.cpp]
---              headers        : /Users/aklekovkinhardy/Documents/Code/cthyb/python/triqs_cthyb/configuration.wrap.hxx [to be used with other modules, cf doc]
+--    Generated Python bindings: /mnt/home/ahardy/cthyb/python/triqs_cthyb/configuration.wrap.cxx [included in /mnt/home/ahardy/cthyb/python/triqs_cthyb/configuration.cpp]
+--              headers        : /mnt/home/ahardy/cthyb/python/triqs_cthyb/configuration.wrap.hxx [to be used with other modules, cf doc]
 -- Running clang-format ...
 -- Done.
---    Generated the depfile /Users/aklekovkinhardy/Documents/Code/cthyb/build/python/triqs_cthyb/configuration.cpp.d
+--    Generated the depfile /tmp/ahardy/cthyb_build/python/triqs_cthyb/configuration.cpp.d
    

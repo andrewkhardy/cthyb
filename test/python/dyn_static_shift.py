@@ -2,8 +2,8 @@
 # This file is part of TRIQS/cthyb and is licensed under the terms of GPLv3 or later.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Tests the instantaneous (constant) offset of a retarded interaction: kprime_0, static_shift and
-# half_filling_mu in triqs_cthyb.dynamical_interactions. These exist so a script can add the
+# Tests the instantaneous (constant) offset of a retarded interaction: static_coupling, kprime_0,
+# static_shift and half_filling_mu in triqs_cthyb.dynamical_interactions. These exist so a script can add the
 # offset to mu explicitly, instead of reading it back from what solve() happened to route through
 # the analytic path (which is route dependent, and would give a lang_firsov=True run and a
 # lang_firsov=False run different chemical potentials).
@@ -12,7 +12,7 @@
 
 import unittest
 import numpy as np
-from triqs_cthyb.dynamical_interactions import kprime_0, kprime_0_boson, half_filling_mu, static_shift
+from triqs_cthyb.dynamical_interactions import static_coupling, kprime_0, kprime_0_boson, half_filling_mu, static_shift
 
 BETA, OMEGA_0, N_TAU = 10.0, 1.0, 2001
 TAU = np.linspace(0.0, BETA, N_TAU)
@@ -33,12 +33,15 @@ class TestDynStaticShift(unittest.TestCase):
             q = -np.cosh(OMEGA_0 * (tau - BETA / 2)) / (2 * OMEGA_0 * np.sinh(OMEGA_0 * BETA / 2))
             self.assertAlmostEqual(kprime_0(q, BETA), 1.0 / (2 * OMEGA_0**2), places=8)
 
-    def test_zero_frequency_shortcut_only_for_symmetric_kernels(self):
-        """-(1/2) int D is K'(0) only when D is symmetric about beta/2, not for an asymmetric kernel."""
-        shortcut = lambda D: -0.5 * np.trapezoid(D, TAU)
-        self.assertAlmostEqual(shortcut(Q), kprime_0(Q, BETA), places=5)     # symmetric: agrees
+    def test_static_coupling_is_minus_kprime_0_only_for_symmetric_kernels(self):
+        """The shift is the equal-time term (1/2) int D, which is -K'(0) when D is symmetric about beta/2. For an
+        asymmetric D the two differ, and the shift stays (1/2) int D: K'(0) would add -(beta/6) d_1."""
+        for coeff in (1.0, -0.7):
+            self.assertAlmostEqual(static_coupling(coeff * Q, BETA), -kprime_0(coeff * Q, BETA), places=9)
+            self.assertAlmostEqual(static_coupling(coeff * Q, BETA), -kprime_0_boson(coeff, OMEGA_0), places=9)
         D_asym = -np.exp(-OMEGA_0 * TAU)
-        self.assertGreater(abs(shortcut(D_asym) - kprime_0(D_asym, BETA)), 0.1)  # asymmetric: does not
+        self.assertAlmostEqual(static_coupling(D_asym, BETA), -0.5 * (1 - np.exp(-OMEGA_0 * BETA)) / OMEGA_0, places=9)
+        self.assertGreater(abs(static_coupling(D_asym, BETA) + kprime_0(D_asym, BETA)), 0.1)
 
     def test_reproduces_kanamori_phonon_reference(self):
         """The closed-form W and mu of the two-orbital Kanamori-phonon model (checked against exact

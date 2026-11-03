@@ -69,6 +69,7 @@ namespace triqs_cthyb {
     std::vector<bool_and_matrix> atomic_rho;        // atomic density matrix (non-normalized)
     double atomic_z;                                // atomic partition function
     double atomic_norm;                             // Frobenius norm of atomic_rho
+    std::vector<double> exp_beta, exp_0;            // scratch of compute: e^{-(beta - tmax) E} and e^{-tmin E} on a block
 
     public:
     std::vector<bool_and_matrix> const &get_density_matrix() const { return density_matrix; }

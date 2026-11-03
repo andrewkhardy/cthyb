@@ -209,9 +209,9 @@ namespace triqs_cthyb {
       return ops;
     }
 
-    // Lang-Firsov kernel K_ab(tau) on [0, beta/2] (K(tau) = K(beta - tau)): K and its slope on a grid, interpolated by
-    // cubic Hermite polynomials, the grid refined until they reproduce the Legendre series to K_TABLE_RTOL. One row per
-    // distinct K_ab.
+    // Lang-Firsov kernel K_ab(tau) on [0, beta] (no symmetry about beta/2 assumed; K_ba(tau) = K_ab(beta - tau) by
+    // build_K_n): K and its slope on a grid, interpolated by cubic Hermite polynomials, the grid refined until they
+    // reproduce the Legendre series to K_TABLE_RTOL. One row per distinct K_ab.
     static constexpr double K_TABLE_RTOL      = 1e-9;
     static constexpr double K_TABLE_WARN_RTOL = 1e-4; // warn only when the table stops this far from the series
     static constexpr long K_TABLE_N_START     = 64;
@@ -247,7 +247,7 @@ namespace triqs_cthyb {
     }
 
     void build_K_table(std::vector<std::vector<std::vector<double>>> const &K_n, int verbosity) {
-      double const beta = config.beta(), half = beta / 2.0;
+      double const beta = config.beta();
 
       // K(t) and dK/dt from the Legendre series, with (n + 1) P_{n+1} = (2n + 1) x P_n - n P_{n-1}, P'_{n+1} = P'_{n-1} + (2n + 1) P_n
       auto K_and_slope = [beta](std::vector<double> const &k, double t) {
@@ -278,7 +278,7 @@ namespace triqs_cthyb {
 
       double max_err = 0.0, max_K = 0.0;
       for (n_K_tab = K_TABLE_N_START;; n_K_tab *= 2) {
-        double const h = half / double(n_K_tab);
+        double const h = beta / double(n_K_tab);
         K_tab.assign(rows.size() * (n_K_tab + 1) * 2, 0.0);
         max_err = max_K = 0.0;
         for (size_t r = 0; r < rows.size(); ++r) {
@@ -295,13 +295,13 @@ namespace triqs_cthyb {
         }
         if (max_err <= K_TABLE_RTOL * std::max(1.0, max_K) || n_K_tab >= K_TABLE_N_MAX) break;
       }
-      K_tab_inv_h = double(n_K_tab) / half;
+      K_tab_inv_h = double(n_K_tab) / beta;
       if (max_err > K_TABLE_WARN_RTOL * std::max(1.0, max_K))
         std::cerr << "WARNING: Lang-Firsov K(tau) table did not reach its tolerance: max interpolation error " << max_err
                   << " at " << n_K_tab << " intervals (max|K| = " << max_K << ")\n";
       else if (verbosity >= 3)
         std::cout << "Lang-Firsov K(tau) tabulated in " << rows.size() << " distinct row(s) on " << n_K_tab
-                  << " intervals over [0, beta/2], max interpolation error " << max_err << " (max|K| = " << max_K << ")" << std::endl;
+                  << " intervals over [0, beta], max interpolation error " << max_err << " (max|K| = " << max_K << ")" << std::endl;
     }
 
     /// s_1 s_2 K_{a(op1) b(op2)}(tau1 - tau2) from the table, s = +1 for c^dagger, -1 for c, for dt = tau1 - tau2 in (-beta, beta)
@@ -309,9 +309,7 @@ namespace triqs_cthyb {
     double eval_K(op_desc const &op1, op_desc const &op2, double dt) const {
       long const row = K_row[op1.linear_index * n_K_lin + op2.linear_index];
       if (row < 0) return 0.0;
-      double const beta = config.beta();
-      double t          = (dt < 0) ? dt + beta : dt; // cyclic difference, in [0, beta)
-      if (t > beta / 2.0) t = beta - t;
+      double const t   = (dt < 0) ? dt + config.beta() : dt; // cyclic difference, in [0, beta)
       double const x   = t * K_tab_inv_h;
       long const i     = std::min(long(x), n_K_tab - 1);
       double const val = hermite(&K_tab[(row * (n_K_tab + 1) + i) * 2], x - double(i));

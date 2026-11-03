@@ -1,9 +1,8 @@
 // Unit test for the Legendre machinery in math_utils.hpp: fit_legendre_coeffs projects a
 // retarded coupling D(tau) onto the Legendre basis, and build_M_matrix maps those
-// coefficients to the ones of its double antiderivative K(tau). build_K_n relies on this
-// pair, and so do the K'(0) static-shift helpers in
-// python/triqs_cthyb/dynamical_interactions.py, so a regression here moves every
-// Lang-Firsov result.
+// coefficients to the ones of its double antiderivative K(tau). build_K_n and
+// apply_lang_firsov_shift rely on this pair, so a regression here moves every Lang-Firsov
+// result.
 //
 // For a single Einstein boson the pair is known analytically:
 //   D(tau) = lam^2 cosh(w0 (tau - beta/2)) / sinh(w0 beta / 2)
@@ -144,42 +143,127 @@ TEST(ReconstructK, LinearCouplingProjectsExactly) {
   EXPECT_LT(worst, 1e-10);
 }
 
+namespace {
+
+  // Two spin-orbitals, up and dn, each its own block
+  struct two_orbitals {
+    triqs::hilbert_space::fundamental_operator_set fops;
+    std::map<std::pair<int, int>, int> linindex;
+    int up, dn;
+    two_orbitals() {
+      fops.insert("up", 0);
+      fops.insert("dn", 0);
+      linindex = {{{0, 0}, fops[{"up", 0}]}, {{1, 0}, fops[{"dn", 0}]}};
+      up       = linindex[{0, 0}];
+      dn       = linindex[{1, 0}];
+    }
+  };
+
+  gf<imtime, scalar_valued> sampled(std::function<double(double)> const &D, double beta, int n_pt) {
+    auto g = gf<imtime, scalar_valued>{{beta, Boson, n_pt}};
+    for (auto const &tau : g.mesh()) g[tau] = D(tau.value());
+    return g;
+  }
+
+  // g(beta - tau), exactly, on the same mesh
+  gf<imtime, scalar_valued> reflected(gf<imtime, scalar_valued> const &g) {
+    auto r     = g;
+    long const n = g.mesh().size();
+    for (long i = 0; i < n; ++i) r.data()(i) = g.data()(n - 1 - i);
+    return r;
+  }
+
+  double sign_n(int n) { return n % 2 == 0 ? 1.0 : -1.0; }
+
+} // namespace
+
 // A coupling registered one way, D n_up n_dn, is the same action as D/2 registered both ways, and
-// build_K_n must give the same, symmetric kernel for both: half of K in either row. With K only
-// in the (up, dn) row, a pair of kinks weighed K or 0 depending on which operator a move touched
-// (a 13 sigma spurious n_up - n_dn in test/python/dyn_one_way_registration.py's model at g = 1.3).
+// build_K_n must give the same kernel for both: half of K, with Khat_dn,up(t) = Khat_up,dn(beta - t)
+// (coefficients (-1)^n). With K only in the (up, dn) row, a pair of kinks weighed K or 0 depending on
+// which operator a move touched (a 13 sigma spurious n_up - n_dn in test/python/dyn_one_way_registration.py's
+// model at g = 1.3).
 TEST(BuildKn, OneWayRegistrationIsSymmetrized) {
   double beta = 10.0, w0 = 1.0, lam_sq = 0.64;
   int n_leg   = 40;
+  two_orbitals o;
 
-  triqs::hilbert_space::fundamental_operator_set fops;
-  fops.insert("up", 0);
-  fops.insert("dn", 0);
-  std::map<std::pair<int, int>, int> linindex{{{0, 0}, fops[{"up", 0}]}, {{1, 0}, fops[{"dn", 0}]}};
-  int const up = linindex[{0, 0}], dn = linindex[{1, 0}];
-
-  auto D = gf<imtime, scalar_valued>{{beta, Boson, 2001}};
-  for (auto const &tau : D.mesh()) D[tau] = analytic_D(tau.value(), beta, w0, lam_sq);
-  auto D_half = D;
+  std::function<double(double)> D_eval = [&](double tau) { return analytic_D(tau, beta, w0, lam_sq); };
+  auto D                                = sampled(D_eval, beta, 2001);
+  auto D_half                           = D;
   D_half.data() *= 0.5;
 
   auto n_up    = triqs::operators::n("up", 0);
   auto n_dn    = triqs::operators::n("dn", 0);
-  auto one_way = build_K_n({{n_up, n_dn, D}}, beta, linindex, fops, n_leg);
-  auto split   = build_K_n({{n_up, n_dn, D_half}, {n_dn, n_up, D_half}}, beta, linindex, fops, n_leg);
+  auto one_way = build_K_n({{n_up, n_dn, D}}, beta, o.linindex, o.fops, n_leg);
+  auto split   = build_K_n({{n_up, n_dn, D_half}, {n_dn, n_up, D_half}}, beta, o.linindex, o.fops, n_leg);
 
   // K of the coupling D on its own, for the factor 1/2
-  std::function<double(double)> D_eval = [&](double tau) { return analytic_D(tau, beta, w0, lam_sq); };
-  nda::vector<double> k_n               = build_M_matrix(n_leg, beta) * fit_legendre_coeffs(2001, beta, D_eval, n_leg);
+  nda::vector<double> k_n = build_M_matrix(n_leg, beta) * fit_legendre_coeffs(2001, beta, D_eval, n_leg);
+  double const scale      = std::abs(k_n(0));
 
   for (int n = 0; n < n_leg; ++n) {
-    EXPECT_DOUBLE_EQ(one_way[up][dn][n], one_way[dn][up][n]) << "n = " << n;
-    EXPECT_DOUBLE_EQ(one_way[up][dn][n], split[up][dn][n]) << "n = " << n;
-    EXPECT_DOUBLE_EQ(split[up][dn][n], split[dn][up][n]) << "n = " << n;
-    EXPECT_NEAR(one_way[up][dn][n], 0.5 * k_n(n), 1e-6 * std::abs(k_n(0))) << "n = " << n;
-    EXPECT_EQ(one_way[up][up][n], 0.0);
-    EXPECT_EQ(one_way[dn][dn][n], 0.0);
+    EXPECT_EQ(one_way[o.dn][o.up][n], sign_n(n) * one_way[o.up][o.dn][n]) << "n = " << n;
+    EXPECT_EQ(split[o.dn][o.up][n], sign_n(n) * split[o.up][o.dn][n]) << "n = " << n;
+    EXPECT_NEAR(one_way[o.up][o.dn][n], split[o.up][o.dn][n], 1e-12 * scale) << "n = " << n;
+    EXPECT_NEAR(one_way[o.up][o.dn][n], 0.5 * k_n(n), 1e-6 * scale) << "n = " << n;
+    EXPECT_EQ(one_way[o.up][o.up][n], 0.0);
+    EXPECT_EQ(one_way[o.dn][o.dn][n], 0.0);
   }
+}
+
+// A coupling that is not symmetric about beta/2 keeps its odd Legendre coefficients. One way, D n_up n_dn is
+// the same action as D/2 on (up, dn) plus D(beta - tau)/2 on (dn, up), and both give Khat_up,dn = K/2 with
+// its odd part. Before, the kernel was (K_ab + K_ba)/2 folded at beta/2, which dropped the odd part (both
+// ways) or evaluated it at the wrong time (one way).
+TEST(BuildKn, AsymmetricCouplingKeepsItsOddPart) {
+  double beta = 10.0, w0 = 1.0, lam_sq = 0.64;
+  int n_leg   = 40;
+  two_orbitals o;
+
+  std::function<double(double)> D_eval = [&](double tau) { return -lam_sq * std::exp(-w0 * tau); };
+  auto D                                = sampled(D_eval, beta, 2001);
+  auto D_half = D, D_refl_half = reflected(D);
+  D_half.data() *= 0.5;
+  D_refl_half.data() *= 0.5;
+
+  auto n_up      = triqs::operators::n("up", 0);
+  auto n_dn      = triqs::operators::n("dn", 0);
+  auto one_way   = build_K_n({{n_up, n_dn, D}}, beta, o.linindex, o.fops, n_leg);
+  auto both_ways = build_K_n({{n_up, n_dn, D_half}, {n_dn, n_up, D_refl_half}}, beta, o.linindex, o.fops, n_leg);
+
+  nda::vector<double> k_n = build_M_matrix(n_leg, beta) * fit_legendre_coeffs(2001, beta, D_eval, n_leg);
+  double const scale      = std::abs(k_n(0));
+  EXPECT_GT(std::abs(k_n(1)), 0.1 * scale); // the test needs an odd part
+
+  for (int n = 0; n < n_leg; ++n) {
+    EXPECT_NEAR(one_way[o.up][o.dn][n], 0.5 * k_n(n), 1e-12 * scale) << "n = " << n;
+    EXPECT_NEAR(both_ways[o.up][o.dn][n], 0.5 * k_n(n), 1e-12 * scale) << "n = " << n;
+    EXPECT_EQ(one_way[o.dn][o.up][n], sign_n(n) * one_way[o.up][o.dn][n]) << "n = " << n;
+    EXPECT_EQ(both_ways[o.dn][o.up][n], sign_n(n) * both_ways[o.up][o.dn][n]) << "n = " << n;
+  }
+
+  // On one density, only the part symmetric about beta/2 acts: Khat_up,up is the even part of K
+  auto diagonal = build_K_n({{n_up, n_up, D}}, beta, o.linindex, o.fops, n_leg);
+  for (int n = 0; n < n_leg; ++n) {
+    if (n % 2 == 0)
+      EXPECT_NEAR(diagonal[o.up][o.up][n], k_n(n), 1e-12 * scale) << "n = " << n;
+    else
+      EXPECT_EQ(diagonal[o.up][o.up][n], 0.0) << "n = " << n;
+  }
+}
+
+// The equal-time term of a Lang-Firsov vertex is (1/2) int_0^beta D n_a n_b, whatever the symmetry of D. For
+// D = a + b x (x = 2 tau / beta - 1) it is beta a / 2; the former -K'(0) = (beta/2)(a - b/3) differs by the odd b.
+TEST(ApplyLangFirsovShift, EqualTimeTermIsHalfTheIntegral) {
+  double const beta = 10.0, a = -0.7, b = 0.3;
+  two_orbitals o;
+  auto D = sampled([&](double tau) { return a + b * (2.0 * tau / beta - 1.0); }, beta, 2001);
+
+  many_body_op_t n_up = triqs::operators::n("up", 0), n_dn = triqs::operators::n("dn", 0);
+  many_body_op_t h_loc;
+  apply_lang_firsov_shift(h_loc, {{n_up, n_dn, D}, {n_up, n_up, D}}, o.fops, o.linindex, beta, 0);
+  many_body_op_t const expected = 0.5 * beta * a * (n_up * n_dn + n_up);
+  EXPECT_TRUE((h_loc - expected).is_almost_zero(1e-12)) << h_loc;
 }
 
 MAKE_MAIN;

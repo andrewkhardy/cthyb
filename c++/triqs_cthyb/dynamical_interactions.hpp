@@ -35,6 +35,12 @@ namespace triqs_cthyb {
   std::vector<dyn_vertex_t> collect_dyn_vertices(std::vector<dyn_vertex_t> const &explicit_vertices, block2_gf_const_view<imtime> D0t,
                                                  gf_const_view<imtime, matrix_valued> Jperpt, gf_struct_t const &gf_struct);
 
+  /// Warn (std::cerr) about density-density vertices whose coupling is not symmetric about beta/2, D(tau) != D(beta - tau)
+  /// beyond 1e-6 of max |D|: a real coupling between densities always is, so this usually means a mistake in the input.
+  /// They are used as given.
+  void warn_asymmetric_density_couplings(std::vector<dyn_vertex_t> const &vertices, fundamental_operator_set const &fops,
+                                         std::map<std::pair<int, int>, int> const &linindex);
+
   struct classified_dyn_vertices_t {
     std::vector<dyn_vertex_t> lang_firsov, stochastic;
   };
@@ -75,11 +81,13 @@ namespace triqs_cthyb {
                          density_split_counts_t const &split, bool lang_firsov_requested, fundamental_operator_set const &fops,
                          std::map<std::pair<int, int>, int> const &linindex);
 
-  /// Subtract the static part K'(0) of the Lang-Firsov vertices from h_loc, which must happen before h_diag is built
+  /// Add the equal-time part of the Lang-Firsov vertices to h_loc, (1/2) int_0^beta D n_a n_b per ordered vertex (which is
+  /// -K'(0) n_a n_b for D(tau) = D(beta - tau)). It must happen before h_diag is built.
   void apply_lang_firsov_shift(many_body_op_t &h_loc, std::vector<dyn_vertex_t> const &lf_vertices, fundamental_operator_set const &fops,
-                               std::map<std::pair<int, int>, int> const &linindex, double beta, int N_leg, int verbosity);
+                               std::map<std::pair<int, int>, int> const &linindex, double beta, int verbosity);
 
-  /// Legendre coefficients K_n[a][b][n] of the Lang-Firsov kernel of qmc_data::compute_lang_firsov_ratio
+  /// Legendre coefficients K_n[a][b][n] of the Lang-Firsov kernel of qmc_data::compute_lang_firsov_ratio: the pair kernel
+  /// [K_ab(t) + K_ba(beta - t)] / 2 of a kink of a and a kink of b a time t = tau_a - tau_b apart, on [0, beta)
   std::vector<std::vector<std::vector<double>>> build_K_n(std::vector<dyn_vertex_t> const &lf_vertices, double beta,
                                                           std::map<std::pair<int, int>, int> const &linindex, fundamental_operator_set const &fops,
                                                           int N_leg);

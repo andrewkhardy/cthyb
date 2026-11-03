@@ -123,25 +123,34 @@ def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=No
                 solver.add_dyn_int(-0.5 * coupling, c_dag(s1, a1) * c(s2, a1), c_dag(s2, a2) * c(s1, a2))
 
 
-# The static offset of a retarded coupling D: K'' = D with K(0) = K(beta) = 0 gives
-# K'(0) = -(1/beta) int_0^beta (beta - tau) D(tau) dtau. It depends only on the input coupling, not on how solve()
-# routes the vertex, so mu can be set from it. Only for a kernel symmetric about beta/2 does it equal -D(i nu = 0)/2.
+# The static offset of a retarded coupling D: writing (1/2) int int D(tau - tau') n_a(tau) n_b(tau') through K'' = D with
+# K(0) = K(beta) = 0 leaves the equal-time term (1/2) int_0^beta D n_a n_b, which solve() adds to h_loc for every
+# Lang-Firsov vertex (static_coupling). It depends only on the input coupling, not on how solve() routes the vertex, so
+# mu can be set from it. For D(tau) = D(beta - tau) it equals -K'(0), K'(0) = -(1/beta) int_0^beta (beta - tau) D(tau) dtau.
+# A real D between densities is always symmetric (D_ab(tau)* = D_ba(tau) = D_ab(beta - tau)), but a fitted one may not be.
 
 
-def kprime_0(D_tau, beta):
-    """K'(0) of a coupling on a uniform tau grid including both endpoints (Gf or array), by Simpson's rule
-    (trapezoidal for an even number of points)."""
-    D = np.asarray(getattr(D_tau, 'data', D_tau)).real.squeeze()
-    n = D.size
-    tau = np.linspace(0.0, beta, n)
-    integrand = (beta - tau) * D
+def _integrate(f, beta):
+    """int_0^beta f on a uniform grid including both endpoints, by Simpson's rule (trapezoidal for an even number of points)"""
+    n = f.size
     if n % 2 == 1:
         w = np.ones(n)
         w[1:-1:2], w[2:-1:2] = 4.0, 2.0
-        integral = (beta / (n - 1)) / 3.0 * np.dot(w, integrand)
-    else:
-        integral = np.trapezoid(integrand, tau)
-    return -integral / beta
+        return (beta / (n - 1)) / 3.0 * np.dot(w, f)
+    return np.trapezoid(f, np.linspace(0.0, beta, n))
+
+
+def static_coupling(D_tau, beta):
+    """(1/2) int_0^beta D(tau) dtau of a coupling on a uniform tau grid including both endpoints (Gf or array). solve()
+    integrates the piecewise-linear interpolant of the samples (the trapezoidal rule), which differs by O(dtau^2)."""
+    D = np.asarray(getattr(D_tau, 'data', D_tau)).real.squeeze()
+    return 0.5 * _integrate(D, beta)
+
+
+def kprime_0(D_tau, beta):
+    """K'(0) of a coupling on a uniform tau grid including both endpoints (Gf or array)."""
+    D = np.asarray(getattr(D_tau, 'data', D_tau)).real.squeeze()
+    return -_integrate((beta - np.linspace(0.0, beta, D.size)) * D, beta) / beta
 
 
 def kprime_0_boson(coeff, omega_0):
@@ -152,7 +161,7 @@ def kprime_0_boson(coeff, omega_0):
 
 def static_shift(vertices, n_orb, beta):
     r"""The static shift solve() applies for the ordered vertices (a, b, D_tau), a and b linear orbital indices (pass both
-    orderings): each shifts the level of a by -K'(0) if a == b, and otherwise W_ab and W_ba by -K'(0).
+    orderings): with s = static_coupling(D_tau), each shifts the level of a by s if a == b, and otherwise W_ab and W_ba by s.
 
     Returns (W_shift, level_shift): the change of the density-density interaction, counted once per unordered pair,
     and of the orbital energies (a shift of eps, not of mu).
@@ -160,12 +169,12 @@ def static_shift(vertices, n_orb, beta):
     W_shift = np.zeros((n_orb, n_orb))
     level_shift = np.zeros(n_orb)
     for a, b, D_tau in vertices:
-        Kp = kprime_0(D_tau, beta)
+        s = static_coupling(D_tau, beta)
         if a == b:
-            level_shift[a] -= Kp
+            level_shift[a] += s
         else:
-            W_shift[a, b] -= Kp
-            W_shift[b, a] -= Kp
+            W_shift[a, b] += s
+            W_shift[b, a] += s
     return W_shift, level_shift
 
 

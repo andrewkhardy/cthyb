@@ -199,6 +199,37 @@ namespace triqs_cthyb {
 
   // -----------------------------------------------------------------------------------
 
+  void warn_asymmetric_density_couplings(std::vector<dyn_vertex_t> const &vertices, fundamental_operator_set const &fops,
+                                         std::map<std::pair<int, int>, int> const &linindex) {
+    // A coupling from bosons coupled to hermitian densities is D_ab(tau) ~ <X_a(tau) X_b(0)>, so D_ab(tau)^* = D_ba(tau)
+    // (hermiticity) and D_ba(tau) = D_ab(beta - tau) (KMS): a real one is symmetric about beta/2. Spin flips can be
+    // asymmetric, so only density vertices are checked.
+    constexpr double tolerance = 1.e-6;
+    std::vector<std::pair<dyn_vertex_t const *, double>> asymmetric; // with max |D(tau) - D(beta - tau)| / max |D|
+    for (auto const &v : vertices) {
+      if (!is_density_bilinear(extract_bilinear(v.op1, fops, linindex, "op1")) || !is_density_bilinear(extract_bilinear(v.op2, fops, linindex, "op2")))
+        continue;
+      auto const &d        = v.coupling.data();
+      long const n         = d.size();
+      double const largest = max_element(nda::abs(d));
+      double difference    = 0.0;
+      for (long i = 0; i < n; ++i) difference = std::max(difference, std::abs(d(i) - d(n - 1 - i)));
+      if (largest > 0.0 && difference > tolerance * largest) asymmetric.emplace_back(&v, difference / largest);
+    }
+    if (asymmetric.empty()) return;
+
+    std::cerr << "WARNING: " << asymmetric.size() << " density-density coupling(s) not symmetric about beta/2, D(tau) != D(beta - tau).\n"
+              << "A real coupling between densities always is (D_ab(tau)^* = D_ba(tau) = D_ab(beta - tau)), so this usually means a\n"
+              << "wrong tau mesh or beta, or noise in a fitted coupling. They are used as given:\n";
+    long const n_shown = std::min<long>(asymmetric.size(), 10);
+    for (long i = 0; i < n_shown; ++i)
+      std::cerr << "    " << asymmetric[i].first->op1 << " -- " << asymmetric[i].first->op2
+                << ": max |D(tau) - D(beta - tau)| = " << asymmetric[i].second << " max |D|\n";
+    if (long(asymmetric.size()) > n_shown) std::cerr << "    and " << asymmetric.size() - n_shown << " more\n";
+  }
+
+  // -----------------------------------------------------------------------------------
+
   classified_dyn_vertices_t classify_dyn_vertices(std::vector<dyn_vertex_t> const &vertices, many_body_op_t const &h_loc,
                                                   fundamental_operator_set const &fops, std::map<std::pair<int, int>, int> const &linindex,
                                                   bool lang_firsov_requested) {
@@ -223,7 +254,7 @@ namespace triqs_cthyb {
   // -----------------------------------------------------------------------------------
 
   void apply_lang_firsov_shift(many_body_op_t &h_loc, std::vector<dyn_vertex_t> const &lf_vertices, fundamental_operator_set const &fops,
-                               std::map<std::pair<int, int>, int> const &linindex, double beta, int N_leg, int verbosity) {
+                               std::map<std::pair<int, int>, int> const &linindex, double beta, int verbosity) {
     if (lf_vertices.empty()) return;
 
     auto [U_renorm, mu_renorm] = bare_density_matrix(h_loc, fops, count_orbitals(linindex));
@@ -236,22 +267,23 @@ namespace triqs_cthyb {
       int const lin1 = extract_bilinear(v.op1, fops, linindex, "op1").opL.linear_index;
       int const lin2 = extract_bilinear(v.op2, fops, linindex, "op2").opL.linear_index;
 
-      auto const d_n        = legendre_coeffs(v, beta, N_leg);
-      double const Kprime_0 = -beta * (d_n(0) - (N_leg > 1 ? d_n(1) : 0.0) / 3.0);
-      if (std::abs(Kprime_0) < 1.e-13) continue;
+      // (1/2) int_0^beta D = beta d_0 / 2, the equal-time term left by K'' = D with K(0) = K(beta) = 0. It is -K'(0) only
+      // for D(tau) = D(beta - tau).
+      double const static_coupling = 0.5 * beta * legendre_coeffs(v, beta, 1)(0);
+      if (std::abs(static_coupling) < 1.e-13) continue;
 
-      // H -> H - K'(0)/2 n_a n_b per ordered vertex, so a pair registered both ways shifts by K'(0)
+      // H -> H + static_coupling n_a n_b per ordered vertex
       if (lin1 == lin2) {
-        h_loc = h_loc - 0.5 * Kprime_0 * v.op1;
-        mu_renorm(lin1) += 0.5 * Kprime_0;
+        h_loc = h_loc + static_coupling * v.op1;
+        mu_renorm(lin1) -= static_coupling;
       } else {
-        h_loc = h_loc - 0.5 * Kprime_0 * v.op1 * v.op2;
-        U_renorm(lin1, lin2) -= 0.5 * Kprime_0;
-        U_renorm(lin2, lin1) -= 0.5 * Kprime_0;
+        h_loc = h_loc + static_coupling * v.op1 * v.op2;
+        U_renorm(lin1, lin2) += static_coupling;
+        U_renorm(lin2, lin1) += static_coupling;
       }
 
       if (verbosity >= 4)
-        std::cout << "Lang-Firsov K'(0) shift: K'(0)=" << Kprime_0 << " for vertex " << v.op1 << " -- " << v.op2 << std::endl;
+        std::cout << "Lang-Firsov static coupling (1/2) int D = " << static_coupling << " for vertex " << v.op1 << " -- " << v.op2 << std::endl;
     }
 
     if (verbosity >= 2) {
@@ -279,12 +311,14 @@ namespace triqs_cthyb {
       for (int n = 0; n < N_leg; ++n) K_n[lin1][lin2][n] += k_n(n);
     }
 
-    // A pair of kinks in a and b interacts through (K_ab + K_ba) / 2 (each vertex is 1/2 int int D_ab n_a n_b).
-    // compute_lang_firsov_ratio reads the row of whichever operator moves, so both rows must hold it, or a pair
-    // registered one way only would break detailed balance.
-    for (size_t a = 0; a < K_n.size(); ++a)
-      for (size_t b = a + 1; b < K_n.size(); ++b)
-        for (int n = 0; n < N_leg; ++n) K_n[a][b][n] = K_n[b][a][n] = 0.5 * (K_n[a][b][n] + K_n[b][a][n]);
+    // Each vertex is 1/2 int int D_ab n_a n_b, so a kink of a at tau and a kink of b at tau' interact through
+    // [K_ab(t) + K_ba(beta - t)] / 2, t = tau - tau' mod beta. K(beta - t) has the coefficients (-1)^n k_n, so the result
+    // satisfies Khat_ba(t) = Khat_ab(beta - t): the pair weighs the same whichever of its operators a move touches, as
+    // detailed balance needs. Khat_aa is the even part of K_aa. The odd parts are kept, so D need not be symmetric.
+    auto const per_vertex = K_n;
+    for (int a = 0; a < n_orb; ++a)
+      for (int b = 0; b < n_orb; ++b)
+        for (int n = 0; n < N_leg; ++n) K_n[a][b][n] = 0.5 * (per_vertex[a][b][n] + (n % 2 == 0 ? 1.0 : -1.0) * per_vertex[b][a][n]);
     return K_n;
   }
 

@@ -318,10 +318,21 @@ namespace triqs_cthyb {
 #endif
 
       // trace(mat * exp(- H * (beta - tmax)) * exp (- H * tmin)) to handle the piece outside of the first-last operators.
+      // The density matrix needs the two exponentials apart: computed once per eigenvalue, their product is the
+      // exp(- H * dtau) of the trace, 2 dim exponentials per block rather than dim^2 + dim
       h_scalar_t trace_partial = 0;
       auto dim                 = get_block_dim(block_index);
+      if (use_norm_as_weight) {
+        exp_beta.resize(dim);
+        exp_0.resize(dim);
+        for (int u = 0; u < dim; ++u) {
+          exp_beta[u] = std::exp(-dtau_beta * get_block_eigenval(block_index, u));
+          exp_0[u]    = std::exp(-dtau_0 * get_block_eigenval(block_index, u));
+        }
+      }
       for (int u = 0; u < dim; ++u) {
-        auto x = b_mat.second(u, u) * std::exp(-dtau * get_block_eigenval(block_index, u));
+        auto x = use_norm_as_weight ? b_mat.second(u, u) * exp_beta[u] * exp_0[u]
+                                    : b_mat.second(u, u) * std::exp(-dtau * get_block_eigenval(block_index, u));
         trace_partial += x;
         trace_abs += std::abs(x);
       }
@@ -333,7 +344,7 @@ namespace triqs_cthyb {
         auto &mat                            = density_matrix[block_index].mat;
         for (int u = 0; u < dim; ++u) {
           for (int v = 0; v < dim; ++v) {
-            mat(u, v) = b_mat.second(u, v) * std::exp(-dtau_beta * get_block_eigenval(block_index, u) - dtau_0 * get_block_eigenval(block_index, v));
+            mat(u, v) = b_mat.second(u, v) * exp_beta[u] * exp_0[v];
             double xx = std::abs(mat(u, v));
             norm_trace_sq_partial += xx * xx;
           }
