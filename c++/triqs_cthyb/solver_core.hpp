@@ -134,8 +134,9 @@ namespace triqs_cthyb {
     /// Parameters used in the last solve.
     solve_parameters_t last_solve_parameters() const { return solve_parameters; }
 
-    /// \f$ G_0^{-1}(i\omega_n = \infty) \f$ in Matsubara frequencies.
-    [[deprecated("Use h_loc0() instead.")]]
+    /// \f$ G_0^{-1}(i\omega_n = \infty) \f$ in Matsubara frequencies. Deprecated: use h_loc0() instead.
+    // Not [[deprecated]]: the Python binding exposes it as Solver.Delta_infty for compatibility, and the attribute
+    // only produced warnings when compiling that binding (nothing in C++ calls it).
     std::vector<matrix<dcomplex>> Delta_infty() {
       if (delta_interface) TRIQS_RUNTIME_ERROR << "Delta_infty cannot be accessed when using the Delta interface";
       return Delta_infty_vec.value();

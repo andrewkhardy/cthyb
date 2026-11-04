@@ -112,6 +112,13 @@ class Solver(SolverCore):
             return self._G0_iw_dlr
         return SolverCore.G0_iw.__get__(self)
 
+    @property
+    def Delta_infty(self):
+        r""":math:`G_0^{-1}(i\omega_n = \infty)` per block. Deprecated: use ``h_loc0``."""
+        import warnings
+        warnings.warn("Solver.Delta_infty is deprecated, use Solver.h_loc0 instead", DeprecationWarning, stacklevel=2)
+        return SolverCore.Delta_infty.__get__(self)
+
     def add_dyn_int(self, D_tau, op1, op2):
         r"""
         Add a retarded interaction to the impurity action,
