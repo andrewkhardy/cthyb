@@ -69,16 +69,20 @@ def expand_dyn_int(op1, op2):
     return {k: v for k, v in terms.items() if abs(v) > 1e-14}
 
 
-def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=None, J_hund=None, spin_flip=True):
+def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=None, J_hund=None, spin_flip=True,
+                                pair_hopping=True):
     r"""
-    Register the retarded Hubbard-Kanamori interaction on `solver` with add_dyn_int:
+    Register the retarded Hubbard-Kanamori interaction on `solver` with add_dyn_int, S = (1/2) int int sum_v D_v O1 O2 with
 
-        sum_{(a1,s1) != (a2,s2)} D^{s1 s2}_{a1 a2}(tau) n_{a1 s1}(tau) n_{a2 s2}(0)
-          - sum_{a1 != a2, s} D^J_{a1 a2}(tau)/2 [c^dag_{a1 s} c_{a1 sbar}](tau) [c^dag_{a2 sbar} c_{a2 s}](0)
+        density:      D^{s1 s2}_{a1 a2}   n_{a1 s1} (x) n_{a2 s2}                          for (a1,s1) != (a2,s2)
+        spin flip:   -D^J_{a1 a2}        [c^dag_{a1 s} c_{a1 sbar}] (x) [c^dag_{a2 sbar} c_{a2 s}]   for a1 != a2, s
+        pair hopping: D^J_{a1 a2}        [c^dag_{a1 s} c_{a2 s}]    (x) [c^dag_{a1 sbar} c_{a2 sbar}] for a1 != a2, s
 
-    with D^{s1 s2} = U if s1 == s2 else Uprime and D^J = J_hund, as in h_int_kanamori. Each ordered pair is its own
-    vertex with the full coupling (no 1/2: op1(tau) op2(0) and op2(tau) op1(0) are different correlators). Pair hopping
-    is not included.
+    with D^{s1 s2} = U if s1 == s2 else Uprime and D^J = J_hund. For constant couplings, D(tau) -> D delta(tau), this is
+    exactly h_int_kanamori(..., spin_flip, pair_hopping): its pair hopping 1/2 J c^dag_{a1 s} c^dag_{a1 sbar} c_{a2 sbar}
+    c_{a2 s} equals 1/2 J [c^dag_{a1 s} c_{a2 s}][c^dag_{a1 sbar} c_{a2 sbar}] (no contraction: different spins). Each
+    ordered pair is its own vertex with the full coupling: the 1/2 of the action and the two orderings make up the
+    static coefficient. Spin flip and pair hopping are off-diagonal and always sampled stochastically.
 
     Parameters
     ----------
@@ -91,6 +95,8 @@ def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=No
         (absent pairs are zero). Same-spin intra-orbital terms are always excluded.
     spin_flip : bool
         Include the spin-flip terms (needs J_hund).
+    pair_hopping : bool
+        Include the pair-hopping terms (needs J_hund).
     """
 
     def coupling_for(table, a1, a2):
@@ -120,7 +126,19 @@ def kanamori_dynamical_vertices(solver, spin_names, orb_names, U=None, Uprime=No
                 coupling = coupling_for(J_hund, a1, a2)
                 if coupling is None:
                     continue
-                solver.add_dyn_int(-0.5 * coupling, c_dag(s1, a1) * c(s2, a1), c_dag(s2, a2) * c(s1, a2))
+                solver.add_dyn_int(-coupling, c_dag(s1, a1) * c(s2, a1), c_dag(s2, a2) * c(s1, a2))
+
+    if pair_hopping:
+        for s1, s2 in product(spin_names, spin_names):
+            if s1 == s2:
+                continue
+            for a1, a2 in product(orb_names, orb_names):
+                if a1 == a2:
+                    continue
+                coupling = coupling_for(J_hund, a1, a2)
+                if coupling is None:
+                    continue
+                solver.add_dyn_int(coupling, c_dag(s1, a1) * c(s1, a2), c_dag(s2, a1) * c(s2, a2))
 
 
 # The static offset of a retarded coupling D: writing (1/2) int int D(tau - tau') n_a(tau) n_b(tau') through K'' = D with
