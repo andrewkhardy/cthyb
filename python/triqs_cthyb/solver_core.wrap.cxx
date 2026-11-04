@@ -202,6 +202,7 @@ static int synth_constructor_167a5c32(PyObject *self, PyObject *args, PyObject *
   de("move_global", self_c.move_global, true);
   de("move_global_prob", self_c.move_global_prob, true);
   de("move_global_full", self_c.move_global_full, true);
+  de("trace_check", self_c.trace_check, true);
   de("imag_threshold", self_c.imag_threshold, true);
   de("det_init_size", self_c.det_init_size, true);
   de("det_n_operations_before_check", self_c.det_n_operations_before_check, true);
@@ -329,21 +330,23 @@ move_global_prob : {par_52}, default=0.05
 
 move_global_full : {par_53}, default=false
 
-imag_threshold : {par_54}, default=1.e-13
+trace_check : {par_54}, default=false
 
-det_init_size : {par_55}, default=100
+imag_threshold : {par_55}, default=1.e-13
 
-det_n_operations_before_check : {par_56}, default=100
+det_init_size : {par_56}, default=100
 
-det_precision_warning : {par_57}, default=1.e-8
+det_n_operations_before_check : {par_57}, default=100
 
-det_precision_error : {par_58}, default=1.e-5
+det_precision_warning : {par_58}, default=1.e-8
 
-det_singular_threshold : {par_59}, default=-1
+det_precision_error : {par_59}, default=1.e-5
 
-off_diag_threshold : {par_60}, default=0.0
+det_singular_threshold : {par_60}, default=-1
 
-h_loc0 : {par_61}, default={}
+off_diag_threshold : {par_61}, default=0.0
+
+h_loc0 : {par_62}, default={}
 
 )DOC",
                       "par",
@@ -400,6 +403,7 @@ h_loc0 : {par_61}, default={}
                        c2py::python_typename<std::map<std::string, double>>(),
                        c2py::python_typename<std::map<std::string, triqs_cthyb::indices_map_t>>(),
                        c2py::python_typename<double>(),
+                       c2py::python_typename<bool>(),
                        c2py::python_typename<bool>(),
                        c2py::python_typename<double>(),
                        c2py::python_typename<int>(),
@@ -496,6 +500,10 @@ constexpr auto _c2py_doc_member_86410015 =
    R"DOC(List of global moves (with their names). Each move is specified with an index substitution dictionary.)DOC";
 constexpr auto _c2py_doc_member_a5b369a5 = R"DOC(Overall probability of the global moves.)DOC";
 constexpr auto _c2py_doc_member_964a3627 = R"DOC(Substitute every operator mapped by a global move, instead of a random subset?)DOC";
+constexpr auto _c2py_doc_member_9e15796e =
+   R"DOC(Debug: at the end of every move's accept() and reject(), recompute the trace on the confirmed tree and compare it
+with the stored atomic_weight * atomic_reweighting, which measure_density_matrix divides by. Counts per move are
+printed before collect_results; the first mismatches per rank also print a trace computed without the tree.)DOC";
 constexpr auto _c2py_doc_member_3eb4a96e =
    R"DOC(Threshold below which imaginary components of :math:`\Delta` and :math:`h_{loc}` are set to zero.)DOC";
 constexpr auto _c2py_doc_member_a4993264 = R"DOC(The maximum size of the determinant matrix before a resize.)DOC";
@@ -563,6 +571,7 @@ static PyObject *prop_get_dict_167a5c32(PyObject *self, void *) {
   dic["move_global"]                   = self_c.move_global;
   dic["move_global_prob"]              = self_c.move_global_prob;
   dic["move_global_full"]              = self_c.move_global_full;
+  dic["trace_check"]                   = self_c.trace_check;
   dic["imag_threshold"]                = self_c.imag_threshold;
   dic["det_init_size"]                 = self_c.det_init_size;
   dic["det_n_operations_before_check"] = self_c.det_n_operations_before_check;
@@ -633,6 +642,7 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_a2b1dce8>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::move_global, _c2py_cls_a2b1dce8>("move_global", _c2py_doc_member_86410015),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::move_global_prob, _c2py_cls_a2b1dce8>("move_global_prob", _c2py_doc_member_a5b369a5),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::move_global_full, _c2py_cls_a2b1dce8>("move_global_full", _c2py_doc_member_964a3627),
+   c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::trace_check, _c2py_cls_a2b1dce8>("trace_check", _c2py_doc_member_9e15796e),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::imag_threshold, _c2py_cls_a2b1dce8>("imag_threshold", _c2py_doc_member_3eb4a96e),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::det_init_size, _c2py_cls_a2b1dce8>("det_init_size", _c2py_doc_member_a4993264),
    c2py::getsetdef_from_member<&_c2py_cls_a2b1dce8::det_n_operations_before_check, _c2py_cls_a2b1dce8>("det_n_operations_before_check",
