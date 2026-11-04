@@ -235,6 +235,10 @@ namespace triqs_cthyb {
       split        = split_density_couplings(classified_dyn_vertices, lf_conserved.vectors, fops, linindex,
                                              params.lang_firsov_split);
     }
+    // After the split, so that the residuals are closed too
+    if (int n_reverse = close_stochastic_under_reversal(classified_dyn_vertices.stochastic); n_reverse > 0 and params.verbosity >= 1)
+      std::cerr << "NOTE: " << n_reverse << " stochastic dynamical vertex type(s) were registered one way only; their reverse types\n"
+                   "(O2, O1) with D(beta - s) were added, each carrying half of the coupling (exact for one-way registration).\n";
     if (params.verbosity >= 2)
       print_dyn_routing(dyn_vertices.size(), classified_dyn_vertices, lf_conserved.operators, split, params.lang_firsov, fops, linindex);
     apply_lang_firsov_shift(_h_loc, classified_dyn_vertices.lang_firsov, fops, linindex, beta, params.verbosity);

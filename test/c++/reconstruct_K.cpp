@@ -266,4 +266,55 @@ TEST(ApplyLangFirsovShift, EqualTimeTermIsHalfTheIntegral) {
   EXPECT_TRUE((h_loc - expected).is_almost_zero(1e-12)) << h_loc;
 }
 
+// The stochastic moves sample each catalog type (A, B) on tau1 > tau2, so the exact coupling of the type is
+// f_(A,B)(s) = [D_(A,B)(s) + D_(B,A)(beta - s)] / 2. A vertex registered one way gets its reverse type with D(beta - s)/2;
+// a catalog already closed with D_(B,A)(s) = D_(A,B)(beta - s) is unchanged, in order.
+TEST(CloseStochasticUnderReversal, OneWayGetsItsReverseWithHalfTheCoupling) {
+  double const beta = 10.0;
+  auto D            = sampled([](double tau) { return -0.64 * std::exp(-tau); }, beta, 2001); // asymmetric
+  many_body_op_t n_up = triqs::operators::n("up", 0), n_dn = triqs::operators::n("dn", 0);
+
+  std::vector<dyn_vertex_t> v = {{n_up, n_dn, D}};
+  EXPECT_EQ(close_stochastic_under_reversal(v), 1);
+  ASSERT_EQ(v.size(), 2u);
+  EXPECT_TRUE(v[0].op1 == n_up && v[0].op2 == n_dn);
+  EXPECT_TRUE(v[1].op1 == n_dn && v[1].op2 == n_up);
+  auto R = reflected(D);
+  for (long i = 0; i < D.data().size(); ++i) {
+    EXPECT_EQ(v[0].coupling.data()(i), 0.5 * D.data()(i));
+    EXPECT_EQ(v[1].coupling.data()(i), 0.5 * R.data()(i));
+  }
+}
+
+TEST(CloseStochasticUnderReversal, ClosedCatalogIsUnchanged) {
+  double const beta = 10.0, w0 = 1.0, lam_sq = 0.64;
+  auto D = sampled([&](double tau) { return analytic_D(tau, beta, w0, lam_sq); }, beta, 2001);
+  // exactly symmetric samples, so that D(beta - s) is D bit for bit
+  auto R = reflected(D);
+  D.data() = 0.5 * (D.data() + R.data());
+  many_body_op_t n_up = triqs::operators::n("up", 0), n_dn = triqs::operators::n("dn", 0);
+  many_body_op_t Sp = triqs::operators::c_dag("up", 0) * triqs::operators::c("dn", 0);
+  many_body_op_t Sm = triqs::operators::c_dag("dn", 0) * triqs::operators::c("up", 0);
+
+  std::vector<dyn_vertex_t> v = {{n_up, n_dn, D}, {Sp, Sm, D}, {n_dn, n_up, D}, {Sm, Sp, D}};
+  auto const before           = v;
+  EXPECT_EQ(close_stochastic_under_reversal(v), 0);
+  ASSERT_EQ(v.size(), before.size());
+  for (size_t k = 0; k < v.size(); ++k) {
+    EXPECT_TRUE(v[k].op1 == before[k].op1 && v[k].op2 == before[k].op2) << "type " << k;
+    for (long i = 0; i < D.data().size(); ++i) EXPECT_EQ(v[k].coupling.data()(i), before[k].coupling.data()(i));
+  }
+}
+
+TEST(CloseStochasticUnderReversal, DiagonalTypeKeepsTheSymmetricPart) {
+  double const beta = 10.0;
+  auto D            = sampled([](double tau) { return -0.64 * std::exp(-tau); }, beta, 2001);
+  many_body_op_t n_up = triqs::operators::n("up", 0);
+  std::vector<dyn_vertex_t> v = {{n_up, n_up, D}};
+  EXPECT_EQ(close_stochastic_under_reversal(v), 0);
+  ASSERT_EQ(v.size(), 1u);
+  auto R = reflected(D);
+  for (long i = 0; i < D.data().size(); ++i) EXPECT_EQ(v[0].coupling.data()(i), 0.5 * D.data()(i) + 0.5 * R.data()(i));
+}
+
 MAKE_MAIN;

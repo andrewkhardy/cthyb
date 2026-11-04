@@ -324,6 +324,52 @@ namespace triqs_cthyb {
 
   // -----------------------------------------------------------------------------------
 
+  int close_stochastic_under_reversal(std::vector<dyn_vertex_t> &stoch_vertices) {
+    // (1/2) int int D_v(tau - tau') O1(tau) O2(tau') over the ordered half-plane tau1 > tau2 is
+    // (1/2) [D_v(s) O1(tau1) O2(tau2) + D_v(beta - s) O2(tau1) O1(tau2)], s = tau1 - tau2: half of the coupling goes to the
+    // type (O1, O2) at s and half to the reverse type (O2, O1) at beta - s. The moves sample each type on tau1 > tau2 with
+    // weight -f_t(s), so f_(A,B)(s) = (1/2) [D_(A,B)(s) + D_(B,A)(beta - s)], summed over the registered vertices. For a
+    // catalog already closed under reversal with D_(B,A)(s) = D_(A,B)(beta - s) this is D_(A,B) itself; a vertex registered
+    // one way only, or a pair whose couplings break that relation, was sampled wrongly before. Existing types keep their
+    // order (it labels dyn_vertex_corr_tau and the type draw of insert_dyn), missing reverse types are appended.
+    auto reversed = [](gf<imtime, scalar_valued> const &g) {
+      auto r       = g;
+      long const n = g.data().size();
+      for (long i = 0; i < n; ++i) r.data()(i) = g.data()(n - 1 - i);
+      return r;
+    };
+    std::vector<dyn_vertex_t> closed;
+    auto find = [&closed](many_body_op_t const &op1, many_body_op_t const &op2, auto const &mesh) {
+      return std::find_if(closed.begin(), closed.end(),
+                          [&](dyn_vertex_t const &m) { return m.op1 == op1 && m.op2 == op2 && m.coupling.mesh() == mesh; });
+    };
+    for (auto const &v : stoch_vertices) { // the registered types, in order, with zero couplings
+      if (find(v.op1, v.op2, v.coupling.mesh()) != closed.end()) continue;
+      auto zero = v.coupling;
+      zero.data() = 0.0;
+      closed.push_back({v.op1, v.op2, zero});
+    }
+    int n_added = 0;
+    for (auto const &v : stoch_vertices) {
+      find(v.op1, v.op2, v.coupling.mesh())->coupling.data() += 0.5 * v.coupling.data();
+      auto rev = reversed(v.coupling);
+      auto it  = find(v.op2, v.op1, v.coupling.mesh());
+      if (it == closed.end()) {
+        auto zero = v.coupling;
+        zero.data() = 0.0;
+        closed.push_back({v.op2, v.op1, zero});
+        it = closed.end() - 1;
+        ++n_added;
+      }
+      it->coupling.data() += 0.5 * rev.data();
+    }
+    std::erase_if(closed, [](dyn_vertex_t const &m) { return max_element(nda::abs(m.coupling.data())) < 1.e-13; });
+    stoch_vertices = std::move(closed);
+    return n_added;
+  }
+
+  // -----------------------------------------------------------------------------------
+
   void fold_into_stochastic_catalog(std::vector<dyn_vertex_t> const &stoch_vertices, fundamental_operator_set const &fops,
                                     std::map<std::pair<int, int>, int> const &linindex, std::vector<bosonic_op_pair_t> &dyn_op_list,
                                     std::vector<std::function<double(double)>> &dyn_interactions) {

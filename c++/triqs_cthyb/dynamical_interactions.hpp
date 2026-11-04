@@ -92,6 +92,11 @@ namespace triqs_cthyb {
                                                           std::map<std::pair<int, int>, int> const &linindex, fundamental_operator_set const &fops,
                                                           int N_leg);
 
+  /// Replace the stochastic vertices by a catalog closed under reversal, f_(A,B)(s) = [D_(A,B)(s) + D_(B,A)(beta - s)] / 2,
+  /// which the moves sample exactly on the ordered half-plane whatever was registered. Existing types keep their order;
+  /// returns the number of reverse types appended.
+  int close_stochastic_under_reversal(std::vector<dyn_vertex_t> &stoch_vertices);
+
   /// The catalog of stochastic vertex types and their couplings, f_index = position
   void fold_into_stochastic_catalog(std::vector<dyn_vertex_t> const &stoch_vertices, fundamental_operator_set const &fops,
                                     std::map<std::pair<int, int>, int> const &linindex, std::vector<bosonic_op_pair_t> &dyn_op_list,
